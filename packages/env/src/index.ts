@@ -17,6 +17,11 @@ const envSchema = z.object({
   HYPER_PM_AI_API_KEY: z.string().optional(),
   /** Optional override for hyper-pm JSONL event `actor` on CLI mutations. */
   HYPER_PM_ACTOR: z.string().optional(),
+  /**
+   * Absolute path to the hyper-pm CLI bundle (`main.cjs`) for hyper-pm-mcp and
+   * other integrations when auto-resolution from the `hyper-pm` package is insufficient.
+   */
+  HYPER_PM_CLI_PATH: z.string().optional(),
   /** Standard temp directory override (process manager / OS). */
   TMPDIR: z.string().optional(),
 });

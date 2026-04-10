@@ -1,0 +1,25 @@
+---
+title: hyper-pm MCP server
+---
+
+The `hyper-pm-mcp` app exposes the `hyper-pm` CLI over [MCP](https://modelcontextprotocol.io) using a stdio transport.
+
+## When to use it
+
+Use this when you want an MCP-capable editor or agent to run **hyper-pm** commands (read epics/stories/tickets, `doctor`, `sync`, etc.) against a git repo on your machine.
+
+## Setup
+
+1. Build the CLI and MCP app from the monorepo root:
+   - `pnpm --filter hyper-pm build`
+   - `pnpm --filter hyper-pm-mcp build`
+
+2. Register the server in your MCP host with `node` and the absolute path to `apps/hyper-pm-mcp/dist/main.mjs`.
+
+3. Optionally set `HYPER_PM_CLI_PATH` if the CLI bundle must be loaded from a non-standard path (see `@workspace/env` and `apps/hyper-pm-mcp/env.example`).
+
+## Tool surface
+
+A single tool, **`hyper_pm_run`**, spawns hyper-pm with `--format json` and returns a JSON envelope (`exitCode`, streams, `parsedStdout` when stdout is JSON). Treat it like shell access to hyper-pm: only enable it in trusted configurations.
+
+For full flag documentation, see the hyper-pm CLI and `apps/hyper-pm-mcp/README.md` in this repository.

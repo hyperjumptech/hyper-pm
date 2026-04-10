@@ -1,5 +1,5 @@
 {
   "title": "Getting Started",
   "icon": "MyIcon",
-  "pages": ["install", "project-structure"]
+  "pages": ["install", "project-structure", "hyper-pm-mcp"]
 }
