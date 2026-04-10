@@ -15,6 +15,8 @@ const envSchema = z.object({
   /** `owner/repo` for GitHub Issues sync (hyper-pm). */
   GITHUB_REPO: z.string().optional(),
   HYPER_PM_AI_API_KEY: z.string().optional(),
+  /** Optional override for hyper-pm JSONL event `actor` on CLI mutations. */
+  HYPER_PM_ACTOR: z.string().optional(),
   /** Standard temp directory override (process manager / OS). */
   TMPDIR: z.string().optional(),
 });

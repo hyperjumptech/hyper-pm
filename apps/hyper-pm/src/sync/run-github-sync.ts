@@ -9,12 +9,16 @@ import { appendEventLine } from "../storage/append-event";
 import type { Projection } from "../storage/projection";
 import { replayEvents } from "../storage/projection";
 import { readAllEventLines } from "../storage/read-event-lines";
+import { githubInboundActorFromIssue } from "./github-inbound-actor";
+import { resolveGithubTokenActor } from "./resolve-github-token-actor";
 
 export type GithubSyncDeps = {
   octokit: Octokit;
   owner: string;
   repo: string;
   clock: { now: () => Date };
+  /** When set, used as outbound/sync cursor `actor` (avoids an extra `getAuthenticated` call). */
+  outboundActor?: string;
 };
 
 const parseRepo = (githubRepo: string): { owner: string; repo: string } => {
@@ -42,7 +46,9 @@ export const runGithubOutboundSync = async (params: {
   if (params.config.issueMapping !== "ticket") {
     return outEvents;
   }
-  const actor = "hyper-pm-sync";
+  const actor =
+    params.deps.outboundActor ??
+    (await resolveGithubTokenActor(params.deps.octokit));
   const ts = params.deps.clock.now().toISOString();
   for (const ticket of params.projection.tickets.values()) {
     if (ticket.deleted) continue;
@@ -116,7 +122,6 @@ export const runGithubInboundSync = async (params: {
 }): Promise<EventLine[]> => {
   const out: EventLine[] = [];
   if (params.config.sync !== "full") return out;
-  const actor = "hyper-pm-inbound";
   const ts = params.deps.clock.now().toISOString();
 
   const issues = await params.deps.octokit.paginate(
@@ -154,7 +159,7 @@ export const runGithubInboundSync = async (params: {
       type: "GithubInboundUpdate",
       id: `in-${id}-${issue.id}`,
       ts,
-      actor,
+      actor: githubInboundActorFromIssue(issue),
       payload: {
         entity: "ticket",
         entityId: id,

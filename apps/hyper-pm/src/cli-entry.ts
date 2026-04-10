@@ -10,6 +10,8 @@ import { ulid } from "ulid";
 import { runAiDraft } from "./ai/run-ai-draft";
 import { ExitCode } from "./cli/exit-codes";
 import { formatOutput } from "./cli/format-output";
+import { resolveCliActor } from "./cli/resolve-cli-actor";
+import { formatAuditTextLines, runAuditOnLines } from "./cli/run-audit";
 import {
   listActiveEpicSummaries,
   listActiveStorySummaries,
@@ -26,9 +28,13 @@ import { openDataBranchWorktree } from "./git/data-worktree-session";
 import { findGitRoot } from "./git/find-git-root";
 import { initOrphanDataBranchInWorktree } from "./git/init-orphan-data-branch";
 import { runGit } from "./git/run-git";
-import { commitDataWorktreeIfNeeded } from "./run/commit-data";
+import {
+  commitDataWorktreeIfNeeded,
+  formatDataBranchCommitMessage,
+} from "./run/commit-data";
 import { appendEventLine } from "./storage/append-event";
 import type { EventLine, EventType } from "./storage/event-line";
+import { eventTypeSchema } from "./storage/event-line";
 import { readAllEventLines } from "./storage/read-event-lines";
 import { replayEvents } from "./storage/projection";
 import {
@@ -37,6 +43,7 @@ import {
   runGithubInboundSync,
   runGithubOutboundSync,
 } from "./sync/run-github-sync";
+import { resolveGithubTokenActor } from "./sync/resolve-github-token-actor";
 
 type GlobalOpts = {
   format: "json" | "text";
@@ -47,6 +54,8 @@ type GlobalOpts = {
   remote?: string;
   sync?: string;
   githubRepo?: string;
+  /** Overrides env and git-derived identity for JSONL `actor` on mutations. */
+  actor?: string;
 };
 
 const readGlobals = (cmd: Command): GlobalOpts => {
@@ -89,7 +98,11 @@ export const runCli = async (
     .option("--data-branch <name>", "override data branch name (config/init)")
     .option("--remote <name>", "override remote name (init/config)")
     .option("--sync <mode>", "off|outbound|full")
-    .option("--github-repo <owner/repo>", "override GitHub slug");
+    .option("--github-repo <owner/repo>", "override GitHub slug")
+    .option(
+      "--actor <label>",
+      "audit actor for CLI mutations (overrides HYPER_PM_ACTOR)",
+    );
 
   program.hook("preAction", (thisCommand) => {
     const fmt = thisCommand.getOptionValue("format");
@@ -158,12 +171,13 @@ export const runCli = async (
     .action(async function (this: Command) {
       const g = readGlobals(this);
       const o = this.opts<{ title: string; body: string; id?: string }>();
-      await mutateDataBranch(g, deps, async (root) => {
+      await mutateDataBranch(g, deps, async (root, { actor }) => {
         const id = o.id ?? ulid();
         const evt = makeEvent(
           "EpicCreated",
           { id, title: o.title, body: o.body },
           deps.clock,
+          actor,
         );
         await appendEventLine(root, evt, deps.clock);
         return evt.payload;
@@ -186,11 +200,11 @@ export const runCli = async (
     .action(async function (this: Command) {
       const g = readGlobals(this);
       const o = this.opts<{ id: string; title?: string; body?: string }>();
-      await mutateDataBranch(g, deps, async (root) => {
+      await mutateDataBranch(g, deps, async (root, { actor }) => {
         const payload: Record<string, unknown> = { id: o.id };
         if (o.title !== undefined) payload["title"] = o.title;
         if (o.body !== undefined) payload["body"] = o.body;
-        const evt = makeEvent("EpicUpdated", payload, deps.clock);
+        const evt = makeEvent("EpicUpdated", payload, deps.clock, actor);
         await appendEventLine(root, evt, deps.clock);
         return payload;
       });
@@ -201,8 +215,8 @@ export const runCli = async (
     .action(async function (this: Command) {
       const g = readGlobals(this);
       const o = this.opts<{ id: string }>();
-      await mutateDataBranch(g, deps, async (root) => {
-        const evt = makeEvent("EpicDeleted", { id: o.id }, deps.clock);
+      await mutateDataBranch(g, deps, async (root, { actor }) => {
+        const evt = makeEvent("EpicDeleted", { id: o.id }, deps.clock, actor);
         await appendEventLine(root, evt, deps.clock);
         return { id: o.id, deleted: true };
       });
@@ -223,7 +237,7 @@ export const runCli = async (
         epic: string;
         id?: string;
       }>();
-      await mutateDataBranch(g, deps, async (root) => {
+      await mutateDataBranch(g, deps, async (root, { actor }) => {
         const lines = await readAllEventLines(root);
         const proj = replayEvents(lines);
         const epic = proj.epics.get(o.epic);
@@ -235,6 +249,7 @@ export const runCli = async (
           "StoryCreated",
           { id, epicId: o.epic, title: o.title, body: o.body },
           deps.clock,
+          actor,
         );
         await appendEventLine(root, evt, deps.clock);
         return evt.payload;
@@ -257,11 +272,11 @@ export const runCli = async (
     .action(async function (this: Command) {
       const g = readGlobals(this);
       const o = this.opts<{ id: string; title?: string; body?: string }>();
-      await mutateDataBranch(g, deps, async (root) => {
+      await mutateDataBranch(g, deps, async (root, { actor }) => {
         const payload: Record<string, unknown> = { id: o.id };
         if (o.title !== undefined) payload["title"] = o.title;
         if (o.body !== undefined) payload["body"] = o.body;
-        const evt = makeEvent("StoryUpdated", payload, deps.clock);
+        const evt = makeEvent("StoryUpdated", payload, deps.clock, actor);
         await appendEventLine(root, evt, deps.clock);
         return payload;
       });
@@ -272,8 +287,8 @@ export const runCli = async (
     .action(async function (this: Command) {
       const g = readGlobals(this);
       const o = this.opts<{ id: string }>();
-      await mutateDataBranch(g, deps, async (root) => {
-        const evt = makeEvent("StoryDeleted", { id: o.id }, deps.clock);
+      await mutateDataBranch(g, deps, async (root, { actor }) => {
+        const evt = makeEvent("StoryDeleted", { id: o.id }, deps.clock, actor);
         await appendEventLine(root, evt, deps.clock);
         return { id: o.id, deleted: true };
       });
@@ -307,7 +322,7 @@ export const runCli = async (
           prompt: `Draft acceptance-style body for ticket titled: ${o.title}`,
         });
       }
-      await mutateDataBranch(g, deps, async (root) => {
+      await mutateDataBranch(g, deps, async (root, { actor }) => {
         const lines = await readAllEventLines(root);
         const proj = replayEvents(lines);
         const storyRow = proj.stories.get(o.story);
@@ -325,6 +340,7 @@ export const runCli = async (
             state: "open",
           },
           deps.clock,
+          actor,
         );
         await appendEventLine(root, evt, deps.clock);
         return evt.payload;
@@ -370,12 +386,12 @@ export const runCli = async (
           prompt: `Improve this ticket body:\n${body}`,
         });
       }
-      await mutateDataBranch(g, deps, async (root) => {
+      await mutateDataBranch(g, deps, async (root, { actor }) => {
         const payload: Record<string, unknown> = { id: o.id };
         if (o.title !== undefined) payload["title"] = o.title;
         if (body !== undefined) payload["body"] = body;
         if (o.state !== undefined) payload["state"] = o.state;
-        const evt = makeEvent("TicketUpdated", payload, deps.clock);
+        const evt = makeEvent("TicketUpdated", payload, deps.clock, actor);
         await appendEventLine(root, evt, deps.clock);
         return payload;
       });
@@ -386,8 +402,8 @@ export const runCli = async (
     .action(async function (this: Command) {
       const g = readGlobals(this);
       const o = this.opts<{ id: string }>();
-      await mutateDataBranch(g, deps, async (root) => {
-        const evt = makeEvent("TicketDeleted", { id: o.id }, deps.clock);
+      await mutateDataBranch(g, deps, async (root, { actor }) => {
+        const evt = makeEvent("TicketDeleted", { id: o.id }, deps.clock, actor);
         await appendEventLine(root, evt, deps.clock);
         return { id: o.id, deleted: true };
       });
@@ -424,11 +440,13 @@ export const runCli = async (
         );
         const { owner, repo } = resolveGithubRepo(cfg, env.GITHUB_REPO);
         const octokit = new Octokit({ auth: env.GITHUB_TOKEN });
+        const outboundActor = await resolveGithubTokenActor(octokit);
         const depsGh = {
           octokit,
           owner,
           repo,
           clock: deps.clock,
+          outboundActor,
         };
         await runGithubOutboundSync({
           dataRoot: session.worktreePath,
@@ -444,7 +462,7 @@ export const runCli = async (
         });
         await commitDataWorktreeIfNeeded(
           session.worktreePath,
-          "hyper-pm: sync",
+          formatDataBranchCommitMessage("hyper-pm: sync", outboundActor),
           runGit,
         );
         deps.log(formatOutput(g.format, { ok: true }));
@@ -454,6 +472,84 @@ export const runCli = async (
         deps.exit(ExitCode.ExternalApi);
       } finally {
         await session.dispose();
+      }
+    });
+
+  program
+    .command("audit")
+    .description(
+      "List durable events (who / what / when) with optional filters",
+    )
+    .option(
+      "--limit <n>",
+      "keep only the most recent n matching events",
+      (raw) => {
+        const n = Number.parseInt(String(raw), 10);
+        return Number.isNaN(n) ? undefined : n;
+      },
+    )
+    .option("--type <t>", "filter by event type (e.g. TicketUpdated)")
+    .option(
+      "--entity-id <id>",
+      "filter rows whose payload id, entityId, or ticketId matches",
+    )
+    .action(async function (this: Command) {
+      const g = readGlobals(this);
+      const o = this.opts<{
+        limit?: number;
+        type?: string;
+        entityId?: string;
+      }>();
+      let filterType: EventType | undefined;
+      if (o.type !== undefined && o.type !== "") {
+        const parsed = eventTypeSchema.safeParse(o.type);
+        if (!parsed.success) {
+          deps.error(`Invalid --type: ${o.type}`);
+          deps.exit(ExitCode.UserError);
+        }
+        filterType = parsed.data;
+      }
+      try {
+        const repoRoot = await resolveRepoRoot(g.repo);
+        const cfg = await loadMergedConfig(repoRoot, g);
+        const tmpBase = g.tempDir ?? env.TMPDIR ?? tmpdir();
+        const session = await openDataBranchWorktree({
+          repoRoot,
+          dataBranch: cfg.dataBranch,
+          tmpBase,
+          keepWorktree: g.keepWorktree,
+          runGit,
+        });
+        try {
+          const lines = await readAllEventLines(session.worktreePath);
+          const { events, invalidLines } = runAuditOnLines(lines, {
+            type: filterType,
+            entityId: o.entityId,
+            limit: o.limit,
+          });
+          if (invalidLines.length > 0) {
+            deps.error(
+              `audit: skipped ${invalidLines.length} invalid JSONL line(s)`,
+            );
+          }
+          if (g.format === "json") {
+            deps.log(
+              formatOutput(g.format, {
+                ok: true,
+                events,
+                invalidLines,
+              }),
+            );
+          } else {
+            deps.log(formatAuditTextLines(events));
+          }
+          deps.exit(ExitCode.Success);
+        } finally {
+          await session.dispose();
+        }
+      } catch (e) {
+        deps.error(e instanceof Error ? e.message : String(e));
+        deps.exit(ExitCode.UserError);
       }
     });
 
@@ -489,16 +585,25 @@ export const runCli = async (
   await program.parseAsync(argv, { from: "node" });
 };
 
+/**
+ * Builds a validated-shaped event line for append-only storage.
+ *
+ * @param type - Durable event discriminator.
+ * @param payload - Type-specific fields.
+ * @param clock - Injectable clock (tests use fixed times).
+ * @param actor - Resolved audit identity (CLI, sync, etc.).
+ */
 const makeEvent = (
   type: EventType,
   payload: Record<string, unknown>,
   clock: { now: () => Date },
+  actor: string,
 ): EventLine => ({
   schema: 1,
   type,
   id: ulid(),
   ts: clock.now().toISOString(),
-  actor: "cli",
+  actor,
   payload,
 });
 
@@ -546,11 +651,20 @@ const mutateDataBranch = async (
     exit: (code: number) => never;
     log: typeof console.log;
     error: typeof console.error;
+    clock: { now: () => Date };
   },
-  fn: (dataRoot: string) => Promise<Record<string, unknown>>,
+  fn: (
+    dataRoot: string,
+    ctx: { actor: string },
+  ) => Promise<Record<string, unknown>>,
 ): Promise<void> => {
   try {
     const repoRoot = await resolveRepoRoot(g.repo);
+    const actor = await resolveCliActor({
+      repoRoot,
+      cliActor: g.actor,
+      envActor: env.HYPER_PM_ACTOR,
+    });
     const cfg = await loadMergedConfig(repoRoot, g);
     const tmpBase = g.tempDir ?? env.TMPDIR ?? tmpdir();
     const session = await openDataBranchWorktree({
@@ -561,10 +675,10 @@ const mutateDataBranch = async (
       runGit,
     });
     try {
-      const payload = await fn(session.worktreePath);
+      const payload = await fn(session.worktreePath, { actor });
       await commitDataWorktreeIfNeeded(
         session.worktreePath,
-        "hyper-pm: mutation",
+        formatDataBranchCommitMessage("hyper-pm: mutation", actor),
         runGit,
       );
       deps.log(formatOutput(g.format, { ok: true, ...payload }));
