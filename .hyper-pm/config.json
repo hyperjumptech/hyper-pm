@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "dataBranch": "hyper-pm-data",
+  "remote": "origin",
+  "sync": "outbound",
+  "issueMapping": "ticket"
+}

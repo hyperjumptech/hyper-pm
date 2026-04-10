@@ -478,7 +478,7 @@ export const runCli = async (
       }
     });
 
-  await program.parseAsync(argv, { from: "user" });
+  await program.parseAsync(argv, { from: "node" });
 };
 
 const makeEvent = (
