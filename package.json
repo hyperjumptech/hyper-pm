@@ -8,6 +8,7 @@
     "test:coverage": "turbo test:coverage",
     "dev": "turbo dev",
     "lint": "turbo lint",
+    "code-quality": "turbo run lint test check-types --continue",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "docs:dev": "speed-docs docs --dev",
     "docs:build": "speed-docs docs"

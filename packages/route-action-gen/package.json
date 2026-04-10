@@ -1,0 +1,29 @@
+{
+  "name": "route-action-gen",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "route-action-gen": "./src/cli.js"
+  },
+  "main": "./src/lib/index.ts",
+  "types": "./src/lib/index.ts",
+  "exports": {
+    ".": "./src/lib/index.ts",
+    "./lib": "./src/lib/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint \"src/**/*.ts\"",
+    "check-types": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "eslint": "catalog:",
+    "@types/node": "catalog:",
+    "@workspace/eslint-config": "workspace:*",
+    "@workspace/typescript-config": "workspace:*",
+    "typescript": "catalog:"
+  }
+}

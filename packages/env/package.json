@@ -1,0 +1,25 @@
+{
+  "name": "@workspace/env",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint \"src/**/*.ts\"",
+    "check-types": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "eslint": "catalog:",
+    "@types/node": "catalog:",
+    "@workspace/eslint-config": "workspace:*",
+    "@workspace/typescript-config": "workspace:*",
+    "typescript": "catalog:"
+  }
+}
