@@ -1,11 +1,11 @@
-# @workspace/hyper-pm
+# hyper-pm
 
 Git-native PM CLI: orphan data branch, disposable temp worktrees, append-only JSONL, optional GitHub Issues sync.
 
 ## Quickstart
 
 ```bash
-pnpm build --filter=@workspace/hyper-pm
+pnpm build --filter=hyper-pm
 node packages/hyper-pm/dist/main.js init
 node packages/hyper-pm/dist/main.js epic create --title "My epic"
 ```
