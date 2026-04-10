@@ -8,7 +8,7 @@ import { Command } from "commander";
 import { Octokit } from "@octokit/rest";
 import { ulid } from "ulid";
 import { runAiDraft } from "./ai/run-ai-draft";
-import { ExitCode } from "./cli/exit-codes";
+import { ExitCode, type ExitCodeValue } from "./cli/exit-codes";
 import {
   parseWorkItemStatus,
   type WorkItemStatus,
@@ -545,13 +545,13 @@ export const runCli = async (
           runGit,
         );
         deps.log(formatOutput(g.format, { ok: true }));
-        deps.exit(ExitCode.Success);
       } catch (e) {
         deps.error(e instanceof Error ? e.message : String(e));
         deps.exit(ExitCode.ExternalApi);
       } finally {
         await session.dispose();
       }
+      deps.exit(ExitCode.Success);
     });
 
   program
@@ -622,7 +622,6 @@ export const runCli = async (
           } else {
             deps.log(formatAuditTextLines(events));
           }
-          deps.exit(ExitCode.Success);
         } finally {
           await session.dispose();
         }
@@ -630,6 +629,7 @@ export const runCli = async (
         deps.error(e instanceof Error ? e.message : String(e));
         deps.exit(ExitCode.UserError);
       }
+      deps.exit(ExitCode.Success);
     });
 
   program
@@ -761,7 +761,6 @@ const mutateDataBranch = async (
         runGit,
       );
       deps.log(formatOutput(g.format, { ok: true, ...payload }));
-      deps.exit(ExitCode.Success);
     } finally {
       await session.dispose();
     }
@@ -769,6 +768,7 @@ const mutateDataBranch = async (
     deps.error(e instanceof Error ? e.message : String(e));
     deps.exit(ExitCode.UserError);
   }
+  deps.exit(ExitCode.Success);
 };
 
 /**
@@ -787,6 +787,7 @@ const readEpic = async (
     error: typeof console.error;
   },
 ): Promise<void> => {
+  let exitCode: ExitCodeValue = ExitCode.Success;
   try {
     const repoRoot = await resolveRepoRoot(g.repo);
     const cfg = await loadMergedConfig(repoRoot, g);
@@ -805,15 +806,15 @@ const readEpic = async (
         deps.log(
           formatOutput(g.format, { items: listActiveEpicSummaries(proj) }),
         );
-        deps.exit(ExitCode.Success);
+      } else {
+        const row = proj.epics.get(id);
+        if (!row || row.deleted) {
+          deps.error("Epic not found");
+          exitCode = ExitCode.UserError;
+        } else {
+          deps.log(formatOutput(g.format, row));
+        }
       }
-      const row = proj.epics.get(id);
-      if (!row || row.deleted) {
-        deps.error("Epic not found");
-        deps.exit(ExitCode.UserError);
-      }
-      deps.log(formatOutput(g.format, row));
-      deps.exit(ExitCode.Success);
     } finally {
       await session.dispose();
     }
@@ -821,6 +822,7 @@ const readEpic = async (
     deps.error(e instanceof Error ? e.message : String(e));
     deps.exit(ExitCode.UserError);
   }
+  deps.exit(exitCode);
 };
 
 /**
@@ -839,6 +841,7 @@ const readStory = async (
     error: typeof console.error;
   },
 ): Promise<void> => {
+  let exitCode: ExitCodeValue = ExitCode.Success;
   try {
     const repoRoot = await resolveRepoRoot(g.repo);
     const cfg = await loadMergedConfig(repoRoot, g);
@@ -857,15 +860,15 @@ const readStory = async (
         deps.log(
           formatOutput(g.format, { items: listActiveStorySummaries(proj) }),
         );
-        deps.exit(ExitCode.Success);
+      } else {
+        const row = proj.stories.get(id);
+        if (!row || row.deleted) {
+          deps.error("Story not found");
+          exitCode = ExitCode.UserError;
+        } else {
+          deps.log(formatOutput(g.format, row));
+        }
       }
-      const row = proj.stories.get(id);
-      if (!row || row.deleted) {
-        deps.error("Story not found");
-        deps.exit(ExitCode.UserError);
-      }
-      deps.log(formatOutput(g.format, row));
-      deps.exit(ExitCode.Success);
     } finally {
       await session.dispose();
     }
@@ -873,6 +876,7 @@ const readStory = async (
     deps.error(e instanceof Error ? e.message : String(e));
     deps.exit(ExitCode.UserError);
   }
+  deps.exit(exitCode);
 };
 
 /**
@@ -891,6 +895,7 @@ const readTicket = async (
     error: typeof console.error;
   },
 ): Promise<void> => {
+  let exitCode: ExitCodeValue = ExitCode.Success;
   try {
     const repoRoot = await resolveRepoRoot(g.repo);
     const cfg = await loadMergedConfig(repoRoot, g);
@@ -909,15 +914,15 @@ const readTicket = async (
         deps.log(
           formatOutput(g.format, { items: listActiveTicketSummaries(proj) }),
         );
-        deps.exit(ExitCode.Success);
+      } else {
+        const row = proj.tickets.get(id);
+        if (!row || row.deleted) {
+          deps.error("Ticket not found");
+          exitCode = ExitCode.UserError;
+        } else {
+          deps.log(formatOutput(g.format, row));
+        }
       }
-      const row = proj.tickets.get(id);
-      if (!row || row.deleted) {
-        deps.error("Ticket not found");
-        deps.exit(ExitCode.UserError);
-      }
-      deps.log(formatOutput(g.format, row));
-      deps.exit(ExitCode.Success);
     } finally {
       await session.dispose();
     }
@@ -925,4 +930,5 @@ const readTicket = async (
     deps.error(e instanceof Error ? e.message : String(e));
     deps.exit(ExitCode.UserError);
   }
+  deps.exit(exitCode);
 };
