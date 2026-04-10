@@ -1,14 +1,24 @@
 import type { Projection } from "../storage/projection";
 
+type AuditSummaryFields = {
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+};
+
 /** One row for `epic read` when listing (no `--id`). */
-export type EpicListSummary = { id: string; title: string };
+export type EpicListSummary = {
+  id: string;
+  title: string;
+} & AuditSummaryFields;
 
 /** One row for `story read` when listing (no `--id`). */
 export type StoryListSummary = {
   id: string;
   title: string;
   epicId: string;
-};
+} & AuditSummaryFields;
 
 /** One row for `ticket read` when listing (no `--id`). */
 export type TicketListSummary = {
@@ -16,7 +26,7 @@ export type TicketListSummary = {
   title: string;
   state: "open" | "closed";
   storyId: string;
-};
+} & AuditSummaryFields;
 
 /**
  * Returns non-deleted epics as id/title pairs, sorted by id.
@@ -28,7 +38,14 @@ export const listActiveEpicSummaries = (
 ): EpicListSummary[] =>
   [...projection.epics.values()]
     .filter((e) => !e.deleted)
-    .map((e) => ({ id: e.id, title: e.title }))
+    .map((e) => ({
+      id: e.id,
+      title: e.title,
+      createdAt: e.createdAt,
+      createdBy: e.createdBy,
+      updatedAt: e.updatedAt,
+      updatedBy: e.updatedBy,
+    }))
     .sort((a, b) => a.id.localeCompare(b.id));
 
 /**
@@ -41,7 +58,15 @@ export const listActiveStorySummaries = (
 ): StoryListSummary[] =>
   [...projection.stories.values()]
     .filter((s) => !s.deleted)
-    .map((s) => ({ id: s.id, title: s.title, epicId: s.epicId }))
+    .map((s) => ({
+      id: s.id,
+      title: s.title,
+      epicId: s.epicId,
+      createdAt: s.createdAt,
+      createdBy: s.createdBy,
+      updatedAt: s.updatedAt,
+      updatedBy: s.updatedBy,
+    }))
     .sort((a, b) => a.id.localeCompare(b.id));
 
 /**
@@ -59,5 +84,9 @@ export const listActiveTicketSummaries = (
       title: t.title,
       state: t.state,
       storyId: t.storyId,
+      createdAt: t.createdAt,
+      createdBy: t.createdBy,
+      updatedAt: t.updatedAt,
+      updatedBy: t.updatedBy,
     }))
     .sort((a, b) => a.id.localeCompare(b.id));

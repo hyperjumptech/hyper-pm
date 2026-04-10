@@ -1,11 +1,19 @@
 import { eventLineSchema, type EventLine } from "./event-line";
 
+/** Audit fields copied from durable events (`ts` / `actor`) for CLI read output. */
+type EntityAudit = {
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+};
+
 export type EpicRecord = {
   id: string;
   title: string;
   body: string;
   deleted?: boolean;
-};
+} & EntityAudit;
 
 export type StoryRecord = {
   id: string;
@@ -13,7 +21,7 @@ export type StoryRecord = {
   title: string;
   body: string;
   deleted?: boolean;
-};
+} & EntityAudit;
 
 export type TicketRecord = {
   id: string;
@@ -26,7 +34,7 @@ export type TicketRecord = {
   /** GitHub issue number when linked via sync. */
   githubIssueNumber?: number;
   deleted?: boolean;
-};
+} & EntityAudit;
 
 export type Projection = {
   epics: Map<string, EpicRecord>;
@@ -53,6 +61,30 @@ const parsePrRefs = (body: string): number[] => {
 };
 
 /**
+ * Sets create and last-update audit from a create event line.
+ *
+ * @param row - Mutable record that will receive `created*` and initial `updated*`.
+ * @param evt - Parsed event (uses `ts` and `actor`).
+ */
+const applyCreatedAudit = (row: EntityAudit, evt: EventLine): void => {
+  row.createdAt = evt.ts;
+  row.createdBy = evt.actor;
+  row.updatedAt = evt.ts;
+  row.updatedBy = evt.actor;
+};
+
+/**
+ * Updates last-change audit from an event line.
+ *
+ * @param row - Mutable record with `updatedAt` / `updatedBy`.
+ * @param evt - Parsed event (uses `ts` and `actor`).
+ */
+const applyLastUpdate = (row: EntityAudit, evt: EventLine): void => {
+  row.updatedAt = evt.ts;
+  row.updatedBy = evt.actor;
+};
+
+/**
  * Applies a single validated event onto an in-memory projection (last-writer-wins per field).
  *
  * @param projection - Mutable projection state.
@@ -62,11 +94,17 @@ export const applyEvent = (projection: Projection, evt: EventLine): void => {
   switch (evt.type) {
     case "EpicCreated": {
       const id = String(evt.payload["id"]);
-      projection.epics.set(id, {
+      const row: EpicRecord = {
         id,
         title: String(evt.payload["title"] ?? ""),
         body: String(evt.payload["body"] ?? ""),
-      });
+        createdAt: "",
+        createdBy: "",
+        updatedAt: "",
+        updatedBy: "",
+      };
+      applyCreatedAudit(row, evt);
+      projection.epics.set(id, row);
       break;
     }
     case "EpicUpdated": {
@@ -79,22 +117,32 @@ export const applyEvent = (projection: Projection, evt: EventLine): void => {
       if (evt.payload["body"] !== undefined) {
         cur.body = String(evt.payload["body"]);
       }
+      applyLastUpdate(cur, evt);
       break;
     }
     case "EpicDeleted": {
       const id = String(evt.payload["id"]);
       const cur = projection.epics.get(id);
-      if (cur) cur.deleted = true;
+      if (cur) {
+        cur.deleted = true;
+        applyLastUpdate(cur, evt);
+      }
       break;
     }
     case "StoryCreated": {
       const id = String(evt.payload["id"]);
-      projection.stories.set(id, {
+      const row: StoryRecord = {
         id,
         epicId: String(evt.payload["epicId"]),
         title: String(evt.payload["title"] ?? ""),
         body: String(evt.payload["body"] ?? ""),
-      });
+        createdAt: "",
+        createdBy: "",
+        updatedAt: "",
+        updatedBy: "",
+      };
+      applyCreatedAudit(row, evt);
+      projection.stories.set(id, row);
       break;
     }
     case "StoryUpdated": {
@@ -107,18 +155,22 @@ export const applyEvent = (projection: Projection, evt: EventLine): void => {
       if (evt.payload["body"] !== undefined) {
         cur.body = String(evt.payload["body"]);
       }
+      applyLastUpdate(cur, evt);
       break;
     }
     case "StoryDeleted": {
       const id = String(evt.payload["id"]);
       const cur = projection.stories.get(id);
-      if (cur) cur.deleted = true;
+      if (cur) {
+        cur.deleted = true;
+        applyLastUpdate(cur, evt);
+      }
       break;
     }
     case "TicketCreated": {
       const id = String(evt.payload["id"]);
       const body = String(evt.payload["body"] ?? "");
-      projection.tickets.set(id, {
+      const row: TicketRecord = {
         id,
         storyId: String(evt.payload["storyId"]),
         title: String(evt.payload["title"] ?? ""),
@@ -128,7 +180,13 @@ export const applyEvent = (projection: Projection, evt: EventLine): void => {
             ? evt.payload["state"]
             : "open",
         linkedPrs: parsePrRefs(body),
-      });
+        createdAt: "",
+        createdBy: "",
+        updatedAt: "",
+        updatedBy: "",
+      };
+      applyCreatedAudit(row, evt);
+      projection.tickets.set(id, row);
       break;
     }
     case "TicketUpdated": {
@@ -148,12 +206,16 @@ export const applyEvent = (projection: Projection, evt: EventLine): void => {
       ) {
         cur.state = evt.payload["state"];
       }
+      applyLastUpdate(cur, evt);
       break;
     }
     case "TicketDeleted": {
       const id = String(evt.payload["id"]);
       const cur = projection.tickets.get(id);
-      if (cur) cur.deleted = true;
+      if (cur) {
+        cur.deleted = true;
+        applyLastUpdate(cur, evt);
+      }
       break;
     }
     case "SyncCursor": {
@@ -166,6 +228,7 @@ export const applyEvent = (projection: Projection, evt: EventLine): void => {
       const ticket = projection.tickets.get(ticketId);
       if (ticket && Number.isFinite(num)) {
         ticket.githubIssueNumber = num;
+        applyLastUpdate(ticket, evt);
       }
       break;
     }
@@ -188,6 +251,7 @@ export const applyEvent = (projection: Projection, evt: EventLine): void => {
         ) {
           ticket.state = evt.payload["state"];
         }
+        applyLastUpdate(ticket, evt);
       }
       break;
     }

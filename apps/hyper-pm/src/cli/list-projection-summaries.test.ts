@@ -7,6 +7,13 @@ import {
   listActiveTicketSummaries,
 } from "./list-projection-summaries";
 
+const audit = {
+  createdAt: "2026-01-01T00:00:00.000Z",
+  createdBy: "creator",
+  updatedAt: "2026-01-02T00:00:00.000Z",
+  updatedBy: "editor",
+} as const;
+
 const projectionWith = (partial: Partial<Projection>): Projection => ({
   epics: new Map(),
   stories: new Map(),
@@ -18,14 +25,14 @@ describe("listActiveEpicSummaries", () => {
   it("omits deleted epics and sorts by id", () => {
     const projection = projectionWith({
       epics: new Map([
-        ["b", { id: "b", title: "B", body: "", deleted: true }],
-        ["a", { id: "a", title: "A", body: "" }],
-        ["c", { id: "c", title: "C", body: "" }],
+        ["b", { id: "b", title: "B", body: "", deleted: true, ...audit }],
+        ["a", { id: "a", title: "A", body: "", ...audit }],
+        ["c", { id: "c", title: "C", body: "", ...audit }],
       ]),
     });
     expect(listActiveEpicSummaries(projection)).toEqual([
-      { id: "a", title: "A" },
-      { id: "c", title: "C" },
+      { id: "a", title: "A", ...audit },
+      { id: "c", title: "C", ...audit },
     ]);
   });
 
@@ -38,12 +45,22 @@ describe("listActiveStorySummaries", () => {
   it("omits deleted stories and sorts by id", () => {
     const projection = projectionWith({
       stories: new Map([
-        ["y", { id: "y", epicId: "e1", title: "Y", body: "", deleted: true }],
-        ["x", { id: "x", epicId: "e1", title: "X", body: "" }],
+        [
+          "y",
+          {
+            id: "y",
+            epicId: "e1",
+            title: "Y",
+            body: "",
+            deleted: true,
+            ...audit,
+          },
+        ],
+        ["x", { id: "x", epicId: "e1", title: "X", body: "", ...audit }],
       ]),
     });
     expect(listActiveStorySummaries(projection)).toEqual([
-      { id: "x", epicId: "e1", title: "X" },
+      { id: "x", epicId: "e1", title: "X", ...audit },
     ]);
   });
 });
@@ -62,6 +79,7 @@ describe("listActiveTicketSummaries", () => {
             state: "closed",
             linkedPrs: [],
             deleted: true,
+            ...audit,
           },
         ],
         [
@@ -73,6 +91,7 @@ describe("listActiveTicketSummaries", () => {
             body: "",
             state: "open",
             linkedPrs: [],
+            ...audit,
           },
         ],
       ]),
@@ -83,6 +102,7 @@ describe("listActiveTicketSummaries", () => {
         title: "Open",
         state: "open",
         storyId: "s1",
+        ...audit,
       },
     ]);
   });
