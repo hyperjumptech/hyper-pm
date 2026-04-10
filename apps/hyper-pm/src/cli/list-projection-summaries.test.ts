@@ -14,6 +14,11 @@ const audit = {
   updatedBy: "editor",
 } as const;
 
+const statusAudit = {
+  statusChangedAt: "2026-01-01T00:00:00.000Z",
+  statusChangedBy: "creator",
+} as const;
+
 const projectionWith = (partial: Partial<Projection>): Projection => ({
   epics: new Map(),
   stories: new Map(),
@@ -25,14 +30,45 @@ describe("listActiveEpicSummaries", () => {
   it("omits deleted epics and sorts by id", () => {
     const projection = projectionWith({
       epics: new Map([
-        ["b", { id: "b", title: "B", body: "", deleted: true, ...audit }],
-        ["a", { id: "a", title: "A", body: "", ...audit }],
-        ["c", { id: "c", title: "C", body: "", ...audit }],
+        [
+          "b",
+          {
+            id: "b",
+            title: "B",
+            body: "",
+            status: "backlog",
+            deleted: true,
+            ...audit,
+            ...statusAudit,
+          },
+        ],
+        [
+          "a",
+          {
+            id: "a",
+            title: "A",
+            body: "",
+            status: "backlog",
+            ...audit,
+            ...statusAudit,
+          },
+        ],
+        [
+          "c",
+          {
+            id: "c",
+            title: "C",
+            body: "",
+            status: "todo",
+            ...audit,
+            ...statusAudit,
+          },
+        ],
       ]),
     });
     expect(listActiveEpicSummaries(projection)).toEqual([
-      { id: "a", title: "A", ...audit },
-      { id: "c", title: "C", ...audit },
+      { id: "a", title: "A", status: "backlog", ...audit },
+      { id: "c", title: "C", status: "todo", ...audit },
     ]);
   });
 
@@ -52,21 +88,34 @@ describe("listActiveStorySummaries", () => {
             epicId: "e1",
             title: "Y",
             body: "",
+            status: "backlog",
             deleted: true,
             ...audit,
+            ...statusAudit,
           },
         ],
-        ["x", { id: "x", epicId: "e1", title: "X", body: "", ...audit }],
+        [
+          "x",
+          {
+            id: "x",
+            epicId: "e1",
+            title: "X",
+            body: "",
+            status: "in_progress",
+            ...audit,
+            ...statusAudit,
+          },
+        ],
       ]),
     });
     expect(listActiveStorySummaries(projection)).toEqual([
-      { id: "x", epicId: "e1", title: "X", ...audit },
+      { id: "x", epicId: "e1", title: "X", status: "in_progress", ...audit },
     ]);
   });
 });
 
 describe("listActiveTicketSummaries", () => {
-  it("omits deleted tickets and preserves state", () => {
+  it("omits deleted tickets and preserves status", () => {
     const projection = projectionWith({
       tickets: new Map([
         [
@@ -76,10 +125,11 @@ describe("listActiveTicketSummaries", () => {
             storyId: "s1",
             title: "Closed",
             body: "",
-            state: "closed",
+            status: "done",
             linkedPrs: [],
             deleted: true,
             ...audit,
+            ...statusAudit,
           },
         ],
         [
@@ -89,9 +139,10 @@ describe("listActiveTicketSummaries", () => {
             storyId: "s1",
             title: "Open",
             body: "",
-            state: "open",
+            status: "todo",
             linkedPrs: [],
             ...audit,
+            ...statusAudit,
           },
         ],
       ]),
@@ -100,7 +151,7 @@ describe("listActiveTicketSummaries", () => {
       {
         id: "t1",
         title: "Open",
-        state: "open",
+        status: "todo",
         storyId: "s1",
         ...audit,
       },

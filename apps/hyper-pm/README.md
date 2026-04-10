@@ -12,6 +12,18 @@ node apps/hyper-pm/dist/main.cjs epic create --title "My epic"
 
 Use `hyper-pm` on your PATH after linking or via `pnpm exec hyper-pm` from a package that depends on this workspace package.
 
+## Workflow status
+
+Epics, stories, and tickets share a `status` value: `backlog`, `todo`, `in_progress`, `done`, `cancelled`.
+
+- **Defaults:** `epic create` / `story create` default to `backlog` when `--status` is omitted; `ticket create` defaults to `todo`.
+- **CLI:** pass `--status <value>` on create/update. `ticket update` no longer accepts `--state` (legacy JSONL may still carry `state` on tickets for replay).
+- **Reads:** each row includes `status`, `statusChangedAt`, and `statusChangedBy` for the **last time `status` changed**. `updatedAt` / `updatedBy` still reflect **any** field change (title, body, link, delete, etc.). For a full history of transitions, use `hyper-pm audit`.
+
+### GitHub Issues (tickets)
+
+Outbound and inbound sync map workflow status to GitHub issue **open/closed**: `done` and `cancelled` → closed; `backlog`, `todo`, and `in_progress` → open. Inbound full sync preserves non-terminal statuses when an issue stays open (for example `in_progress` is not reset on every poll). Reopening a closed issue on GitHub moves `done` / `cancelled` to `todo`.
+
 ## Audit trail
 
 Every durable change is an append-only JSONL event with `ts` (when), `type` + `payload` (what), and `actor` (who).

@@ -1,3 +1,4 @@
+import type { WorkItemStatus } from "../lib/work-item-status";
 import type { Projection } from "../storage/projection";
 
 type AuditSummaryFields = {
@@ -11,6 +12,7 @@ type AuditSummaryFields = {
 export type EpicListSummary = {
   id: string;
   title: string;
+  status: WorkItemStatus;
 } & AuditSummaryFields;
 
 /** One row for `story read` when listing (no `--id`). */
@@ -18,13 +20,14 @@ export type StoryListSummary = {
   id: string;
   title: string;
   epicId: string;
+  status: WorkItemStatus;
 } & AuditSummaryFields;
 
 /** One row for `ticket read` when listing (no `--id`). */
 export type TicketListSummary = {
   id: string;
   title: string;
-  state: "open" | "closed";
+  status: WorkItemStatus;
   storyId: string;
 } & AuditSummaryFields;
 
@@ -41,6 +44,7 @@ export const listActiveEpicSummaries = (
     .map((e) => ({
       id: e.id,
       title: e.title,
+      status: e.status,
       createdAt: e.createdAt,
       createdBy: e.createdBy,
       updatedAt: e.updatedAt,
@@ -62,6 +66,7 @@ export const listActiveStorySummaries = (
       id: s.id,
       title: s.title,
       epicId: s.epicId,
+      status: s.status,
       createdAt: s.createdAt,
       createdBy: s.createdBy,
       updatedAt: s.updatedAt,
@@ -82,7 +87,7 @@ export const listActiveTicketSummaries = (
     .map((t) => ({
       id: t.id,
       title: t.title,
-      state: t.state,
+      status: t.status,
       storyId: t.storyId,
       createdAt: t.createdAt,
       createdBy: t.createdBy,

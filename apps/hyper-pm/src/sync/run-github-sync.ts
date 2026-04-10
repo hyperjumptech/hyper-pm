@@ -4,6 +4,10 @@ import {
   buildGithubIssueBody,
   parseHyperPmIdFromIssueBody,
 } from "../lib/github-issue-body";
+import {
+  resolveTicketInboundStatus,
+  statusToGithubIssueState,
+} from "../lib/work-item-status";
 import type { EventLine } from "../storage/event-line";
 import { appendEventLine } from "../storage/append-event";
 import type { Projection } from "../storage/projection";
@@ -68,7 +72,7 @@ export const runGithubOutboundSync = async (params: {
           parentIds: { epic: epic.id, story: story.id },
           description: ticket.body,
         }),
-        state: ticket.state === "closed" ? "closed" : "open",
+        state: statusToGithubIssueState(ticket.status),
       });
       continue;
     }
@@ -110,7 +114,7 @@ export const runGithubOutboundSync = async (params: {
 };
 
 /**
- * Minimum inbound sync: title/body/state for issues referencing hyper_pm ids.
+ * Minimum inbound sync: title/body/status for issues referencing hyper_pm ids.
  *
  * @param params - Data worktree root, projection baseline, config, deps.
  */
@@ -140,7 +144,12 @@ export const runGithubInboundSync = async (params: {
     if (!id) continue;
     const ticket = params.projection.tickets.get(id);
     if (!ticket || ticket.deleted) continue;
-    const nextState = issue.state === "closed" ? "closed" : "open";
+    const issueApiState =
+      issue.state === "closed" ? ("closed" as const) : ("open" as const);
+    const nextStatus = resolveTicketInboundStatus({
+      issueState: issueApiState,
+      currentStatus: ticket.status,
+    });
     const fenceIdx = issue.body.indexOf("```");
     const desc =
       fenceIdx === -1
@@ -150,7 +159,7 @@ export const runGithubInboundSync = async (params: {
     if (
       ticket.title === ghTitle &&
       ticket.body === desc &&
-      ticket.state === nextState
+      ticket.status === nextStatus
     ) {
       continue;
     }
@@ -165,7 +174,7 @@ export const runGithubInboundSync = async (params: {
         entityId: id,
         title: ghTitle,
         body: desc,
-        state: nextState,
+        status: nextStatus,
       },
     };
     out.push(evt);

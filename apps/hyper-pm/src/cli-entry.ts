@@ -9,6 +9,10 @@ import { Octokit } from "@octokit/rest";
 import { ulid } from "ulid";
 import { runAiDraft } from "./ai/run-ai-draft";
 import { ExitCode } from "./cli/exit-codes";
+import {
+  parseWorkItemStatus,
+  type WorkItemStatus,
+} from "./lib/work-item-status";
 import { formatOutput } from "./cli/format-output";
 import { resolveCliActor } from "./cli/resolve-cli-actor";
 import { formatAuditTextLines, runAuditOnLines } from "./cli/run-audit";
@@ -64,6 +68,31 @@ const readGlobals = (cmd: Command): GlobalOpts => {
     root = root.parent;
   }
   return root.opts() as GlobalOpts;
+};
+
+/**
+ * Parses `--status` when present, or exits on invalid values.
+ *
+ * @param raw - Raw CLI flag value.
+ * @param deps - Process boundary for user-facing errors.
+ * @returns Parsed status, or `undefined` when `raw` is `undefined`.
+ */
+const parseCliWorkItemStatus = (
+  raw: string | undefined,
+  deps: {
+    exit: (code: number) => never;
+    error: typeof console.error;
+  },
+): WorkItemStatus | undefined => {
+  if (raw === undefined) return undefined;
+  const s = parseWorkItemStatus(raw);
+  if (s === undefined) {
+    deps.error(
+      `Invalid --status ${JSON.stringify(raw)} (expected backlog|todo|in_progress|done|cancelled)`,
+    );
+    deps.exit(ExitCode.UserError);
+  }
+  return s;
 };
 
 /**
@@ -168,14 +197,29 @@ export const runCli = async (
     .requiredOption("--title <t>", "title")
     .option("--body <b>", "body", "")
     .option("--id <id>", "explicit id")
+    .option(
+      "--status <s>",
+      "backlog|todo|in_progress|done|cancelled (default backlog)",
+    )
     .action(async function (this: Command) {
       const g = readGlobals(this);
-      const o = this.opts<{ title: string; body: string; id?: string }>();
+      const o = this.opts<{
+        title: string;
+        body: string;
+        id?: string;
+        status?: string;
+      }>();
       await mutateDataBranch(g, deps, async (root, { actor }) => {
         const id = o.id ?? ulid();
+        const status = parseCliWorkItemStatus(o.status, deps);
         const evt = makeEvent(
           "EpicCreated",
-          { id, title: o.title, body: o.body },
+          {
+            id,
+            title: o.title,
+            body: o.body,
+            ...(status !== undefined ? { status } : {}),
+          },
           deps.clock,
           actor,
         );
@@ -197,13 +241,21 @@ export const runCli = async (
     .requiredOption("--id <id>", "id")
     .option("--title <t>")
     .option("--body <b>")
+    .option("--status <s>", "backlog|todo|in_progress|done|cancelled")
     .action(async function (this: Command) {
       const g = readGlobals(this);
-      const o = this.opts<{ id: string; title?: string; body?: string }>();
+      const o = this.opts<{
+        id: string;
+        title?: string;
+        body?: string;
+        status?: string;
+      }>();
       await mutateDataBranch(g, deps, async (root, { actor }) => {
+        const status = parseCliWorkItemStatus(o.status, deps);
         const payload: Record<string, unknown> = { id: o.id };
         if (o.title !== undefined) payload["title"] = o.title;
         if (o.body !== undefined) payload["body"] = o.body;
+        if (status !== undefined) payload["status"] = status;
         const evt = makeEvent("EpicUpdated", payload, deps.clock, actor);
         await appendEventLine(root, evt, deps.clock);
         return payload;
@@ -229,6 +281,10 @@ export const runCli = async (
     .requiredOption("--epic <id>")
     .option("--body <b>", "", "")
     .option("--id <id>")
+    .option(
+      "--status <s>",
+      "backlog|todo|in_progress|done|cancelled (default backlog)",
+    )
     .action(async function (this: Command) {
       const g = readGlobals(this);
       const o = this.opts<{
@@ -236,6 +292,7 @@ export const runCli = async (
         body: string;
         epic: string;
         id?: string;
+        status?: string;
       }>();
       await mutateDataBranch(g, deps, async (root, { actor }) => {
         const lines = await readAllEventLines(root);
@@ -245,9 +302,16 @@ export const runCli = async (
           throw new Error(`Epic not found: ${o.epic}`);
         }
         const id = o.id ?? ulid();
+        const status = parseCliWorkItemStatus(o.status, deps);
         const evt = makeEvent(
           "StoryCreated",
-          { id, epicId: o.epic, title: o.title, body: o.body },
+          {
+            id,
+            epicId: o.epic,
+            title: o.title,
+            body: o.body,
+            ...(status !== undefined ? { status } : {}),
+          },
           deps.clock,
           actor,
         );
@@ -269,13 +333,21 @@ export const runCli = async (
     .requiredOption("--id <id>")
     .option("--title <t>")
     .option("--body <b>")
+    .option("--status <s>", "backlog|todo|in_progress|done|cancelled")
     .action(async function (this: Command) {
       const g = readGlobals(this);
-      const o = this.opts<{ id: string; title?: string; body?: string }>();
+      const o = this.opts<{
+        id: string;
+        title?: string;
+        body?: string;
+        status?: string;
+      }>();
       await mutateDataBranch(g, deps, async (root, { actor }) => {
+        const status = parseCliWorkItemStatus(o.status, deps);
         const payload: Record<string, unknown> = { id: o.id };
         if (o.title !== undefined) payload["title"] = o.title;
         if (o.body !== undefined) payload["body"] = o.body;
+        if (status !== undefined) payload["status"] = status;
         const evt = makeEvent("StoryUpdated", payload, deps.clock, actor);
         await appendEventLine(root, evt, deps.clock);
         return payload;
@@ -301,6 +373,10 @@ export const runCli = async (
     .requiredOption("--story <id>")
     .option("--body <b>", "", "")
     .option("--id <id>")
+    .option(
+      "--status <s>",
+      "backlog|todo|in_progress|done|cancelled (default todo)",
+    )
     .option("--ai-draft", "draft body via AI (explicit)", false)
     .action(async function (this: Command) {
       const g = readGlobals(this);
@@ -309,6 +385,7 @@ export const runCli = async (
         body: string;
         story: string;
         id?: string;
+        status?: string;
         aiDraft?: boolean;
       }>();
       let body = o.body;
@@ -330,6 +407,7 @@ export const runCli = async (
           throw new Error(`Story not found: ${o.story}`);
         }
         const id = o.id ?? ulid();
+        const status = parseCliWorkItemStatus(o.status, deps);
         const evt = makeEvent(
           "TicketCreated",
           {
@@ -337,7 +415,7 @@ export const runCli = async (
             storyId: o.story,
             title: o.title,
             body,
-            state: "open",
+            ...(status !== undefined ? { status } : {}),
           },
           deps.clock,
           actor,
@@ -360,7 +438,7 @@ export const runCli = async (
     .requiredOption("--id <id>")
     .option("--title <t>")
     .option("--body <b>")
-    .option("--state <s>")
+    .option("--status <s>", "backlog|todo|in_progress|done|cancelled")
     .option("--ai-improve", "expand description via AI (explicit)", false)
     .action(async function (this: Command) {
       const g = readGlobals(this);
@@ -368,7 +446,7 @@ export const runCli = async (
         id: string;
         title?: string;
         body?: string;
-        state?: string;
+        status?: string;
         aiImprove?: boolean;
       }>();
       let body = o.body;
@@ -387,10 +465,11 @@ export const runCli = async (
         });
       }
       await mutateDataBranch(g, deps, async (root, { actor }) => {
+        const status = parseCliWorkItemStatus(o.status, deps);
         const payload: Record<string, unknown> = { id: o.id };
         if (o.title !== undefined) payload["title"] = o.title;
         if (body !== undefined) payload["body"] = body;
-        if (o.state !== undefined) payload["state"] = o.state;
+        if (status !== undefined) payload["status"] = status;
         const evt = makeEvent("TicketUpdated", payload, deps.clock, actor);
         await appendEventLine(root, evt, deps.clock);
         return payload;

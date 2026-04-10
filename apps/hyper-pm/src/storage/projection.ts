@@ -1,3 +1,11 @@
+import {
+  parseWorkItemStatus,
+  resolveStatusForNewEpicStoryPayload,
+  resolveStatusForNewTicketPayload,
+  resolveTicketInboundStatus,
+  resolveTicketStatusFromUpdatePayload,
+  type WorkItemStatus,
+} from "../lib/work-item-status";
 import { eventLineSchema, type EventLine } from "./event-line";
 
 /** Audit fields copied from durable events (`ts` / `actor`) for CLI read output. */
@@ -8,39 +16,56 @@ type EntityAudit = {
   updatedBy: string;
 };
 
+/** Fields for last workflow transition (distinct from `updatedAt`). */
+type StatusTransitionAudit = {
+  statusChangedAt: string;
+  statusChangedBy: string;
+};
+
 export type EpicRecord = {
   id: string;
   title: string;
   body: string;
+  status: WorkItemStatus;
   deleted?: boolean;
-} & EntityAudit;
+} & EntityAudit &
+  StatusTransitionAudit;
 
 export type StoryRecord = {
   id: string;
   epicId: string;
   title: string;
   body: string;
+  status: WorkItemStatus;
   deleted?: boolean;
-} & EntityAudit;
+} & EntityAudit &
+  StatusTransitionAudit;
 
 export type TicketRecord = {
   id: string;
   storyId: string;
   title: string;
   body: string;
-  state: "open" | "closed";
+  status: WorkItemStatus;
   /** Parsed PR refs from body (REQ-010). */
   linkedPrs: number[];
   /** GitHub issue number when linked via sync. */
   githubIssueNumber?: number;
   deleted?: boolean;
-} & EntityAudit;
+} & EntityAudit &
+  StatusTransitionAudit;
 
 export type Projection = {
   epics: Map<string, EpicRecord>;
   stories: Map<string, StoryRecord>;
   tickets: Map<string, TicketRecord>;
   syncCursor?: string;
+};
+
+type WorkflowRow = {
+  status: WorkItemStatus;
+  statusChangedAt: string;
+  statusChangedBy: string;
 };
 
 const emptyProjection = (): Projection => ({
@@ -85,6 +110,49 @@ const applyLastUpdate = (row: EntityAudit, evt: EventLine): void => {
 };
 
 /**
+ * Assigns a new workflow status when it differs and records who changed it.
+ *
+ * @param row - Epic, story, or ticket row with `status` and `statusChanged*`.
+ * @param evt - Source event for `ts` and `actor`.
+ * @param nextStatus - Desired status after this event.
+ * @returns `true` when the status value changed.
+ */
+const applyStatusIfChanged = (
+  row: WorkflowRow,
+  evt: EventLine,
+  nextStatus: WorkItemStatus,
+): boolean => {
+  if (row.status === nextStatus) return false;
+  row.status = nextStatus;
+  row.statusChangedAt = evt.ts;
+  row.statusChangedBy = evt.actor;
+  return true;
+};
+
+/**
+ * Resolves the next ticket status from a `GithubInboundUpdate` payload (new `status` or legacy `state`).
+ *
+ * @param ticket - Current ticket row before applying the event.
+ * @param payload - Inbound sync payload.
+ * @returns The status to apply, or `undefined` when the payload carries no workflow signal.
+ */
+const resolveInboundTicketStatusFromPayload = (
+  ticket: TicketRecord,
+  payload: Record<string, unknown>,
+): WorkItemStatus | undefined => {
+  const explicit = parseWorkItemStatus(payload["status"]);
+  if (explicit !== undefined) return explicit;
+  const legacySt = payload["state"];
+  if (legacySt === "open" || legacySt === "closed") {
+    return resolveTicketInboundStatus({
+      issueState: legacySt,
+      currentStatus: ticket.status,
+    });
+  }
+  return undefined;
+};
+
+/**
  * Applies a single validated event onto an in-memory projection (last-writer-wins per field).
  *
  * @param projection - Mutable projection state.
@@ -94,10 +162,14 @@ export const applyEvent = (projection: Projection, evt: EventLine): void => {
   switch (evt.type) {
     case "EpicCreated": {
       const id = String(evt.payload["id"]);
+      const status = resolveStatusForNewEpicStoryPayload(evt.payload);
       const row: EpicRecord = {
         id,
         title: String(evt.payload["title"] ?? ""),
         body: String(evt.payload["body"] ?? ""),
+        status,
+        statusChangedAt: evt.ts,
+        statusChangedBy: evt.actor,
         createdAt: "",
         createdBy: "",
         updatedAt: "",
@@ -117,6 +189,10 @@ export const applyEvent = (projection: Projection, evt: EventLine): void => {
       if (evt.payload["body"] !== undefined) {
         cur.body = String(evt.payload["body"]);
       }
+      const nextStatus = parseWorkItemStatus(evt.payload["status"]);
+      if (nextStatus !== undefined) {
+        applyStatusIfChanged(cur, evt, nextStatus);
+      }
       applyLastUpdate(cur, evt);
       break;
     }
@@ -131,11 +207,15 @@ export const applyEvent = (projection: Projection, evt: EventLine): void => {
     }
     case "StoryCreated": {
       const id = String(evt.payload["id"]);
+      const status = resolveStatusForNewEpicStoryPayload(evt.payload);
       const row: StoryRecord = {
         id,
         epicId: String(evt.payload["epicId"]),
         title: String(evt.payload["title"] ?? ""),
         body: String(evt.payload["body"] ?? ""),
+        status,
+        statusChangedAt: evt.ts,
+        statusChangedBy: evt.actor,
         createdAt: "",
         createdBy: "",
         updatedAt: "",
@@ -155,6 +235,10 @@ export const applyEvent = (projection: Projection, evt: EventLine): void => {
       if (evt.payload["body"] !== undefined) {
         cur.body = String(evt.payload["body"]);
       }
+      const nextStatus = parseWorkItemStatus(evt.payload["status"]);
+      if (nextStatus !== undefined) {
+        applyStatusIfChanged(cur, evt, nextStatus);
+      }
       applyLastUpdate(cur, evt);
       break;
     }
@@ -170,15 +254,15 @@ export const applyEvent = (projection: Projection, evt: EventLine): void => {
     case "TicketCreated": {
       const id = String(evt.payload["id"]);
       const body = String(evt.payload["body"] ?? "");
+      const status = resolveStatusForNewTicketPayload(evt.payload);
       const row: TicketRecord = {
         id,
         storyId: String(evt.payload["storyId"]),
         title: String(evt.payload["title"] ?? ""),
         body,
-        state:
-          evt.payload["state"] === "closed" || evt.payload["state"] === "open"
-            ? evt.payload["state"]
-            : "open",
+        status,
+        statusChangedAt: evt.ts,
+        statusChangedBy: evt.actor,
         linkedPrs: parsePrRefs(body),
         createdAt: "",
         createdBy: "",
@@ -200,11 +284,9 @@ export const applyEvent = (projection: Projection, evt: EventLine): void => {
         cur.body = String(evt.payload["body"]);
         cur.linkedPrs = parsePrRefs(cur.body);
       }
-      if (
-        evt.payload["state"] === "open" ||
-        evt.payload["state"] === "closed"
-      ) {
-        cur.state = evt.payload["state"];
+      const nextStatus = resolveTicketStatusFromUpdatePayload(evt.payload);
+      if (nextStatus !== undefined) {
+        applyStatusIfChanged(cur, evt, nextStatus);
       }
       applyLastUpdate(cur, evt);
       break;
@@ -245,11 +327,12 @@ export const applyEvent = (projection: Projection, evt: EventLine): void => {
           ticket.body = String(evt.payload["body"]);
           ticket.linkedPrs = parsePrRefs(ticket.body);
         }
-        if (
-          evt.payload["state"] === "open" ||
-          evt.payload["state"] === "closed"
-        ) {
-          ticket.state = evt.payload["state"];
+        const inboundStatus = resolveInboundTicketStatusFromPayload(
+          ticket,
+          evt.payload,
+        );
+        if (inboundStatus !== undefined) {
+          applyStatusIfChanged(ticket, evt, inboundStatus);
         }
         applyLastUpdate(ticket, evt);
       }
