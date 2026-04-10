@@ -1,0 +1,124 @@
+---
+globs: **/*.{ts, tsx, js, jsx}
+alwaysApply: false
+---
+
+# TypeScript (TS) & JavaScript (JS) Standards
+
+## Import Extensions (Workspace Packages)
+
+In **workspace packages** that export TypeScript source (e.g. `"main": "./src/index.ts"` or `"exports": { ".": "./src/index.ts" }` with no build step), use **extensionless** relative imports. Do not use `.js` in import paths when the package is consumed as source — bundlers (Next.js/Turbopack, Vite, etc.) resolve to the actual `.ts` files, and `./foo.js` will not resolve to `foo.ts`, causing "Module not found" at build time.
+
+```typescript
+// ❌ BAD — .js in source breaks when package is consumed as source (no dist)
+export { createAgentTokenClient } from "./agent-token-client.js";
+export { verifyTokenViaAuthApi } from "./verify-token.js";
+
+// ✅ GOOD — extensionless; bundler resolves to .ts
+export { createAgentTokenClient } from "./agent-token-client";
+export { verifyTokenViaAuthApi } from "./verify-token";
+```
+
+Use `.js` in relative imports when the package **has a build step** and exports built output (e.g. `"main": "dist/index.js"`). With `moduleResolution: "NodeNext"` / `"node16"`, tsc requires explicit `.js` extensions in ESM; the build emits real `.js` files, so consumers (and tsc) resolve them correctly.
+
+## File Naming
+
+File names must be **kebab-case**.
+
+```
+✅ user-service.ts
+✅ get-active-users.test.ts
+✅ parse-config.js
+
+❌ userService.ts
+❌ GetActiveUsers.test.ts
+❌ parseConfig.js
+```
+
+## Functions
+
+- Keep functions **small, modular, and composable** — each function does one thing.
+- Prefer **dependency injection** over mocking. Accept collaborators as parameters.
+- Every function must have **100% test coverage**.
+- Every function must have a **JSDoc comment** describing what it does, its parameters, and its return value. This lets devs see the signature and purpose by hovering in the IDE.
+
+```typescript
+// ❌ BAD — no docs, hard to test, tightly coupled
+async function getActiveUsers() {
+  const db = new Database();
+  const users = await db.query("SELECT * FROM users WHERE active = true");
+  return users;
+}
+
+// ✅ GOOD — documented, injectable, testable, composable
+/** Fetches all active users from the database. */
+async function getActiveUsers(db: DatabaseClient): Promise<User[]> {
+  return db.query("SELECT * FROM users WHERE active = true");
+}
+```
+
+## Dependency Injection via Props
+
+When passing dependencies as props (e.g. in React components or configuration objects), always provide a **default value** that is the **production implementation**. This keeps call sites clean while still allowing tests to inject fakes.
+
+```typescript
+// ❌ BAD — caller must always supply the dependency
+function UserList({ fetchUsers }: { fetchUsers: () => Promise<User[]> }) {
+  // ...
+}
+
+// ✅ GOOD — defaults to production impl, tests can override
+function UserList({
+  fetchUsers = fetchUsersFromApi,
+}: {
+  fetchUsers?: () => Promise<User[]>;
+}) {
+  // ...
+}
+```
+
+## Testing
+
+- Use the vitest-unit-testing skill
+- Every function must have **100% coverage** tests.
+- Use dependency injection to supply real or fake collaborators — avoid mocks when possible.
+- Co-locate test files next to source files using the `.test.ts` / `.test.js` suffix.
+
+```typescript
+// ✅ GOOD — test with a fake, no mocking needed
+test("getActiveUsers returns only active users", async () => {
+  const fakeDb: DatabaseClient = {
+    query: async () => [{ id: 1, name: "Alice", active: true }],
+  };
+  const result = await getActiveUsers(fakeDb);
+  expect(result).toHaveLength(1);
+});
+```
+
+## Errors & Linting
+
+- Always runs `pnpm code-quality` to check for all lint errors, TypeScript errors, tests errors, and formatting errors. Fix them if necessary.
+
+## Formatting
+
+- Always format code using **Prettier** for all supported languages.
+
+## React component
+
+Use the /react-component skill when creating a React component.
+
+## Email template
+
+Use the /email-template skill when creating an email template.
+
+## Prisma code
+
+Use the /prisma-strong-typing skill when creating or updating Prisma queries, Prisma service-layer code, or Prisma-related tests.
+
+## React Server Action/Function
+
+Follow the /route-action-gen-workflow rule when creating a server action/function.
+
+## Next.js Route Handler/API Route
+
+Follow the /route-action-gen-workflow rule when creating a Next.js route handler/API route.

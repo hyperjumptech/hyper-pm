@@ -1,0 +1,51 @@
+{
+  "name": "web",
+  "version": "0.0.1",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "generate": "route-action-gen",
+    "start": "next start",
+    "lint": "next lint",
+    "lint:fix": "next lint --fix",
+    "typecheck": "tsc --noEmit",
+    "create:route": "route-action-gen create",
+    "test": "vitest --run",
+    "test:coverage": "vitest --run --coverage"
+  },
+  "dependencies": {
+    "@workspace/email-send": "workspace:*",
+    "@workspace/env": "workspace:*",
+    "@workspace/ui": "workspace:*",
+    "@prisma/adapter-pg": "^7.2.0",
+    "@prisma/client": "^7.2.0",
+    "pg": "catalog:",
+    "@workspace/database": "workspace:*",
+    "route-action-gen": "workspace:*",
+    "lucide-react": "^0.475.0",
+    "next": "16.0.7",
+    "next-themes": "^0.4.6",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "sonner": "^2.0.7",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "catalog:",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@types/node": "catalog:",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@workspace/eslint-config": "workspace:^",
+    "@workspace/typescript-config": "workspace:*",
+    "dotenv": "catalog:",
+    "jsdom": "^28.0.0",
+    "eslint": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "vite-tsconfig-paths": "^6.1.1"
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "name": "hyperjump-web-framework",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "build": "turbo build",
+    "test": "turbo test",
+    "test:coverage": "turbo test:coverage",
+    "dev": "turbo dev",
+    "lint": "turbo lint",
+    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
+    "docs:dev": "speed-docs docs --dev",
+    "docs:build": "speed-docs docs"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "catalog:",
+    "@workspace/eslint-config": "workspace:*",
+    "@workspace/typescript-config": "workspace:*",
+    "prettier": "^3.6.2",
+    "speed-docs": "^0.0.22",
+    "turbo": "^2.5.5",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "packageManager": "pnpm@10.4.1",
+  "engines": {
+    "node": ">=20"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/engines",
+      "@tailwindcss/oxide",
+      "core-js-pure",
+      "esbuild",
+      "prisma",
+      "sharp"
+    ]
+  }
+}

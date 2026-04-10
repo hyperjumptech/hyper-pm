@@ -1,0 +1,598 @@
+---
+title: Updating Data
+---
+
+Updating data in this document refers to all of the following processes:
+
+1. user initiates the update action (e.g., clicking a button)
+2. the data in the backend is updated
+3. the updated data is reflected in the frontend
+
+The last part is important because there is some cases where data mutation does not need to be reflected in the frontend. For example, we may track the product pages that the user has visited. Technically, the user's data is updated, but we don't need to reflect it in the frontend.
+
+## Before Server Functions
+
+Ever since the introduction of Server Functions in React and Next.js, we should stop thinking of using route handler to update data. When using a route handler (API route), we need to
+
+1. create the route handler file (e.g., `app/api/posts/[postId]/route.ts`). In the handler, we need to make sure to validate the incoming request.
+2. call the end point using fetch from the client component.
+3. handle the response in the client component.
+
+Step 2 and 3 above are prone to errors because we need to make sure that:
+
+1. the URL of the end point is correct when calling the end point from the client component. A minor typo in the URL can cause the request to fail.
+2. the request body needs to correctly contains the data that the server expects. A missing or incorrect field in the request body can cause the request to fail.
+3. the response from the server is correctly validated. Difference in what the client code expects and what the server returns can cause the request to fail.
+
+This vulnerability happens because communication between the client and the server via fetch and route handler is by default not strongly typed.
+
+## Server Functions
+
+With Server Functions, we can simply create a strongly typed function and directly call it from the client component. React and Next.js handle the heavy lifting of actually calling the server function and handling the response in the background.
+
+### Creating and using
+
+For example, we have a component that allows the user to toggle the favorite status of a post. We can create a server function to handle the toggle action.
+
+```tsx title="toggle-favorite.action.ts" lineNumbers
+"use server";
+
+export const toggleFavorite = async (postId: string) => {
+  const user = await getUser();
+  const post = await db.post.findUnique({
+    where: { id: postId, userId: user.id },
+  });
+  if (!post) {
+    return {
+      ok: 0,
+      error: "Post not found",
+    };
+  }
+  await db.post.update({
+    where: { id: postId, userId: user.id },
+    data: {
+      isFavorite: !post.isFavorite,
+    },
+  });
+
+  return {
+    ok: 1,
+    message: "Post toggled successfully",
+  };
+};
+```
+
+<Callout type="info" title="Good to know">
+  The file that contains the server function should have the `"use server"`
+  directive at the top which causes every exported function in the file will be
+  callable from the client component.
+</Callout>
+
+Then we can call the server function from the client component like this:
+
+```tsx title="toggle-favorite.client.ts" lineNumbers
+"use client";
+import { useTransition } from "react";
+import { toast } from "sonner";
+import { toggleFavorite } from "./toggle-favorite.action";
+
+const useToggleFavorite = (postId: string) => {
+  const [isPending, startTransition] = useTransition();
+
+  const handleToggle = async () => {
+    startTransition(async () => {
+      const result = await toggleFavorite(postId);
+      if (result.ok === 1) {
+        toast.success(result.message);
+      } else {
+        toast.error(result.error);
+      }
+    });
+  };
+
+  return {
+    isPending,
+    handleToggle,
+  };
+};
+
+export const ToggleFavorite = ({ postId }: { postId: string }) => {
+  const { isPending, handleToggle } = useToggleFavorite(postId);
+  return (
+    <div>
+      <button onClick={handleToggle} disabled={isPending}>
+        {isPending ? "Loading..." : "Toggle Favorite"}
+      </button>
+    </div>
+  );
+};
+```
+
+<Callout type="info" title="Good to know">
+  We call the server function by wrapping it in a `startTransition` function.
+  This way we can show a loading state to the user while the operation is being
+  performed.
+</Callout>
+
+As you can see, both the client and the server sides are strongly typed. The server function's input and output are known to the client component. This means that the client code we write won't have missing or incorrect fields when sending the request to the server. We can also be sure that the response handling code in the client component won't have any unexpected properties. If the input or output is changed in the server function, the client code will not compile.
+
+<Callout type="info" title="Good to know">
+  Server function in Next.js is tightly integrated with Next.js' caching and
+  rendering which makes it possible to perform mutation and see the updated data
+  in the UI without having to refresh the page. However, it has one limitation:
+  subsequent server function calls are executed sequentially. As of this
+  writing, this limitation is not yet addressed.
+</Callout>
+
+### Showing updated data
+
+After updating data, we often need to show the updated data in the UI. For example, we have this page component in `/updating-data`:
+
+```tsx title="updating-data/page.tsx" lineNumbers
+import { notFound } from "next/navigation";
+import { getPostByIdAndUser } from "./post";
+import { ToggleFavorite } from "./toggle-favorite.client";
+
+export default async function Page() {
+  const post = await getPostByIdAndUser("1", "1");
+  if (!post) {
+    notFound();
+  }
+  return (
+    <div>
+      <h1>Post #1: {post.title}</h1>
+      <p>Content: {post.content}</p>
+      <p>Is Favorite: {post.isFavorite ? "Yes" : "No"}</p>
+      <ToggleFavorite postId="1" />
+    </div>
+  );
+}
+```
+
+After toggling the favorite status of the post, the UI should show the updated data. With server function, this is trivial to do. All we have to do is call one of these functions in the server function:
+
+- `refresh()`. This will refresh the client router. But it's only available in Next.js 16 and it doesn't revalidate the tagged cache data.
+- `revalidatePage(pathname)`: This will invalidate the cached data for a specific path so that the UI is immediately updated.
+- `revalidateTag(tag)`: This will invalidate the cached data for a specific tag but the UI will not be updated immediately. The new data will appear in the next page visit.
+
+Generally, we should use `revalidatePage(pathname)` to revalidate the cached data for the current page.
+
+```tsx title="toggle-favorite.action.ts" lineNumbers
+"use server";
+
+import { getUser } from "./user";
+import { getPostByIdAndUser, updatePost } from "./post";
+import { revalidatePath } from "next/cache";
+
+export const toggleFavorite = async (postId: string) => {
+  const user = await getUser();
+  if (!user) {
+    return {
+      ok: 0,
+      error: "user not found",
+    };
+  }
+  const post = await getPostByIdAndUser(postId, user.id);
+  if (!post) {
+    return {
+      ok: 0,
+      error: "Post not found",
+    };
+  }
+  await updatePost(postId, user.id, !post.isFavorite);
+
+  revalidatePath("/updating-data");
+
+  return {
+    ok: 1,
+    message: "Post toggled successfully",
+  };
+};
+```
+
+If you notice, this approach doesn't require any code in the client component. When the data is successfully updated, we don't need to write code to update the UI to reflect the updated data or to synchronize the data between the client and the server. We just need to tell the server to return the fresh data. The source of truth of data is from the server.
+
+### When not to use
+
+There are cases where it's not preferable to use server function to update data due to the limitation of Next.js implementation.
+
+- Server function calls are executed sequentially. If you call a server function multiple times in a row, the server function calls will be executed sequentially. This can slow down the user experience. This is because Next.js doesn't want the UI to be out of sync due to race condition. If you need to call a server function multiple times in a row in a short period of time, you should use route handler instead.
+- Server function calls cannot be cancelled midway. Generally this is not an issue because when updating data, we usually don't want to cancel the operation midway. But if you need to cancel the operation midway, you should use route handler instead because you can use `AbortController` to cancel a `fetch` request.
+
+## Optimistic update
+
+Some operations performed by a user are not mission critical. For example, bookmarking a post or toggling the favorite status of a post. On the other hand, there are operations that are mission critical, e.g., making a purchase. In a critical operation, it is acceptable to show a loading state to the user while the operation is being performed. But for non-critical operations, we can make our app to be perceived as fast and responsive by updating the UI immediately without waiting for the server to return the updated data. This is called **optimistic update**. And React provides us with the tool called `useOptimistic` hook.
+
+### Example
+
+Say for example, in the example above, the `toggleFavorite` server function takes a few second to complete. We can use `useOptimistic` hook to update the UI immediately without waiting for the server to return the updated data.
+
+```tsx title="toggle-favorite.client.tsx" lineNumbers
+"use client";
+import { useOptimistic, useTransition } from "react";
+import { toast } from "sonner";
+import { toggleFavorite } from "./toggle-favorite.action";
+
+const useToggleFavorite = (postId: string, isFavorite: boolean) => {
+  const [isPending, startTransition] = useTransition();
+  // [!code highlight:6]
+  const [optimisticFavorite, toggleOptimisticFavorite] = useOptimistic(
+    isFavorite,
+    (_currentState, _: void) => {
+      return !_currentState;
+    }
+  );
+
+  const handleToggle = async () => {
+    startTransition(async () => {
+      toggleOptimisticFavorite();
+
+      const result = await toggleFavorite(postId);
+      if (result.ok === 1) {
+        toast.success(result.message);
+      } else {
+        toast.error(result.error);
+      }
+    });
+  };
+
+  return {
+    currentFavorite: optimisticFavorite,
+    isPending,
+    handleToggle,
+  };
+};
+
+export const ToggleFavorite = ({
+  postId,
+  isFavorite,
+}: {
+  postId: string;
+  isFavorite: boolean; // This value is from the server, the source of truth of the data
+}) => {
+  const { handleToggle, currentFavorite } = useToggleFavorite(
+    postId,
+    isFavorite
+  );
+  return (
+    <div>
+      <p>Is Favorite: {currentFavorite ? "Yes" : "No"}</p>
+      <button onClick={handleToggle}>Toggle Favorite</button>
+    </div>
+  );
+};
+```
+
+### When to use
+
+Fast and snappy UI is important for the user experience. But we should not use optimistic update for all operations. You should not use optimistic update when:
+
+1. the operation involves monetary value. For example, completing a purchase transaction.
+2. the operation is destructive and irreversible. For example, deleting a post.
+
+## Server Actions for form submission
+
+When updating data from a form, we use a particular server functions to handle the form submission instead of a route handler. However, the server function for form submission has a specific signature when used with the `useActionState` hook (or `useResettableActionState` hook). It accepts two arguments:
+
+- the previous state: the value that was returned by the previous call to the server function.
+- the form data: the data that was sent from the client.
+
+From here on, we will refer to the server function that handles the form submission as a **server action** because we indirectly pass it to the `action` prop of the form. "Indirectly" because the server function is not directly passed to the `action` prop, but rather to the `useResettableActionState` hook.
+
+For example we have the following form:
+
+```tsx title="form.tsx" lineNumbers
+"use client";
+import { serverAction } from "./server-action";
+import { useResettableActionState } from "@nicnocquee/use-resettable-action-state";
+
+const Form = () => {
+  const [state, action, pending] = useResettableActionState(serverAction, null);
+  return (
+    <form action={action}>
+      <input type="hidden" name="token" />
+      <input type="password" name="password" />
+      <input type="email" name="email" />
+      <button type="submit">Submit</button>
+    </form>
+  );
+};
+```
+
+and the following server function:
+
+```tsx title="server-action.ts" lineNumbers
+"use server";
+
+export const serverAction = async (previousState: any, formData: FormData) => {
+  const token = formData.get("token");
+  const password = formData.get("password");
+  const email = formData.get("email");
+
+  // do something with the data
+  // ...
+
+  return { success: true, message: "Data updated successfully" };
+};
+```
+
+### useResettableActionState
+
+The `useResettableActionState` is basically a wrapper for React's `useActionState`. Please read the docs for more information. But the gist is basically it allows you
+
+- to reset the state of the action
+- to run some code before the form is submitted, e.g., data validation, add more data, etc.
+- to access the payload of the form submission, i.e., the data that was sent from the client.
+
+### Redirecting
+
+Generally, you can redirect the user in the server function like this:
+
+```tsx title="server-action.ts" lineNumbers
+"use server";
+
+import { redirect } from "next/navigation";
+
+export const serverAction = async (previousState: any, formData: FormData) => {
+  // do something with the data
+  redirect("/success");
+};
+```
+
+<Callout type="info" title="Good to know">
+  The Next.js' `redirect` function actually throws an error which will be caught
+  by the Next.js to actually perform the redirect. Because of this, you must not
+  put the `redirect` function in a try-catch block.
+</Callout>
+
+In some rare cases like due to a bug in the Next.js, you may need to perform the redirect in the client component. You can do this by using the `useRouter` hook from Next.js:
+
+```tsx title="component.tsx" lineNumbers
+"use client";
+import { useRouter } from "next/navigation";
+
+const Component = () => {
+  const router = useRouter();
+  const [state, action, pending] = useResettableActionState(serverAction, null);
+
+  if (!pending && state?.success) {
+    router.push("/success");
+  }
+  return (
+    <form action={action}>
+      <input type="text" name="username" />
+      <button type="submit">Submit</button>
+    </form>
+  );
+};
+```
+
+### Error handling
+
+The server function should catch any known and expected errors and return a response to the client. For example, if the form validation fails, you should return an error response to the client.
+
+```tsx title="server-action.ts" lineNumbers
+"use server";
+
+export const serverAction = async (previousState: any, formData: FormData) => {
+  const postId = formData.get("postId");
+  if (!postId) {
+    return { error: "Post ID is required" };
+  }
+  const post = await db.post.findUnique({
+    where: { id: postId },
+  });
+  if (!post) {
+    return { error: "Post not found" };
+  }
+  return { success: true, message: "Post updated successfully" };
+};
+```
+
+And then the client component can handle the error response like this:
+
+```tsx title="component.tsx" lineNumbers
+"use client";
+import { useResettableActionState } from "@nicnocquee/use-resettable-action-state";
+import { serverAction } from "./server-action";
+
+const Component = () => {
+  const [state, action, pending] = useResettableActionState(serverAction, null);
+  return <div>{state?.error ? <p>{state.error}</p> : <p>Success</p>}</div>;
+};
+```
+
+## Generating code
+
+In Hyperjump, we don't write the server function and server action code manually. Instead, we write the `route.post.config.ts` file to configure the server action. Then we use the `route-action-gen` command to generate the server function and server action code.
+
+For example, the following is the `/api/login/route.post.config.ts` file to handle the login form submission:
+
+```tsx title="app/api/login/route.post.config.ts" lineNumbers
+import { z } from "zod";
+
+const auth: AuthFunc<User> = async (request: Request) => {
+  const user = await getUser(request);
+  if (!user) throw new Error("Unauthorized");
+  return user;
+};
+
+export const requestValidator = createRequestValidator({
+  body: z.object({
+    email: z.string().email(),
+    password: z.string().min(8),
+  }),
+  user: auth,
+});
+
+export const responseValidator = z.object({
+  ok: z.boolean(),
+});
+
+export const handler: HandlerFunc<
+  typeof requestValidator,
+  typeof responseValidator
+> = async (data) => {
+  const { body } = data;
+  const user = await db.user.findUnique({
+    where: { email: body.email },
+  });
+  if (!user) {
+    return errorResponse(401, "Invalid credentials");
+  }
+  if (user.password !== body.password) {
+    return errorResponse(401, "Invalid credentials");
+  }
+  return successResponse(200, { ok: true });
+};
+```
+
+Upon running the `route-action-gen --server-function` command, it will generate two server function related files:
+
+- `app/api/login/server-function.ts`
+- `app/api/login/use-server-function.ts`
+
+The `server-function.ts` file contains two exported functions:
+
+- `serverFunction`: the server function that can be called directly from the client component.
+- `serverAction`: the server action that can be used with the `useResettableActionState` hook.
+
+Both functions perform the exactly same thing, except that the `serverAction` function accepts two arguments: the previous state and the form data. While the `serverFunction` function accepts only one argument: the data that was sent from the client.
+
+Just like the generated route handler, the generated server function and server action also checks if the request is authenticated and validates the request data before executing the handler function.
+
+### Generated server-function.ts
+
+Given the above `route.post.config.ts` file, the generated `server-function.ts` file will look like this:
+
+```tsx title="app/api/login/server-function.ts" lineNumbers
+import {
+  handler,
+  requestValidator,
+  responseValidator,
+} from "./route.post.config";
+import {
+  getBodyFromRequest,
+  errorResponse,
+  successResponse,
+} from "@hyperjumptech/route-action-gen/lib";
+import { z } from "zod";
+
+export const serverFunction = async (
+  data: ExtractValidatorData<typeof requestValidator>["body"]
+) => {
+  let user: Awaited<ReturnType<typeof auth>> | null = null;
+  if (requestValidator.user) {
+    try {
+      user = await requestValidator.user(request);
+    } catch (error) {
+      return errorResponse(401, "Unauthorized");
+    }
+  }
+  const validatedBody = requestValidator.body.parse(data);
+  return await handler({ body: validatedBody, user: user });
+};
+
+export const serverAction = async (previousState: any, formData: FormData) => {
+  let user: Awaited<ReturnType<typeof auth>> | null = null;
+  if (requestValidator.user) {
+    try {
+      user = await requestValidator.user(request);
+    } catch (error) {
+      return errorResponse(401, "Unauthorized");
+    }
+  }
+  const body = await getBodyFromRequest(formData);
+  const validatedBody = requestValidator.body.parse(body);
+  return await handler({ body: validatedBody, user: user });
+};
+```
+
+### Generated use-server-function.ts
+
+Given the above `route.post.config.ts` file, the generated `use-server-function.ts` file will look like this:
+
+```tsx title="app/api/login/use-server-function.ts" lineNumbers
+import { serverFunction, serverAction } from "./server-function";
+import { useState, useTransition } from "react";
+import { useResettableActionState } from "@nicnocquee/use-resettable-action-state";
+
+export const useServerFunction = () => {
+  const [data, setData] = useState<z.infer<typeof responseValidator> | null>(
+    null
+  );
+  const [error, setError] = useState<Error | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  const fetchData = async (
+    data: ExtractValidatorData<typeof requestValidator>["body"]
+  ) => {
+    startTransition(async () => {
+      const result = await serverFunction(data);
+      if (result.status === false) {
+        setError(result.error);
+      } else {
+        setData(result.data);
+      }
+    });
+  };
+
+  return { data, error, pending, fetchData };
+};
+```
+
+Which you can use like this in the client component:
+
+```tsx title="component.tsx" lineNumbers
+"use client";
+import { useServerFunction } from "./use-server-function";
+
+const Component = () => {
+  const { data, error, pending, fetchData } = useServerFunction();
+  return (
+    <div>
+      <p>{data?.message}</p>
+      <button
+        disabled={pending}
+        onClick={() => fetchData({ username: "John Doe" })}
+      >
+        Submit
+      </button>
+    </div>
+  );
+};
+```
+
+For using the generated server action in the form in the client component, you can use the `useResettableActionState` hook like this:
+
+```tsx title="component.tsx" lineNumbers
+"use client";
+import { useResettableActionState } from "@nicnocquee/use-resettable-action-state";
+import { serverAction } from "./server-action";
+import { toast } from "sonner";
+
+const Component = () => {
+  const [state, action, pending] = useResettableActionState(serverAction, null);
+  if (!pending && state?.error) {
+    toast.error(state.error);
+  }
+  return (
+    <form action={action}>
+      <input type="text" name="username" />
+      <button type="submit">Submit</button>
+    </form>
+  );
+};
+```
+
+## Security
+
+Server function and server action are basically a public end point that can be called from the client component. As such, you should always authorize and validate the data that is sent from the client to prevent unauthorized access and data manipulation. When using `route-action-gen`, you have to **always** include the user function in the request validator to authorize the request.
+
+## Ground Rules
+
+|     | Action                                                                                                                  |
+| --- | ----------------------------------------------------------------------------------------------------------------------- |
+| ✅  | Never write the server function and/or server action code manually. Always use `route-action-gen` to generate the code. |
+| ✅  | Use the generated custom hooks to call the end point from a client component in the Next.js app.                        |
+| ✅  | Understand when not to use server function and use route handler instead.                                               |
