@@ -1,6 +1,119 @@
 # hyper-pm
 
-Git-native PM CLI: orphan data branch, disposable temp worktrees, append-only JSONL, optional GitHub Issues sync.
+Git-native project management CLI: an orphan data branch, disposable temp worktrees, append-only JSONL event log, and optional GitHub Issues sync.
+
+## Requirements
+
+- Node.js 20+
+- Git repository with `hyper-pm` initialized (`init`)
+- Optional: `GITHUB_TOKEN` and repo slug for sync; `HYPER_PM_AI_API_KEY` for AI ticket helpers
+
+## Install and run
+
+From the monorepo root:
+
+```bash
+pnpm build --filter=hyper-pm
+```
+
+Then either:
+
+- **Direct:** `node apps/hyper-pm/dist/main.cjs <command> [options]`
+- **On PATH:** link the package or use `pnpm exec hyper-pm` from a workspace that depends on `hyper-pm`
+- **Discover flags:** `hyper-pm --help`, `hyper-pm epic --help`, `hyper-pm epic create --help`, etc.
+
+## Global options
+
+These apply before any subcommand (for example `hyper-pm --format text epic read`).
+
+| Option                       | Description                                                  | Default                           |
+| ---------------------------- | ------------------------------------------------------------ | --------------------------------- |
+| `--format <fmt>`             | Output format: `json` or `text`                              | `json`                            |
+| `--temp-dir <dir>`           | Parent directory for disposable git worktrees                | `TMPDIR` / system temp            |
+| `--keep-worktree`            | Do not remove the temp worktree after the command            | off                               |
+| `--repo <path>`              | Git repository root (defaults to current working directory)  | `cwd`                             |
+| `--data-branch <name>`       | Data branch name (overrides config / `init`)                 | from config, else `hyper-pm-data` |
+| `--remote <name>`            | Remote name (`init` / config)                                | `origin`                          |
+| `--sync <mode>`              | Persisted sync mode: `off`, `outbound`, or `full`            | (see `init` / config)             |
+| `--github-repo <owner/repo>` | GitHub repository slug                                       | env / config                      |
+| `--actor <label>`            | JSONL `actor` for CLI mutations (overrides `HYPER_PM_ACTOR`) | resolved from git user / env      |
+
+## Commands
+
+### `init`
+
+Create or adopt the orphan data branch and write `.hyper-pm/config.json`.
+
+Uses global options only (no subcommand-specific flags).
+
+### `epic`
+
+| Subcommand | Description                                   | Options                                                                                                                                                                      |
+| ---------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `create`   | Create an epic                                | **Required:** `--title <t>`. **Optional:** `--body <b>` (default `""`), `--id <id>`, `--status <s>` (`backlog`, `todo`, `in_progress`, `done`, `cancelled`; default backlog) |
+| `read`     | One epic by id, or list all if `--id` omitted | `--id <id>`                                                                                                                                                                  |
+| `update`   | Patch an epic                                 | **Required:** `--id <id>`. **Optional:** `--title <t>`, `--body <b>`, `--status <s>` (same values as `create`)                                                               |
+| `delete`   | Soft-delete an epic                           | **Required:** `--id <id>`                                                                                                                                                    |
+
+### `story`
+
+| Subcommand | Description                  | Options                                                                                                                              |
+| ---------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `create`   | Create a story under an epic | **Required:** `--title <t>`, `--epic <id>`. **Optional:** `--body <b>` (default `""`), `--id <id>`, `--status <s>` (default backlog) |
+| `read`     | One story or list all        | `--id <id>`                                                                                                                          |
+| `update`   | Patch a story                | **Required:** `--id <id>`. **Optional:** `--title <t>`, `--body <b>`, `--status <s>` (same status values as epic)                    |
+| `delete`   | Soft-delete a story          | **Required:** `--id <id>`                                                                                                            |
+
+### `ticket`
+
+| Subcommand | Description                   | Options                                                                                                                                                                                               |
+| ---------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `create`   | Create a ticket under a story | **Required:** `--title <t>`, `--story <id>`. **Optional:** `--body <b>` (default `""`), `--id <id>`, `--status <s>` (default `todo`), `--ai-draft` (draft body via AI; needs `HYPER_PM_AI_API_KEY`)   |
+| `read`     | One ticket or list all        | `--id <id>`                                                                                                                                                                                           |
+| `update`   | Patch a ticket                | **Required:** `--id <id>`. **Optional:** `--title <t>`, `--body <b>`, `--status <s>` (same status values), `--ai-improve` (rewrite `--body` with AI; **requires** `--body` and `HYPER_PM_AI_API_KEY`) |
+| `delete`   | Soft-delete a ticket          | **Required:** `--id <id>`                                                                                                                                                                             |
+
+### `sync`
+
+GitHub Issues sync (outbound + inbound). Skips network work if `sync` is `off` in config, or if you pass `--no-github`.
+
+| Option        | Description          | Default                          |
+| ------------- | -------------------- | -------------------------------- |
+| `--no-github` | Skip GitHub API sync | sync runs when enabled in config |
+
+Requires `GITHUB_TOKEN` when sync is not skipped.
+
+### `audit`
+
+List durable events (who / what / when) with optional filters.
+
+| Option             | Description                                                       |
+| ------------------ | ----------------------------------------------------------------- |
+| `--limit <n>`      | Keep only the **most recent** _n_ matching events                 |
+| `--type <t>`       | Filter by event type (must be one of the values below)            |
+| `--entity-id <id>` | Filter rows whose payload `id`, `entityId`, or `ticketId` matches |
+
+Valid `--type` values: `EpicCreated`, `EpicUpdated`, `EpicDeleted`, `StoryCreated`, `StoryUpdated`, `StoryDeleted`, `TicketCreated`, `TicketUpdated`, `TicketDeleted`, `SyncCursor`, `GithubInboundUpdate`, `GithubIssueLinked`.
+
+In `--format text`, output is human-readable lines; in `json`, the result includes `events` and any `invalidLines` skipped during parse.
+
+### `doctor`
+
+Validate that the event log on the data branch can be read and replayed. Exits non-zero if issues are found.
+
+No subcommand-specific options.
+
+## Environment variables
+
+See `apps/hyper-pm/env.example`. Commonly:
+
+| Variable              | Used for                                                             |
+| --------------------- | -------------------------------------------------------------------- |
+| `GITHUB_REPO`         | Default repo slug (`owner/repo`)                                     |
+| `GITHUB_TOKEN`        | `sync` and GitHub identity for outbound actor                        |
+| `HYPER_PM_AI_API_KEY` | `ticket create --ai-draft`, `ticket update --ai-improve`             |
+| `HYPER_PM_ACTOR`      | Default audit label for mutations (override with `--actor`)          |
+| `TMPDIR`              | Default parent for disposable worktrees (override with `--temp-dir`) |
 
 ## Quickstart
 
@@ -8,6 +121,5 @@ Git-native PM CLI: orphan data branch, disposable temp worktrees, append-only JS
 pnpm build --filter=hyper-pm
 node apps/hyper-pm/dist/main.cjs init
 node apps/hyper-pm/dist/main.cjs epic create --title "My epic"
+node apps/hyper-pm/dist/main.cjs --format text epic read
 ```
-
-Use `hyper-pm` on your PATH after linking or via `pnpm exec hyper-pm` from a package that depends on this workspace package.
