@@ -11,6 +11,11 @@ import { runAiDraft } from "./ai/run-ai-draft";
 import { ExitCode } from "./cli/exit-codes";
 import { formatOutput } from "./cli/format-output";
 import {
+  listActiveEpicSummaries,
+  listActiveStorySummaries,
+  listActiveTicketSummaries,
+} from "./cli/list-projection-summaries";
+import {
   hyperPmConfigSchema,
   type HyperPmConfig,
 } from "./config/hyper-pm-config";
@@ -166,10 +171,11 @@ export const runCli = async (
     });
   epic
     .command("read")
-    .requiredOption("--id <id>", "id")
+    .description("Show one epic or list all when --id is omitted")
+    .option("--id <id>", "epic id; omit to list")
     .action(async function (this: Command) {
       const g = readGlobals(this);
-      const o = this.opts<{ id: string }>();
+      const o = this.opts<{ id?: string }>();
       await readEpic(g, o.id, deps);
     });
   epic
@@ -236,10 +242,11 @@ export const runCli = async (
     });
   story
     .command("read")
-    .requiredOption("--id <id>")
+    .description("Show one story or list all when --id is omitted")
+    .option("--id <id>", "story id; omit to list")
     .action(async function (this: Command) {
       const g = readGlobals(this);
-      const o = this.opts<{ id: string }>();
+      const o = this.opts<{ id?: string }>();
       await readStory(g, o.id, deps);
     });
   story
@@ -325,10 +332,11 @@ export const runCli = async (
     });
   ticket
     .command("read")
-    .requiredOption("--id <id>")
+    .description("Show one ticket or list all when --id is omitted")
+    .option("--id <id>", "ticket id; omit to list")
     .action(async function (this: Command) {
       const g = readGlobals(this);
-      const o = this.opts<{ id: string }>();
+      const o = this.opts<{ id?: string }>();
       await readTicket(g, o.id, deps);
     });
   ticket
@@ -570,9 +578,16 @@ const mutateDataBranch = async (
   }
 };
 
+/**
+ * Prints one epic by id, or all epic id/title rows when `id` is omitted or empty.
+ *
+ * @param g - Global CLI flags (repo, format, worktree, etc.).
+ * @param id - Epic id, or omit for list mode.
+ * @param deps - Injectable process boundary (log, error, exit).
+ */
 const readEpic = async (
   g: GlobalOpts,
-  id: string,
+  id: string | undefined,
   deps: {
     exit: (code: number) => never;
     log: typeof console.log;
@@ -593,6 +608,12 @@ const readEpic = async (
     try {
       const lines = await readAllEventLines(session.worktreePath);
       const proj = replayEvents(lines);
+      if (id === undefined || id === "") {
+        deps.log(
+          formatOutput(g.format, { items: listActiveEpicSummaries(proj) }),
+        );
+        deps.exit(ExitCode.Success);
+      }
       const row = proj.epics.get(id);
       if (!row || row.deleted) {
         deps.error("Epic not found");
@@ -609,9 +630,16 @@ const readEpic = async (
   }
 };
 
+/**
+ * Prints one story by id, or all story summaries when `id` is omitted or empty.
+ *
+ * @param g - Global CLI flags (repo, format, worktree, etc.).
+ * @param id - Story id, or omit for list mode.
+ * @param deps - Injectable process boundary (log, error, exit).
+ */
 const readStory = async (
   g: GlobalOpts,
-  id: string,
+  id: string | undefined,
   deps: {
     exit: (code: number) => never;
     log: typeof console.log;
@@ -632,6 +660,12 @@ const readStory = async (
     try {
       const lines = await readAllEventLines(session.worktreePath);
       const proj = replayEvents(lines);
+      if (id === undefined || id === "") {
+        deps.log(
+          formatOutput(g.format, { items: listActiveStorySummaries(proj) }),
+        );
+        deps.exit(ExitCode.Success);
+      }
       const row = proj.stories.get(id);
       if (!row || row.deleted) {
         deps.error("Story not found");
@@ -648,9 +682,16 @@ const readStory = async (
   }
 };
 
+/**
+ * Prints one ticket by id, or all ticket summaries when `id` is omitted or empty.
+ *
+ * @param g - Global CLI flags (repo, format, worktree, etc.).
+ * @param id - Ticket id, or omit for list mode.
+ * @param deps - Injectable process boundary (log, error, exit).
+ */
 const readTicket = async (
   g: GlobalOpts,
-  id: string,
+  id: string | undefined,
   deps: {
     exit: (code: number) => never;
     log: typeof console.log;
@@ -671,6 +712,12 @@ const readTicket = async (
     try {
       const lines = await readAllEventLines(session.worktreePath);
       const proj = replayEvents(lines);
+      if (id === undefined || id === "") {
+        deps.log(
+          formatOutput(g.format, { items: listActiveTicketSummaries(proj) }),
+        );
+        deps.exit(ExitCode.Success);
+      }
       const row = proj.tickets.get(id);
       if (!row || row.deleted) {
         deps.error("Ticket not found");
