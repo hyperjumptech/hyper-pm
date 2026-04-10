@@ -1,6 +1,9 @@
 import { Octokit } from "@octokit/rest";
 import type { HyperPmConfig } from "../config/hyper-pm-config";
-import { buildGithubIssueBody, parseHyperPmIdFromIssueBody } from "../lib/github-issue-body";
+import {
+  buildGithubIssueBody,
+  parseHyperPmIdFromIssueBody,
+} from "../lib/github-issue-body";
 import type { EventLine } from "../storage/event-line";
 import { appendEventLine } from "../storage/append-event";
 import type { Projection } from "../storage/projection";

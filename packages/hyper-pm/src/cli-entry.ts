@@ -81,10 +81,7 @@ export const runCli = async (
     .option("--temp-dir <dir>", "parent directory for disposable worktrees")
     .option("--keep-worktree", "skip worktree cleanup", false)
     .option("--repo <path>", "path to target git repository")
-    .option(
-      "--data-branch <name>",
-      "override data branch name (config/init)",
-    )
+    .option("--data-branch <name>", "override data branch name (config/init)")
     .option("--remote <name>", "override remote name (init/config)")
     .option("--sync <mode>", "off|outbound|full")
     .option("--github-repo <owner/repo>", "override GitHub slug");
@@ -119,12 +116,9 @@ export const runCli = async (
           });
         } finally {
           if (!g.keepWorktree) {
-            await runGit(repoRoot, [
-              "worktree",
-              "remove",
-              "--force",
-              wt,
-            ]).catch(() => {});
+            await runGit(repoRoot, ["worktree", "remove", "--force", wt]).catch(
+              () => {},
+            );
           }
         }
       }
@@ -521,9 +515,7 @@ const branchRefExists = async (
   }
 };
 
-const cliConfigSlice = (
-  g: GlobalOpts,
-): Partial<HyperPmConfig> => ({
+const cliConfigSlice = (g: GlobalOpts): Partial<HyperPmConfig> => ({
   ...(g.sync === "off" || g.sync === "outbound" || g.sync === "full"
     ? { sync: g.sync }
     : {}),

@@ -12,7 +12,10 @@ describe("runAiDraft", () => {
     });
 
     await expect(
-      runAiDraft({ apiKey: "k", prompt: "hi" }, fetchFn as unknown as typeof fetch),
+      runAiDraft(
+        { apiKey: "k", prompt: "hi" },
+        fetchFn as unknown as typeof fetch,
+      ),
     ).resolves.toBe("drafted");
 
     expect(fetchFn).toHaveBeenCalled();
