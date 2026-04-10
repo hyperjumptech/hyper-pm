@@ -69,13 +69,15 @@ Uses global options only (no subcommand-specific flags).
 | Subcommand | Description                   | Options                                                                                                                                                                                               |
 | ---------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `create`   | Create a ticket under a story | **Required:** `--title <t>`, `--story <id>`. **Optional:** `--body <b>` (default `""`), `--id <id>`, `--status <s>` (default `todo`), `--ai-draft` (draft body via AI; needs `HYPER_PM_AI_API_KEY`)   |
-| `read`     | One ticket or list all        | `--id <id>`                                                                                                                                                                                           |
+| `read`     | One ticket or list all        | `--id <id>` (JSON includes `prActivityRecent` / list rows include `lastPrActivity` when `GithubPrActivity` events were replayed)                                                                      |
 | `update`   | Patch a ticket                | **Required:** `--id <id>`. **Optional:** `--title <t>`, `--body <b>`, `--status <s>` (same status values), `--ai-improve` (rewrite `--body` with AI; **requires** `--body` and `HYPER_PM_AI_API_KEY`) |
 | `delete`   | Soft-delete a ticket          | **Required:** `--id <id>`                                                                                                                                                                             |
 
 ### `sync`
 
-GitHub Issues sync (outbound + inbound). Skips network work if `sync` is `off` in config, or if you pass `--no-github`.
+GitHub Issues sync (outbound + inbound). With `sync: full` in config, after inbound it also loads linked PR timelines for tickets in **`in_progress`** that have `Refs` / `Closes` / `Fixes #<n>` in the body, appending durable `GithubPrActivity` events (opened seed via `pulls.get`, plus timeline rows such as comments, reviews, pushes, merge/close). That issues extra GitHub API calls per linked PR.
+
+Skips network work if `sync` is `off` in config, or if you pass `--no-github`.
 
 | Option        | Description          | Default                          |
 | ------------- | -------------------- | -------------------------------- |
@@ -93,7 +95,9 @@ List durable events (who / what / when) with optional filters.
 | `--type <t>`       | Filter by event type (must be one of the values below)            |
 | `--entity-id <id>` | Filter rows whose payload `id`, `entityId`, or `ticketId` matches |
 
-Valid `--type` values: `EpicCreated`, `EpicUpdated`, `EpicDeleted`, `StoryCreated`, `StoryUpdated`, `StoryDeleted`, `TicketCreated`, `TicketUpdated`, `TicketDeleted`, `SyncCursor`, `GithubInboundUpdate`, `GithubIssueLinked`.
+Valid `--type` values: `EpicCreated`, `EpicUpdated`, `EpicDeleted`, `StoryCreated`, `StoryUpdated`, `StoryDeleted`, `TicketCreated`, `TicketUpdated`, `TicketDeleted`, `SyncCursor`, `GithubInboundUpdate`, `GithubIssueLinked`, `GithubPrActivity`.
+
+`GithubPrActivity` payloads include `ticketId`, `prNumber`, `kind` (`opened` | `updated` | `commented` | `reviewed` | `merged` | `closed` | `ready_for_review`), `sourceId`, `occurredAt`, and optionally `reviewState` / `url`.
 
 In `--format text`, output is human-readable lines; in `json`, the result includes `events` and any `invalidLines` skipped during parse.
 

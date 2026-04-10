@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { GITHUB_PR_ACTIVITY_RECENT_CAP } from "../lib/github-pr-activity";
 import { replayEvents } from "./projection";
 
 describe("replayEvents", () => {
@@ -216,5 +217,90 @@ describe("replayEvents", () => {
     expect(ticket?.status).toBe("done");
     expect(ticket?.statusChangedAt).toBe("2026-01-03T00:00:00.000Z");
     expect(ticket?.statusChangedBy).toBe("gh");
+  });
+
+  it("appends GithubPrActivity to prActivityRecent without changing status", () => {
+    const lines = [
+      JSON.stringify({
+        schema: 1,
+        type: "TicketCreated",
+        id: "e1",
+        ts: "2026-01-02T00:00:00.000Z",
+        actor: "a1",
+        payload: {
+          id: "t1",
+          storyId: "s1",
+          title: "T",
+          body: "",
+          status: "in_progress",
+        },
+      }),
+      JSON.stringify({
+        schema: 1,
+        type: "GithubPrActivity",
+        id: "e2",
+        ts: "2026-01-03T00:00:00.000Z",
+        actor: "gh:u",
+        payload: {
+          ticketId: "t1",
+          prNumber: 9,
+          kind: "commented",
+          sourceId: "github-timeline:1",
+          occurredAt: "2026-01-03T00:00:00.000Z",
+        },
+      }),
+    ];
+    const p = replayEvents(lines);
+    const ticket = p.tickets.get("t1");
+    expect(ticket?.status).toBe("in_progress");
+    expect(ticket?.prActivityRecent).toEqual([
+      {
+        prNumber: 9,
+        kind: "commented",
+        occurredAt: "2026-01-03T00:00:00.000Z",
+        sourceId: "github-timeline:1",
+      },
+    ]);
+  });
+
+  it("caps prActivityRecent at GITHUB_PR_ACTIVITY_RECENT_CAP", () => {
+    const lines: string[] = [
+      JSON.stringify({
+        schema: 1,
+        type: "TicketCreated",
+        id: "e0",
+        ts: "2026-01-01T00:00:00.000Z",
+        actor: "a",
+        payload: {
+          id: "t1",
+          storyId: "s1",
+          title: "T",
+          body: "",
+          status: "in_progress",
+        },
+      }),
+    ];
+    for (let i = 0; i < GITHUB_PR_ACTIVITY_RECENT_CAP + 5; i++) {
+      lines.push(
+        JSON.stringify({
+          schema: 1,
+          type: "GithubPrActivity",
+          id: `e${i + 1}`,
+          ts: `2026-01-02T00:00:${String(i).padStart(2, "0")}.000Z`,
+          actor: "x",
+          payload: {
+            ticketId: "t1",
+            prNumber: 1,
+            kind: "updated",
+            sourceId: `github-timeline:${i}`,
+            occurredAt: `2026-01-02T00:00:${String(i).padStart(2, "0")}.000Z`,
+          },
+        }),
+      );
+    }
+    const p = replayEvents(lines);
+    expect(p.tickets.get("t1")?.prActivityRecent?.length).toBe(
+      GITHUB_PR_ACTIVITY_RECENT_CAP,
+    );
   });
 });

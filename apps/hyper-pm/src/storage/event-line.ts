@@ -14,6 +14,7 @@ export const eventTypeSchema = z.enum([
   "SyncCursor",
   "GithubInboundUpdate",
   "GithubIssueLinked",
+  "GithubPrActivity",
 ]);
 
 export const eventLineSchema = z.object({

@@ -157,4 +157,52 @@ describe("listActiveTicketSummaries", () => {
       },
     ]);
   });
+
+  it("includes lastPrActivity from prActivityRecent tail", () => {
+    const projection = projectionWith({
+      tickets: new Map([
+        [
+          "t1",
+          {
+            id: "t1",
+            storyId: "s1",
+            title: "Open",
+            body: "",
+            status: "in_progress",
+            linkedPrs: [10],
+            prActivityRecent: [
+              {
+                prNumber: 10,
+                kind: "commented",
+                occurredAt: "2026-01-05T00:00:00.000Z",
+                sourceId: "a",
+              },
+              {
+                prNumber: 10,
+                kind: "merged",
+                occurredAt: "2026-01-06T00:00:00.000Z",
+                sourceId: "b",
+              },
+            ],
+            ...audit,
+            ...statusAudit,
+          },
+        ],
+      ]),
+    });
+    expect(listActiveTicketSummaries(projection)).toEqual([
+      {
+        id: "t1",
+        title: "Open",
+        status: "in_progress",
+        storyId: "s1",
+        lastPrActivity: {
+          prNumber: 10,
+          kind: "merged",
+          occurredAt: "2026-01-06T00:00:00.000Z",
+        },
+        ...audit,
+      },
+    ]);
+  });
 });

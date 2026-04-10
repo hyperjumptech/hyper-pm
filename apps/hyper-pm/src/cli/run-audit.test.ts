@@ -40,10 +40,18 @@ describe("eventTouchesEntityId", () => {
       baseEvent({ type: "GithubIssueLinked", payload: { ticketId: "t2" } }),
       "t2",
     );
+    const c = eventTouchesEntityId(
+      baseEvent({
+        type: "GithubPrActivity",
+        payload: { ticketId: "t3", prNumber: 1, kind: "opened" },
+      }),
+      "t3",
+    );
 
     // Assert
     expect(a).toBe(true);
     expect(b).toBe(true);
+    expect(c).toBe(true);
   });
 
   it("returns false when no key matches", () => {
@@ -190,5 +198,26 @@ describe("formatAuditTextLines", () => {
 
     // Assert
     expect(text).toBe("2026-01-01T00:00:00.000Z\tEpicCreated\tcli:u\tx");
+  });
+
+  it("adds ticket, PR, and kind columns for GithubPrActivity", () => {
+    const text = formatAuditTextLines([
+      baseEvent({
+        type: "GithubPrActivity",
+        id: "z",
+        ts: "2026-01-02T00:00:00.000Z",
+        actor: "github:alice",
+        payload: {
+          ticketId: "tk1",
+          prNumber: 44,
+          kind: "reviewed",
+          sourceId: "github-timeline:1",
+          occurredAt: "2026-01-02T00:00:00.000Z",
+        },
+      }),
+    ]);
+    expect(text).toBe(
+      "2026-01-02T00:00:00.000Z\tGithubPrActivity\tgithub:alice\tz\ttk1\t#44\treviewed",
+    );
   });
 });

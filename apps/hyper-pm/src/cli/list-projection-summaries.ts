@@ -1,3 +1,4 @@
+import type { GithubPrActivityKind } from "../lib/github-pr-activity";
 import type { WorkItemStatus } from "../lib/work-item-status";
 import type { Projection } from "../storage/projection";
 
@@ -23,12 +24,20 @@ export type StoryListSummary = {
   status: WorkItemStatus;
 } & AuditSummaryFields;
 
+/** Latest linked PR activity for list rows (from replayed `GithubPrActivity`). */
+export type TicketLastPrActivitySummary = {
+  prNumber: number;
+  kind: GithubPrActivityKind;
+  occurredAt: string;
+};
+
 /** One row for `ticket read` when listing (no `--id`). */
 export type TicketListSummary = {
   id: string;
   title: string;
   status: WorkItemStatus;
   storyId: string;
+  lastPrActivity?: TicketLastPrActivitySummary;
 } & AuditSummaryFields;
 
 /**
@@ -84,14 +93,30 @@ export const listActiveTicketSummaries = (
 ): TicketListSummary[] =>
   [...projection.tickets.values()]
     .filter((t) => !t.deleted)
-    .map((t) => ({
-      id: t.id,
-      title: t.title,
-      status: t.status,
-      storyId: t.storyId,
-      createdAt: t.createdAt,
-      createdBy: t.createdBy,
-      updatedAt: t.updatedAt,
-      updatedBy: t.updatedBy,
-    }))
+    .map((t) => {
+      const recent = t.prActivityRecent;
+      const last =
+        recent !== undefined && recent.length > 0
+          ? recent[recent.length - 1]
+          : undefined;
+      return {
+        id: t.id,
+        title: t.title,
+        status: t.status,
+        storyId: t.storyId,
+        ...(last !== undefined
+          ? {
+              lastPrActivity: {
+                prNumber: last.prNumber,
+                kind: last.kind,
+                occurredAt: last.occurredAt,
+              },
+            }
+          : {}),
+        createdAt: t.createdAt,
+        createdBy: t.createdBy,
+        updatedAt: t.updatedAt,
+        updatedBy: t.updatedBy,
+      };
+    })
     .sort((a, b) => a.id.localeCompare(b.id));

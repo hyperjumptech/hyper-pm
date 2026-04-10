@@ -87,9 +87,31 @@ export const runAuditOnLines = (
 };
 
 /**
- * Renders audit rows as TSV for `--format text`.
+ * Builds extra TSV fields for `GithubPrActivity` text audit lines (`ticketId`, `#pr`, `kind`).
+ *
+ * @param evt - Parsed `GithubPrActivity` event line.
+ */
+const formatGithubPrActivityAuditTail = (evt: EventLine): string => {
+  const p = evt.payload;
+  const ticketId = p["ticketId"];
+  const pr = p["prNumber"];
+  const kind = p["kind"];
+  const tid = typeof ticketId === "string" ? ticketId : "";
+  const prn = typeof pr === "number" ? String(pr) : String(pr ?? "");
+  const k = typeof kind === "string" ? kind : "";
+  return `${tid}\t#${prn}\t${k}`;
+};
+
+/**
+ * Renders audit rows as TSV for `--format text` (`GithubPrActivity` rows include ticket id, PR, and kind).
  *
  * @param events - Filtered events (already sorted).
  */
 export const formatAuditTextLines = (events: EventLine[]): string =>
-  events.map((e) => `${e.ts}\t${e.type}\t${e.actor}\t${e.id}`).join("\n");
+  events
+    .map((e) =>
+      e.type === "GithubPrActivity"
+        ? `${e.ts}\t${e.type}\t${e.actor}\t${e.id}\t${formatGithubPrActivityAuditTail(e)}`
+        : `${e.ts}\t${e.type}\t${e.actor}\t${e.id}`,
+    )
+    .join("\n");

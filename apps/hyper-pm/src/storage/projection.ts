@@ -1,4 +1,9 @@
 import {
+  GITHUB_PR_ACTIVITY_RECENT_CAP,
+  parseGithubPrActivityPayload,
+  type TicketPrActivitySummary,
+} from "../lib/github-pr-activity";
+import {
   parseWorkItemStatus,
   resolveStatusForNewEpicStoryPayload,
   resolveStatusForNewTicketPayload,
@@ -51,6 +56,8 @@ export type TicketRecord = {
   linkedPrs: number[];
   /** GitHub issue number when linked via sync. */
   githubIssueNumber?: number;
+  /** Recent PR sub-events from `GithubPrActivity` replay (capped). */
+  prActivityRecent?: TicketPrActivitySummary[];
   deleted?: boolean;
 } & EntityAudit &
   StatusTransitionAudit;
@@ -264,6 +271,7 @@ export const applyEvent = (projection: Projection, evt: EventLine): void => {
         statusChangedAt: evt.ts,
         statusChangedBy: evt.actor,
         linkedPrs: parsePrRefs(body),
+        prActivityRecent: [],
         createdAt: "",
         createdBy: "",
         updatedAt: "",
@@ -335,6 +343,20 @@ export const applyEvent = (projection: Projection, evt: EventLine): void => {
           applyStatusIfChanged(ticket, evt, inboundStatus);
         }
         applyLastUpdate(ticket, evt);
+      }
+      break;
+    }
+    case "GithubPrActivity": {
+      const summary = parseGithubPrActivityPayload(evt.payload);
+      if (!summary) break;
+      const ticket = projection.tickets.get(
+        String(evt.payload["ticketId"] ?? ""),
+      );
+      if (!ticket || ticket.deleted) break;
+      const list = ticket.prActivityRecent ?? (ticket.prActivityRecent = []);
+      list.push(summary);
+      if (list.length > GITHUB_PR_ACTIVITY_RECENT_CAP) {
+        ticket.prActivityRecent = list.slice(-GITHUB_PR_ACTIVITY_RECENT_CAP);
       }
       break;
     }

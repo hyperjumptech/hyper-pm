@@ -42,6 +42,10 @@ import { eventTypeSchema } from "./storage/event-line";
 import { readAllEventLines } from "./storage/read-event-lines";
 import { replayEvents } from "./storage/projection";
 import {
+  defaultGithubPrActivitySyncDeps,
+  runGithubPrActivitySync,
+} from "./sync/run-github-pr-activity-sync";
+import {
   loadProjectionFromDataRoot,
   resolveGithubRepo,
   runGithubInboundSync,
@@ -545,6 +549,21 @@ export const runCli = async (
           projection,
           config: cfg,
           deps: depsGh,
+        });
+        const projectionAfterInbound = await loadProjectionFromDataRoot(
+          session.worktreePath,
+        );
+        await runGithubPrActivitySync({
+          projection: projectionAfterInbound,
+          config: cfg,
+          deps: defaultGithubPrActivitySyncDeps({
+            dataRoot: session.worktreePath,
+            clock: deps.clock,
+            octokit,
+            owner,
+            repo,
+            actor: outboundActor,
+          }),
         });
         await commitDataWorktreeIfNeeded(
           session.worktreePath,
