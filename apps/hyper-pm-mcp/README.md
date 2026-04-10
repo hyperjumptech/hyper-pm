@@ -2,6 +2,10 @@
 
 stdio [Model Context Protocol](https://modelcontextprotocol.io) server that exposes the [`hyper-pm`](../hyper-pm) CLI to MCP hosts (for example Cursor or Claude Desktop).
 
+## Publishing to npm
+
+Publish **`hyper-pm` first**, then this package. Use **`pnpm publish`** from each app directory (or `--filter`) so pnpm rewrites the `workspace:^` range on `hyper-pm` to a real semver in the published manifest. Plain `npm publish` can leave `workspace:` specifiers intact and produce an uninstallable tarball.
+
 ## Security
 
 The `hyper_pm_run` tool runs **the same hyper-pm process** you would run locally with the given arguments. Only enable this server in MCP configurations you trust.
@@ -13,7 +17,7 @@ From the monorepo root:
 1. Build the CLI bundle: `pnpm --filter hyper-pm build`
 2. Build this server: `pnpm --filter hyper-pm-mcp build`
 
-The server resolves the CLI at `hyper-pm/dist/main.cjs` via the `hyper-pm` package entry (see `resolve-hyper-pm-main-path.ts`). Ensure `dist/main.cjs` exists before starting the MCP server.
+The server resolves the CLI at `hyper-pm/dist/main.cjs` via `require.resolve("hyper-pm")` (published packages use `dist/index.cjs` as the package entry; see `resolve-hyper-pm-main-path.ts`). Ensure `hyper-pm` is built so `dist/main.cjs` exists before starting the MCP server.
 
 ## Environment
 

@@ -1,38 +1,46 @@
 {
   "name": "hyper-pm",
   "version": "0.1.0",
-  "private": true,
+  "description": "Git-backed work-item CLI with optional GitHub sync",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "bin": {
-    "hyper-pm": "./dist/main.cjs"
+    "hyper-pm": "dist/main.cjs"
   },
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "./dist/index.cjs",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./dist/index.cjs"
   },
+  "files": [
+    "dist/main.cjs",
+    "dist/index.cjs",
+    "README.md",
+    "env.example"
+  ],
   "scripts": {
-    "build": "esbuild src/main.ts --bundle --platform=node --format=cjs --outfile=dist/main.cjs",
+    "build": "rm -rf dist && esbuild src/main.ts --bundle --platform=node --format=cjs --outfile=dist/main.cjs && esbuild src/npm-publish-entry.ts --bundle --platform=node --format=cjs --outfile=dist/index.cjs --footer:js=\"module.exports={runCli,ExitCode,openDataBranchWorktree,runGit};\"",
+    "prepublishOnly": "npm run build",
     "check-types": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint \"src/**/*.ts\"",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage"
   },
-  "dependencies": {
-    "@octokit/rest": "^22.0.1",
-    "@workspace/env": "workspace:*",
-    "commander": "^14.0.2",
-    "ulid": "^3.0.1",
-    "zod": "catalog:"
-  },
+  "dependencies": {},
   "devDependencies": {
-    "esbuild": "^0.27.0",
+    "@octokit/rest": "^22.0.1",
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
-    "eslint": "catalog:",
+    "@workspace/env": "workspace:*",
     "@workspace/eslint-config": "workspace:*",
     "@workspace/typescript-config": "workspace:*",
+    "commander": "^14.0.2",
+    "esbuild": "^0.27.0",
+    "eslint": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "ulid": "^3.0.1",
+    "vitest": "catalog:",
+    "zod": "catalog:"
   }
 }

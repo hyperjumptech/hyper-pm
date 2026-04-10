@@ -119,6 +119,10 @@ See `apps/hyper-pm/env.example`. Commonly:
 | `HYPER_PM_ACTOR`      | Default audit label for mutations (override with `--actor`)                   |
 | `TMPDIR`              | Default parent for disposable worktrees (override with `--temp-dir`)          |
 
+## Publishing to npm
+
+The package is configured for the public registry (`private` unset, `files` whitelist, bundled CLI). Prefer **`pnpm publish`** from this app (or `--filter hyper-pm`) so workspace devDependencies stay correct. Run `pnpm run build` first so `dist/main.cjs` and `dist/index.cjs` exist.
+
 ## Quickstart
 
 ```bash

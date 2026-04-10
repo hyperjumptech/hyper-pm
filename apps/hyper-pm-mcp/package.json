@@ -1,32 +1,41 @@
 {
   "name": "hyper-pm-mcp",
   "version": "0.1.0",
-  "private": true,
+  "description": "stdio MCP server that runs the hyper-pm CLI",
   "type": "module",
-  "bin": {
-    "hyper-pm-mcp": "./dist/main.mjs"
+  "engines": {
+    "node": ">=20"
   },
+  "bin": {
+    "hyper-pm-mcp": "dist/main.mjs"
+  },
+  "files": [
+    "dist/main.mjs",
+    "README.md",
+    "env.example"
+  ],
   "scripts": {
-    "build": "esbuild src/main.ts --bundle --platform=node --format=esm --outfile=dist/main.mjs",
+    "build": "rm -rf dist && esbuild src/main.ts --bundle --platform=node --format=esm --outfile=dist/main.mjs",
+    "prepublishOnly": "npm run build",
     "check-types": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint \"src/**/*.ts\"",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "catalog:",
-    "@workspace/env": "workspace:*",
-    "hyper-pm": "workspace:*",
-    "zod": "catalog:"
+    "hyper-pm": "workspace:^"
   },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "catalog:",
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
+    "@workspace/env": "workspace:*",
     "@workspace/eslint-config": "workspace:*",
     "@workspace/typescript-config": "workspace:*",
     "esbuild": "^0.27.0",
     "eslint": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "zod": "catalog:"
   }
 }

@@ -22,13 +22,13 @@ describe("resolveHyperPmMainPath", () => {
     // Act
     const p = resolveHyperPmMainPath({
       env: {},
-      resolvePackageEntry: () => "/mono/hyper-pm/src/index.ts",
+      resolvePackageEntry: () => "/mono/hyper-pm/dist/index.cjs",
       joinPaths: (...parts: string[]) => parts.join("/"),
       dirnamePath: (path: string) => path.replace(/\/[^/]+$/, ""),
     });
 
     // Assert
-    expect(p).toBe("/mono/hyper-pm/src/../dist/main.cjs");
+    expect(p).toBe("/mono/hyper-pm/dist/../dist/main.cjs");
   });
 
   it("resolves hyper-pm next to the installed package by default", () => {
@@ -43,12 +43,12 @@ describe("resolveHyperPmMainPath", () => {
     // Act
     const p = resolveHyperPmMainPath({
       env: { HYPER_PM_CLI_PATH: "" },
-      resolvePackageEntry: () => "/p/hyper-pm/src/index.ts",
+      resolvePackageEntry: () => "/p/hyper-pm/dist/index.cjs",
       joinPaths: (...parts: string[]) => parts.join("/"),
       dirnamePath: (path: string) => path.replace(/\/[^/]+$/, ""),
     });
 
     // Assert
-    expect(p).toBe("/p/hyper-pm/src/../dist/main.cjs");
+    expect(p).toBe("/p/hyper-pm/dist/../dist/main.cjs");
   });
 });

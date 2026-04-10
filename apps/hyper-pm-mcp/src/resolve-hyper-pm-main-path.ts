@@ -7,7 +7,7 @@ const defaultRequire = createRequire(import.meta.url);
 /**
  * Resolves the absolute path to hyper-pm's bundled CLI entry (`dist/main.cjs`).
  *
- * Uses `require.resolve("hyper-pm")` (the package entry under `src/`) and walks to `dist/main.cjs`, because `hyper-pm` does not export `package.json`.
+ * Uses `require.resolve("hyper-pm")` (the package `main` / `exports` entry, typically `dist/index.cjs` when installed from npm) and walks from that file's directory to `dist/main.cjs`.
  *
  * @param deps - `HYPER_PM_CLI_PATH` override, package entry resolution, and `path.join` (injectable for tests).
  * @returns Absolute filesystem path to the hyper-pm main bundle.
