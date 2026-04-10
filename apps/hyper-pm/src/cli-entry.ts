@@ -48,6 +48,7 @@ import {
   runGithubOutboundSync,
 } from "./sync/run-github-sync";
 import { resolveGithubTokenActor } from "./sync/resolve-github-token-actor";
+import { resolveGithubTokenForSync } from "./sync/resolve-github-token-for-sync";
 
 type GlobalOpts = {
   format: "json" | "text";
@@ -501,8 +502,14 @@ export const runCli = async (
         deps.log(formatOutput(g.format, { ok: true, skipped: true }));
         deps.exit(ExitCode.Success);
       }
-      if (!env.GITHUB_TOKEN) {
-        deps.error("GITHUB_TOKEN required for sync");
+      const githubToken = await resolveGithubTokenForSync({
+        envToken: env.GITHUB_TOKEN,
+        cwd: repoRoot,
+      });
+      if (!githubToken) {
+        deps.error(
+          "GitHub auth required for sync: set GITHUB_TOKEN or run `gh auth login`",
+        );
         deps.exit(ExitCode.EnvironmentAuth);
       }
       const tmpBase = g.tempDir ?? env.TMPDIR ?? tmpdir();
@@ -518,7 +525,7 @@ export const runCli = async (
           session.worktreePath,
         );
         const { owner, repo } = resolveGithubRepo(cfg, env.GITHUB_REPO);
-        const octokit = new Octokit({ auth: env.GITHUB_TOKEN });
+        const octokit = new Octokit({ auth: githubToken });
         const outboundActor = await resolveGithubTokenActor(octokit);
         const depsGh = {
           octokit,

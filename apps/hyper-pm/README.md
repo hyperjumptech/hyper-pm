@@ -6,7 +6,7 @@ Git-native project management CLI: an orphan data branch, disposable temp worktr
 
 - Node.js 20+
 - Git repository with `hyper-pm` initialized (`init`)
-- Optional: `GITHUB_TOKEN` and repo slug for sync; `HYPER_PM_AI_API_KEY` for AI ticket helpers
+- Optional: GitHub auth for sync (`GITHUB_TOKEN` or authenticated [GitHub CLI](https://cli.github.com/) via `gh auth login`) and repo slug; `HYPER_PM_AI_API_KEY` for AI ticket helpers
 
 ## Install and run
 
@@ -81,7 +81,7 @@ GitHub Issues sync (outbound + inbound). Skips network work if `sync` is `off` i
 | ------------- | -------------------- | -------------------------------- |
 | `--no-github` | Skip GitHub API sync | sync runs when enabled in config |
 
-Requires `GITHUB_TOKEN` when sync is not skipped.
+When sync is not skipped, requires `GITHUB_TOKEN` **or** a local `gh` session (`gh auth token` must succeed).
 
 ### `audit`
 
@@ -107,13 +107,13 @@ No subcommand-specific options.
 
 See `apps/hyper-pm/env.example`. Commonly:
 
-| Variable              | Used for                                                             |
-| --------------------- | -------------------------------------------------------------------- |
-| `GITHUB_REPO`         | Default repo slug (`owner/repo`)                                     |
-| `GITHUB_TOKEN`        | `sync` and GitHub identity for outbound actor                        |
-| `HYPER_PM_AI_API_KEY` | `ticket create --ai-draft`, `ticket update --ai-improve`             |
-| `HYPER_PM_ACTOR`      | Default audit label for mutations (override with `--actor`)          |
-| `TMPDIR`              | Default parent for disposable worktrees (override with `--temp-dir`) |
+| Variable              | Used for                                                                      |
+| --------------------- | ----------------------------------------------------------------------------- |
+| `GITHUB_REPO`         | Default repo slug (`owner/repo`)                                              |
+| `GITHUB_TOKEN`        | `sync` and GitHub identity for outbound actor (optional if `gh` is logged in) |
+| `HYPER_PM_AI_API_KEY` | `ticket create --ai-draft`, `ticket update --ai-improve`                      |
+| `HYPER_PM_ACTOR`      | Default audit label for mutations (override with `--actor`)                   |
+| `TMPDIR`              | Default parent for disposable worktrees (override with `--temp-dir`)          |
 
 ## Quickstart
 
