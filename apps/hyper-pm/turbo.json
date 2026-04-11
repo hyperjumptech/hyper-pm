@@ -1,0 +1,17 @@
+{
+  "extends": ["//"],
+  "tasks": {
+    "test": {
+      "dependsOn": ["^db:generate", "^build", "generate", "build"]
+    },
+    "test:coverage": {
+      "dependsOn": [
+        "^db:generate",
+        "^build",
+        "^test:coverage",
+        "generate",
+        "build"
+      ]
+    }
+  }
+}
