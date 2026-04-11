@@ -88,6 +88,80 @@ export const runBundledCliHelp = (
   ) as SpawnSyncReturns<string>;
 };
 
+export type SpawnBundledHyperPmCliCtx = {
+  /** Git repository root passed as `--repo`. */
+  repoRoot: string;
+  /** Parent directory for disposable git worktrees (`--temp-dir`). */
+  tempDir: string;
+  /** Optional `--actor` audit label. */
+  actor?: string;
+};
+
+/** Dependencies for {@link spawnBundledHyperPmCliSync} (same shape as {@link RunBundledCliHelpDeps}). */
+export type SpawnBundledHyperPmCliDeps = RunBundledCliHelpDeps;
+
+/**
+ * Runs `dist/main.cjs` in a child process with `--repo`, `--temp-dir`, optional `--actor`, then `argv`.
+ *
+ * @param mainCjsPath - Absolute path to `dist/main.cjs`.
+ * @param argv - CLI tokens after global options (subcommands and flags).
+ * @param ctx - Repository root, temp base, and optional actor.
+ * @param deps - Injected `spawnSync` and optional Node binary.
+ * @returns `spawnSync` result with string encoding.
+ */
+export const spawnBundledHyperPmCliSync = (
+  mainCjsPath: string,
+  argv: string[],
+  ctx: SpawnBundledHyperPmCliCtx,
+  deps: SpawnBundledHyperPmCliDeps = {
+    spawnSync,
+    nodeExecutable: process.execPath,
+  },
+): SpawnSyncReturns<string> => {
+  const node = deps.nodeExecutable ?? process.execPath;
+  const args = [mainCjsPath, "--repo", ctx.repoRoot, "--temp-dir", ctx.tempDir];
+  if (ctx.actor !== undefined) {
+    args.push("--actor", ctx.actor);
+  }
+  args.push(...argv);
+  const opts: SpawnSyncOptionsWithStringEncoding = { encoding: "utf8" };
+  return deps.spawnSync(node, args, opts) as SpawnSyncReturns<string>;
+};
+
+export type BundledCliInvokeResult = {
+  code: number;
+  stdout: string;
+  stderr: string;
+  json: unknown;
+};
+
+/** Minimal spawn fields used by {@link toBundledCliInvokeResult} (subset of `SpawnSyncReturns`). */
+export type BundledCliSpawnSnapshot = Pick<
+  SpawnSyncReturns<string>,
+  "status" | "stdout" | "stderr"
+>;
+
+/**
+ * Normalizes `spawnSync` output into exit code, trimmed streams, and parsed JSON when stdout is valid JSON.
+ *
+ * @param spawnResult - Result from {@link spawnBundledHyperPmCliSync} or {@link runBundledCliHelp}.
+ * @returns Exit code (`status` when a number, otherwise `1`), stdout/stderr, and `JSON.parse` of stdout when possible.
+ */
+export const toBundledCliInvokeResult = (
+  spawnResult: BundledCliSpawnSnapshot,
+): BundledCliInvokeResult => {
+  const stdout = String(spawnResult.stdout ?? "").trimEnd();
+  const stderr = String(spawnResult.stderr ?? "").trimEnd();
+  let json: unknown;
+  try {
+    json = stdout.length === 0 ? undefined : JSON.parse(stdout);
+  } catch {
+    json = undefined;
+  }
+  const code = typeof spawnResult.status === "number" ? spawnResult.status : 1;
+  return { code, stdout, stderr, json };
+};
+
 /**
  * Sorted list of named exports that must appear on `dist/index.cjs` (public API).
  *

@@ -3,101 +3,50 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { env } from "@workspace/env";
-import { afterEach, describe, expect, it } from "vitest";
-import { runCli } from "../cli-entry";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { ExitCode } from "../cli/exit-codes";
 import {
   createGitRepoWithInitialCommit,
   git,
   sleep,
 } from "./hyper-pm-e2e-git-fixtures";
+import {
+  assertDistMainExists,
+  getDistMainPath,
+  resolveHyperPmPackageRootFromE2eImportMetaUrl,
+  spawnBundledHyperPmCliSync,
+  toBundledCliInvokeResult,
+} from "./published-package-helpers";
 
-/** Thrown by {@link invokeHyperPmCli} when the CLI calls injected `deps.exit`. */
-class CliExitSignal extends Error {
-  /**
-   * @param code - Exit code passed to `exit`.
-   */
-  constructor(readonly code: number) {
-    super("cli-exit");
-    this.name = "CliExitSignal";
-  }
-}
-
-type InvokeHyperPmCliCtx = {
-  /** Git repository root passed as `--repo`. */
+type BundledCtx = {
   repoRoot: string;
-  /** Parent directory for disposable git worktrees (`--temp-dir`). */
   tempDir: string;
-  /** Optional fixed clock for deterministic event timestamps. */
-  clock?: { now: () => Date };
-  /** Optional `--actor` audit label. */
   actor?: string;
 };
 
-type InvokeHyperPmCliResult = {
-  code: number;
-  stdout: string;
-  stderr: string;
-  json: unknown;
-};
+describe("dist/main.cjs subprocess (JSON workflow parity)", () => {
+  const packageRoot = resolveHyperPmPackageRootFromE2eImportMetaUrl(
+    import.meta.url,
+  );
+  let mainCjsPath: string;
 
-/**
- * Invokes {@link runCli} with injected `exit`/`log`/`error`, wiring global `--repo` and `--temp-dir`.
- *
- * @param argv - Tokens after the synthetic `node` / `hyper-pm` argv positions (subcommands and flags).
- * @param ctx - Repository root, temp base, and optional clock or actor.
- * @returns Captured streams, parsed JSON when stdout is valid JSON, and exit code.
- */
-const invokeHyperPmCli = async (
-  argv: string[],
-  ctx: InvokeHyperPmCliCtx,
-): Promise<InvokeHyperPmCliResult> => {
-  const logs: string[] = [];
-  const errors: string[] = [];
-  let code: number = ExitCode.Success;
-  const prefix = [
-    "node",
-    "hyper-pm",
-    "--repo",
-    ctx.repoRoot,
-    "--temp-dir",
-    ctx.tempDir,
-  ];
-  if (ctx.actor !== undefined) {
-    prefix.push("--actor", ctx.actor);
-  }
-  const fullArgv = [...prefix, ...argv];
-  try {
-    await runCli(fullArgv, {
-      exit: (c: number) => {
-        code = c;
-        throw new CliExitSignal(c);
-      },
-      log: (line: string) => {
-        logs.push(line);
-      },
-      error: (line: string) => {
-        errors.push(line);
-      },
-      clock: ctx.clock ?? { now: () => new Date() },
-    });
-  } catch (e) {
-    if (!(e instanceof CliExitSignal)) {
-      throw e;
-    }
-  }
-  const stdout = logs.join("\n");
-  const stderr = errors.join("\n");
-  let json: unknown;
-  try {
-    json = JSON.parse(stdout);
-  } catch {
-    json = undefined;
-  }
-  return { code, stdout, stderr, json };
-};
+  beforeAll(() => {
+    assertDistMainExists(packageRoot);
+    mainCjsPath = getDistMainPath(packageRoot);
+  });
 
-describe("hyper-pm CLI (e2e)", () => {
+  /**
+   * Runs the published CLI bundle in a subprocess with `--repo` / `--temp-dir` / optional `--actor`.
+   *
+   * @param argv - CLI tokens after global options.
+   * @param ctx - Repository root, temp base, optional actor.
+   * @returns Exit code, streams, and parsed JSON when stdout is valid JSON.
+   */
+  const invokeBundled = (argv: string[], ctx: BundledCtx) =>
+    toBundledCliInvokeResult(
+      spawnBundledHyperPmCliSync(mainCjsPath, argv, ctx),
+    );
+
   const bases: string[] = [];
 
   afterEach(async () => {
@@ -108,17 +57,15 @@ describe("hyper-pm CLI (e2e)", () => {
 
   it("covers init, epic/story/ticket CRUD, audit, doctor, sync skip, and ai-draft auth gate", async () => {
     // Setup
-    const base = await mkdtemp(join(tmpdir(), "hyper-pm-e2e-"));
+    const base = await mkdtemp(join(tmpdir(), "hyper-pm-dist-e2e-"));
     bases.push(base);
     const repoRoot = await createGitRepoWithInitialCommit(base);
     const tempDir = join(base, "wt");
-    const clock = { now: () => new Date("2026-04-11T15:30:00.000Z") };
 
     // Act — init
-    const initOut = await invokeHyperPmCli(["--sync", "off", "init"], {
+    const initOut = invokeBundled(["--sync", "off", "init"], {
       repoRoot,
       tempDir,
-      clock,
       actor: "e2e",
     });
 
@@ -133,12 +80,12 @@ describe("hyper-pm CLI (e2e)", () => {
     await git(repoRoot, ["commit", "-m", "hyper-pm config"]);
 
     // Act — epic create / read list / read one / update / (story chain continues)
-    const epicCreate = await invokeHyperPmCli(
+    const epicCreate = invokeBundled(
       [
         "epic",
         "create",
         "--id",
-        "epic-e2e-1",
+        "epic-dist-e2e-1",
         "--title",
         "E2E Epic",
         "--body",
@@ -146,105 +93,96 @@ describe("hyper-pm CLI (e2e)", () => {
         "--status",
         "backlog",
       ],
-      { repoRoot, tempDir, clock, actor: "e2e" },
+      { repoRoot, tempDir, actor: "e2e" },
     );
     expect(epicCreate.code).toBe(ExitCode.Success);
     expect(epicCreate.json).toEqual(
       expect.objectContaining({
         ok: true,
-        id: "epic-e2e-1",
+        id: "epic-dist-e2e-1",
         title: "E2E Epic",
       }),
     );
 
-    const epicList = await invokeHyperPmCli(["epic", "read"], {
-      repoRoot,
-      tempDir,
-      clock,
-    });
+    const epicList = invokeBundled(["epic", "read"], { repoRoot, tempDir });
     expect(epicList.code).toBe(ExitCode.Success);
     expect(epicList.json).toEqual(
       expect.objectContaining({
         items: expect.arrayContaining([
-          expect.objectContaining({ id: "epic-e2e-1", title: "E2E Epic" }),
+          expect.objectContaining({
+            id: "epic-dist-e2e-1",
+            title: "E2E Epic",
+          }),
         ]),
       }),
     );
 
-    const epicOne = await invokeHyperPmCli(
-      ["epic", "read", "--id", "epic-e2e-1"],
-      {
-        repoRoot,
-        tempDir,
-        clock,
-      },
-    );
+    const epicOne = invokeBundled(["epic", "read", "--id", "epic-dist-e2e-1"], {
+      repoRoot,
+      tempDir,
+    });
     expect(epicOne.code).toBe(ExitCode.Success);
     expect(epicOne.json).toEqual(
-      expect.objectContaining({ id: "epic-e2e-1", title: "E2E Epic" }),
+      expect.objectContaining({ id: "epic-dist-e2e-1", title: "E2E Epic" }),
     );
 
-    const epicUpdate = await invokeHyperPmCli(
+    const epicUpdate = invokeBundled(
       [
         "epic",
         "update",
         "--id",
-        "epic-e2e-1",
+        "epic-dist-e2e-1",
         "--title",
         "E2E Epic Updated",
         "--status",
         "in_progress",
       ],
-      { repoRoot, tempDir, clock, actor: "e2e" },
+      { repoRoot, tempDir, actor: "e2e" },
     );
     expect(epicUpdate.code).toBe(ExitCode.Success);
 
-    const storyCreate = await invokeHyperPmCli(
+    const storyCreate = invokeBundled(
       [
         "story",
         "create",
         "--id",
-        "story-e2e-1",
+        "story-dist-e2e-1",
         "--epic",
-        "epic-e2e-1",
+        "epic-dist-e2e-1",
         "--title",
         "Story A",
         "--body",
         "story body",
       ],
-      { repoRoot, tempDir, clock, actor: "e2e" },
+      { repoRoot, tempDir, actor: "e2e" },
     );
     expect(storyCreate.code).toBe(ExitCode.Success);
     expect(storyCreate.json).toEqual(
       expect.objectContaining({
         ok: true,
-        id: "story-e2e-1",
-        epicId: "epic-e2e-1",
+        id: "story-dist-e2e-1",
+        epicId: "epic-dist-e2e-1",
       }),
     );
 
-    const storyList = await invokeHyperPmCli(["story", "read"], {
-      repoRoot,
-      tempDir,
-      clock,
-    });
+    const storyList = invokeBundled(["story", "read"], { repoRoot, tempDir });
     expect(storyList.code).toBe(ExitCode.Success);
     expect(storyList.json).toEqual(
       expect.objectContaining({
         items: expect.arrayContaining([
-          expect.objectContaining({ id: "story-e2e-1" }),
+          expect.objectContaining({ id: "story-dist-e2e-1" }),
         ]),
       }),
     );
 
-    const ticketCreate = await invokeHyperPmCli(
+    const ticketCreate = invokeBundled(
       [
         "ticket",
         "create",
         "--id",
-        "ticket-e2e-1",
+        "ticket-dist-e2e-1",
         "--story",
-        "story-e2e-1",
+        "story-dist-e2e-1",
         "--title",
         "Ticket A",
         "--body",
@@ -252,37 +190,37 @@ describe("hyper-pm CLI (e2e)", () => {
         "--status",
         "todo",
       ],
-      { repoRoot, tempDir, clock, actor: "e2e" },
+      { repoRoot, tempDir, actor: "e2e" },
     );
     expect(ticketCreate.code).toBe(ExitCode.Success);
 
-    const ticketRead = await invokeHyperPmCli(
-      ["ticket", "read", "--id", "ticket-e2e-1"],
-      { repoRoot, tempDir, clock },
+    const ticketRead = invokeBundled(
+      ["ticket", "read", "--id", "ticket-dist-e2e-1"],
+      { repoRoot, tempDir },
     );
     expect(ticketRead.code).toBe(ExitCode.Success);
     expect(ticketRead.json).toEqual(
-      expect.objectContaining({ id: "ticket-e2e-1", title: "Ticket A" }),
+      expect.objectContaining({ id: "ticket-dist-e2e-1", title: "Ticket A" }),
     );
 
-    const ticketUpdate = await invokeHyperPmCli(
+    const ticketUpdate = invokeBundled(
       [
         "ticket",
         "update",
         "--id",
-        "ticket-e2e-1",
+        "ticket-dist-e2e-1",
         "--title",
         "Ticket A+",
         "--status",
         "done",
       ],
-      { repoRoot, tempDir, clock, actor: "e2e" },
+      { repoRoot, tempDir, actor: "e2e" },
     );
     expect(ticketUpdate.code).toBe(ExitCode.Success);
 
-    const audit = await invokeHyperPmCli(
-      ["audit", "--entity-id", "ticket-e2e-1", "--limit", "5"],
-      { repoRoot, tempDir, clock },
+    const audit = invokeBundled(
+      ["audit", "--entity-id", "ticket-dist-e2e-1", "--limit", "5"],
+      { repoRoot, tempDir },
     );
     expect(audit.code).toBe(ExitCode.Success);
     expect(audit.json).toEqual(
@@ -292,75 +230,69 @@ describe("hyper-pm CLI (e2e)", () => {
       }),
     );
 
-    const doctor = await invokeHyperPmCli(["doctor"], {
-      repoRoot,
-      tempDir,
-      clock,
-    });
+    const doctor = invokeBundled(["doctor"], { repoRoot, tempDir });
     expect(doctor.code).toBe(ExitCode.Success);
     expect(doctor.json).toEqual({ ok: true });
 
-    const syncSkip = await invokeHyperPmCli(["sync"], {
-      repoRoot,
-      tempDir,
-      clock,
-    });
+    const syncSkip = invokeBundled(["sync"], { repoRoot, tempDir });
     expect(syncSkip.code).toBe(ExitCode.Success);
     expect(syncSkip.json).toEqual(
       expect.objectContaining({ ok: true, skipped: true }),
     );
 
     if (!env.HYPER_PM_AI_API_KEY) {
-      const aiDraft = await invokeHyperPmCli(
+      const aiDraft = invokeBundled(
         [
           "ticket",
           "create",
           "--story",
-          "story-e2e-1",
+          "story-dist-e2e-1",
           "--title",
           "AI ticket",
           "--ai-draft",
         ],
-        { repoRoot, tempDir, clock, actor: "e2e" },
+        { repoRoot, tempDir, actor: "e2e" },
       );
       expect(aiDraft.code).toBe(ExitCode.EnvironmentAuth);
-      expect(aiDraft.stderr).toMatch(/HYPER_PM_AI_API_KEY/);
+      expect(`${aiDraft.stdout}\n${aiDraft.stderr}`).toMatch(
+        /HYPER_PM_AI_API_KEY/,
+      );
     }
 
-    const ticketDelete = await invokeHyperPmCli(
-      ["ticket", "delete", "--id", "ticket-e2e-1"],
-      { repoRoot, tempDir, clock, actor: "e2e" },
+    const ticketDelete = invokeBundled(
+      ["ticket", "delete", "--id", "ticket-dist-e2e-1"],
+      { repoRoot, tempDir, actor: "e2e" },
     );
     expect(ticketDelete.code).toBe(ExitCode.Success);
 
-    const storyDelete = await invokeHyperPmCli(
-      ["story", "delete", "--id", "story-e2e-1"],
-      { repoRoot, tempDir, clock, actor: "e2e" },
+    const storyDelete = invokeBundled(
+      ["story", "delete", "--id", "story-dist-e2e-1"],
+      { repoRoot, tempDir, actor: "e2e" },
     );
     expect(storyDelete.code).toBe(ExitCode.Success);
 
-    const epicDelete = await invokeHyperPmCli(
-      ["epic", "delete", "--id", "epic-e2e-1"],
-      { repoRoot, tempDir, clock, actor: "e2e" },
+    const epicDelete = invokeBundled(
+      ["epic", "delete", "--id", "epic-dist-e2e-1"],
+      { repoRoot, tempDir, actor: "e2e" },
     );
     expect(epicDelete.code).toBe(ExitCode.Success);
 
-    const epicMissing = await invokeHyperPmCli(
-      ["epic", "read", "--id", "epic-e2e-1"],
-      { repoRoot, tempDir, clock },
+    const epicMissing = invokeBundled(
+      ["epic", "read", "--id", "epic-dist-e2e-1"],
+      { repoRoot, tempDir },
     );
     expect(epicMissing.code).toBe(ExitCode.UserError);
 
-    const badStatus = await invokeHyperPmCli(
+    const badStatus = invokeBundled(
       ["epic", "create", "--title", "x", "--status", "nope"],
-      { repoRoot, tempDir, clock, actor: "e2e" },
+      { repoRoot, tempDir, actor: "e2e" },
     );
     expect(badStatus.code).toBe(ExitCode.UserError);
   }, 120_000);
 
   it("merges divergent hyper-pm-data clones without conflicts when events use separate shard files", async () => {
     // Setup — bare remote + worker1
-    const base = await mkdtemp(join(tmpdir(), "hyper-pm-e2e-merge-"));
+    const base = await mkdtemp(join(tmpdir(), "hyper-pm-dist-e2e-merge-"));
     bases.push(base);
     const bare = join(base, "central.git");
     const w1 = join(base, "worker1");
@@ -376,11 +308,9 @@ describe("hyper-pm CLI (e2e)", () => {
     await git(w1, ["push", "-u", "origin", "main"]);
 
     const temp1 = join(base, "tmp1");
-    const clock1 = { now: () => new Date("2026-06-01T10:00:00.000Z") };
-    const init1 = await invokeHyperPmCli(["--sync", "off", "init"], {
+    const init1 = invokeBundled(["--sync", "off", "init"], {
       repoRoot: w1,
       tempDir: temp1,
-      clock: clock1,
       actor: "w1",
     });
     expect(init1.code).toBe(ExitCode.Success);
@@ -389,9 +319,9 @@ describe("hyper-pm CLI (e2e)", () => {
     await git(w1, ["commit", "-m", "config"]);
     await git(w1, ["push", "origin", "main"]);
 
-    const epicW1 = await invokeHyperPmCli(
-      ["epic", "create", "--id", "ep-merge-a", "--title", "From W1"],
-      { repoRoot: w1, tempDir: temp1, clock: clock1, actor: "w1" },
+    const epicW1 = invokeBundled(
+      ["epic", "create", "--id", "ep-dist-merge-a", "--title", "From W1"],
+      { repoRoot: w1, tempDir: temp1, actor: "w1" },
     );
     expect(epicW1.code).toBe(ExitCode.Success);
     await git(w1, ["push", "-u", "origin", "hyper-pm-data"]);
@@ -404,13 +334,12 @@ describe("hyper-pm CLI (e2e)", () => {
     await git(w2, ["branch", "hyper-pm-data", "origin/hyper-pm-data"]);
 
     const temp2 = join(base, "tmp2");
-    const clock2 = { now: () => new Date("2026-06-01T11:00:00.000Z") };
 
     // Act — ensure distinct event shard filenames (wall-clock based)
     await sleep(5);
-    const epicW2 = await invokeHyperPmCli(
-      ["epic", "create", "--id", "ep-merge-b", "--title", "From W2"],
-      { repoRoot: w2, tempDir: temp2, clock: clock2, actor: "w2" },
+    const epicW2 = invokeBundled(
+      ["epic", "create", "--id", "ep-dist-merge-b", "--title", "From W2"],
+      { repoRoot: w2, tempDir: temp2, actor: "w2" },
     );
     expect(epicW2.code).toBe(ExitCode.Success);
     await git(w2, ["push", "-u", "origin", "hyper-pm-data"]);
@@ -422,22 +351,20 @@ describe("hyper-pm CLI (e2e)", () => {
 
     await git(w1, ["checkout", "main"]);
 
-    const doctorMerged = await invokeHyperPmCli(["doctor"], {
+    const doctorMerged = invokeBundled(["doctor"], {
       repoRoot: w1,
       tempDir: temp1,
-      clock: clock1,
     });
     expect(doctorMerged.code).toBe(ExitCode.Success);
 
-    const listAfter = await invokeHyperPmCli(["epic", "read"], {
+    const listAfter = invokeBundled(["epic", "read"], {
       repoRoot: w1,
       tempDir: temp1,
-      clock: clock1,
     });
     expect(listAfter.code).toBe(ExitCode.Success);
     const items = (listAfter.json as { items?: { id: string }[] }).items ?? [];
     const ids = new Set(items.map((i) => i.id));
-    expect(ids.has("ep-merge-a")).toBe(true);
-    expect(ids.has("ep-merge-b")).toBe(true);
+    expect(ids.has("ep-dist-merge-a")).toBe(true);
+    expect(ids.has("ep-dist-merge-b")).toBe(true);
   }, 120_000);
 });

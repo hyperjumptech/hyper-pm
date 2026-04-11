@@ -16,6 +16,8 @@ import {
   resolveHyperPmPackageRootFromE2eImportMetaUrl,
   runBundledCliHelp,
   runNpmPackIntoDir,
+  spawnBundledHyperPmCliSync,
+  toBundledCliInvokeResult,
 } from "./published-package-helpers";
 
 describe("resolveHyperPmPackageRootFromE2eImportMetaUrl", () => {
@@ -267,5 +269,135 @@ describe("runNpmPackIntoDir integration line parsing", () => {
 
     // Assert
     expect(path).toBe(join("/dest", "hyper-pm-1.0.0.tgz"));
+  });
+});
+
+describe("spawnBundledHyperPmCliSync", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("prefixes argv with --repo, --temp-dir, and optional --actor", () => {
+    // Setup
+    const spawnSync = vi
+      .fn()
+      .mockReturnValue({ status: 0, stdout: "{}", stderr: "" });
+
+    // Act
+    spawnBundledHyperPmCliSync(
+      "/m/main.cjs",
+      ["init"],
+      { repoRoot: "/r", tempDir: "/t", actor: "a" },
+      { spawnSync, nodeExecutable: "/node" },
+    );
+
+    // Assert
+    expect(spawnSync).toHaveBeenCalledWith(
+      "/node",
+      [
+        "/m/main.cjs",
+        "--repo",
+        "/r",
+        "--temp-dir",
+        "/t",
+        "--actor",
+        "a",
+        "init",
+      ],
+      { encoding: "utf8" },
+    );
+  });
+
+  it("omits --actor when ctx.actor is undefined", () => {
+    // Setup
+    const spawnSync = vi
+      .fn()
+      .mockReturnValue({ status: 0, stdout: "", stderr: "" });
+
+    // Act
+    spawnBundledHyperPmCliSync(
+      "/m/main.cjs",
+      ["doctor"],
+      { repoRoot: "/r", tempDir: "/t" },
+      { spawnSync, nodeExecutable: "/bin/node" },
+    );
+
+    // Assert
+    expect(spawnSync).toHaveBeenCalledWith(
+      "/bin/node",
+      ["/m/main.cjs", "--repo", "/r", "--temp-dir", "/t", "doctor"],
+      { encoding: "utf8" },
+    );
+  });
+
+  it("uses process.execPath when nodeExecutable is omitted from deps", () => {
+    // Setup
+    const spawnSync = vi
+      .fn()
+      .mockReturnValue({ status: 0, stdout: "", stderr: "" });
+
+    // Act
+    spawnBundledHyperPmCliSync(
+      "/m/main.cjs",
+      ["doctor"],
+      { repoRoot: "/r", tempDir: "/t" },
+      { spawnSync },
+    );
+
+    // Assert
+    expect(spawnSync.mock.calls[0]?.[0]).toBe(process.execPath);
+  });
+});
+
+describe("toBundledCliInvokeResult", () => {
+  it("parses JSON stdout and uses numeric status as code", () => {
+    // Act
+    const r = toBundledCliInvokeResult({
+      status: 0,
+      stdout: '{"ok":true}\n',
+      stderr: "",
+    });
+
+    // Assert
+    expect(r.code).toBe(0);
+    expect(r.json).toEqual({ ok: true });
+  });
+
+  it("sets json undefined for empty stdout", () => {
+    // Act
+    const r = toBundledCliInvokeResult({
+      status: 0,
+      stdout: "",
+      stderr: "",
+    });
+
+    // Assert
+    expect(r.json).toBeUndefined();
+  });
+
+  it("sets json undefined when stdout is not JSON", () => {
+    // Act
+    const r = toBundledCliInvokeResult({
+      status: 1,
+      stdout: "not-json",
+      stderr: "err",
+    });
+
+    // Assert
+    expect(r.code).toBe(1);
+    expect(r.json).toBeUndefined();
+    expect(r.stderr).toBe("err");
+  });
+
+  it("uses exit code 1 when status is null", () => {
+    // Act
+    const r = toBundledCliInvokeResult({
+      status: null,
+      stdout: "",
+      stderr: "",
+    });
+
+    // Assert
+    expect(r.code).toBe(1);
   });
 });
