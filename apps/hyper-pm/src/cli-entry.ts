@@ -45,6 +45,12 @@ import {
   listActiveTicketSummaries,
 } from "./cli/list-projection-summaries";
 import {
+  mergeTicketImportCreatePayload,
+  parseGithubImportIssueNumberSet,
+  partitionGithubIssuesForImport,
+  tryParseGithubImportListState,
+} from "./cli/github-issue-import";
+import {
   tryParseIsoDateMillis,
   type TicketListQuery,
 } from "./cli/ticket-list-query";
@@ -1601,6 +1607,184 @@ export const runCli = async (
         await appendEventLine(root, evt, deps.clock);
         return { id: o.id, deleted: true };
       });
+    });
+  ticket
+    .command("import-github")
+    .description(
+      "Create local tickets for GitHub issues not yet represented in hyper-pm",
+    )
+    .option("--dry-run", "list import candidates without writing events", false)
+    .option(
+      "--story <id>",
+      "optional story id applied to every imported ticket (must exist)",
+    )
+    .option(
+      "--state <s>",
+      "GitHub list filter: open | closed | all (default all)",
+      "all",
+    )
+    .option(
+      "--issue <n>",
+      "only consider these issue numbers (repeatable or comma-separated)",
+      (value: string, previous: string[]) => [...previous, value],
+      [],
+    )
+    .action(async function (this: Command) {
+      const g = readGlobals(this);
+      const o = this.opts<{
+        dryRun?: boolean;
+        story?: string;
+        state?: string;
+        issue?: string[];
+      }>();
+      const listState = tryParseGithubImportListState(o.state);
+      if (listState === undefined) {
+        deps.error(
+          `Invalid --state ${JSON.stringify(o.state)} (use open, closed, or all)`,
+        );
+        deps.exit(ExitCode.UserError);
+      }
+      let onlyIssueNumbers: Set<number> | undefined;
+      try {
+        onlyIssueNumbers = parseGithubImportIssueNumberSet(o.issue);
+      } catch (e) {
+        deps.error(e instanceof Error ? e.message : String(e));
+        deps.exit(ExitCode.UserError);
+      }
+      const repoRoot = await resolveRepoRoot(g.repo);
+      const cfg = await loadMergedConfig(repoRoot, g);
+      if (cfg.issueMapping !== "ticket") {
+        deps.error(
+          'ticket import-github requires config issueMapping "ticket" (other mappings are not supported yet).',
+        );
+        deps.exit(ExitCode.UserError);
+      }
+      const githubToken = await resolveGithubTokenForSync({
+        envToken: env.GITHUB_TOKEN,
+        cwd: repoRoot,
+      });
+      if (!githubToken) {
+        deps.error(
+          "GitHub auth required: set GITHUB_TOKEN or run `gh auth login`",
+        );
+        deps.exit(ExitCode.EnvironmentAuth);
+      }
+      const actor = await resolveCliActor({
+        repoRoot,
+        cliActor: g.actor,
+        envActor: env.HYPER_PM_ACTOR,
+      });
+      const tmpBase = g.tempDir ?? env.TMPDIR ?? tmpdir();
+      const session = await openDataBranchWorktree({
+        repoRoot,
+        dataBranch: cfg.dataBranch,
+        tmpBase,
+        keepWorktree: g.keepWorktree,
+        runGit,
+      });
+      try {
+        const lines = await readAllEventLines(session.worktreePath);
+        const proj = replayEvents(lines);
+        const storyRaw = o.story;
+        const storyTrimmed =
+          storyRaw !== undefined && storyRaw !== ""
+            ? storyRaw.trim()
+            : undefined;
+        if (storyTrimmed !== undefined && storyTrimmed !== "") {
+          const storyRow = proj.stories.get(storyTrimmed);
+          if (!storyRow || storyRow.deleted) {
+            deps.error(`Story not found: ${storyTrimmed}`);
+            deps.exit(ExitCode.UserError);
+          }
+        }
+        try {
+          const gitDerivedSlug = await tryReadGithubOwnerRepoSlugFromGit({
+            repoRoot,
+            remote: cfg.remote,
+            runGit,
+          });
+          const { owner, repo } = resolveGithubRepo(
+            cfg,
+            env.GITHUB_REPO,
+            gitDerivedSlug,
+          );
+          const octokit = new Octokit({ auth: githubToken });
+          const issues = await octokit.paginate(
+            octokit.rest.issues.listForRepo,
+            {
+              owner,
+              repo,
+              state: listState,
+              per_page: 100,
+            },
+          );
+          const { candidates, skipped } = partitionGithubIssuesForImport({
+            projection: proj,
+            issues,
+            onlyIssueNumbers,
+          });
+          if (o.dryRun) {
+            deps.log(
+              formatOutput(g.format, {
+                ok: true,
+                dryRun: true,
+                candidates,
+                skipped,
+              }),
+            );
+          } else {
+            const imported: { ticketId: string; issueNumber: number }[] = [];
+            for (const c of candidates) {
+              const ticketId = ulid();
+              const createPayload = mergeTicketImportCreatePayload(
+                ticketId,
+                c.ticketCreatedPayloadBase,
+                storyTrimmed,
+              );
+              const createdEvt = makeEvent(
+                "TicketCreated",
+                createPayload,
+                deps.clock,
+                actor,
+              );
+              await appendEventLine(
+                session.worktreePath,
+                createdEvt,
+                deps.clock,
+              );
+              const linkEvt = makeEvent(
+                "GithubIssueLinked",
+                { ticketId, issueNumber: c.issueNumber },
+                deps.clock,
+                actor,
+              );
+              await appendEventLine(session.worktreePath, linkEvt, deps.clock);
+              imported.push({ ticketId, issueNumber: c.issueNumber });
+            }
+            await commitDataWorktreeIfNeeded(
+              session.worktreePath,
+              formatDataBranchCommitMessage(
+                "hyper-pm: import-github-issues",
+                actor,
+              ),
+              runGit,
+            );
+            deps.log(
+              formatOutput(g.format, {
+                ok: true,
+                imported,
+                skipped,
+              }),
+            );
+          }
+        } catch (e) {
+          deps.error(e instanceof Error ? e.message : String(e));
+          deps.exit(ExitCode.ExternalApi);
+        }
+      } finally {
+        await session.dispose();
+      }
+      deps.exit(ExitCode.Success);
     });
 
   program
