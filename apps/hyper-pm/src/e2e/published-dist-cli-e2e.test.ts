@@ -470,9 +470,10 @@ describe("dist/main.cjs subprocess (JSON workflow parity)", () => {
     expect(epicW1.code).toBe(ExitCode.Success);
     await git(w1, ["push", "-u", "origin", "hyper-pm-data"]);
 
-    // Setup — worker2 clone
+    // Setup — worker2 clone (pin main: bare HEAD may point at hyper-pm-data, which
+    // would leave this checkout on the data branch and break `git worktree add`.)
     const w2 = join(base, "worker2");
-    await git(base, ["clone", bare, "worker2"]);
+    await git(base, ["clone", "--branch", "main", bare, "worker2"]);
     await git(w2, ["config", "user.email", "w2@example.com"]);
     await git(w2, ["config", "user.name", "worker2"]);
     await git(w2, ["branch", "hyper-pm-data", "origin/hyper-pm-data"]);
