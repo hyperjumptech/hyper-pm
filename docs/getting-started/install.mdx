@@ -1,0 +1,68 @@
+---
+title: Install
+description: Build hyper-pm from the monorepo or use the published npm package.
+icon: Download
+---
+
+import { Step, Steps } from "fumadocs-ui/components/steps";
+import { Callout } from "fumadocs-ui/components/callout";
+
+## From this monorepo (development)
+
+<Steps>
+  <Step>
+
+### Prerequisites
+
+Use **Node.js 20+** and **pnpm**. The required pnpm version is pinned under **`packageManager`** in the repo root **`package.json`**.
+
+  </Step>
+  <Step>
+
+### Install dependencies
+
+From the repository root:
+
+```bash
+pnpm install
+```
+
+  </Step>
+  <Step>
+
+### Build the CLI
+
+```bash
+pnpm build --filter=hyper-pm
+```
+
+The bundled entry used by scripts and wrappers is typically **`apps/hyper-pm/dist/main.cjs`**.
+
+  </Step>
+  <Step>
+
+### Run
+
+```bash
+node apps/hyper-pm/dist/main.cjs --help
+```
+
+You can also use **`pnpm exec hyper-pm`** from a workspace package that depends on `hyper-pm`, or link the package globally if that fits your workflow.
+
+  </Step>
+</Steps>
+
+## Published npm package
+
+When **`hyper-pm`** is published to npm, install it like any other CLI tool (exact package name and scope follow `apps/hyper-pm/package.json`). After install, **`hyper-pm --help`** should match the in-repo CLI.
+
+<Callout type="info">
+
+Publishing notes for maintainers live in **`apps/hyper-pm/README.md`** (build before publish, prefer `pnpm publish` so workspace ranges resolve).
+
+</Callout>
+
+## Optional: web UI and MCP
+
+- **Web:** build `hyper-pm` first, then `pnpm --filter hyper-pm-web build` (or `dev`). See [Web UI](/integrations/web-ui).
+- **MCP:** build `hyper-pm` and `hyper-pm-mcp`. See [MCP server](/integrations/mcp-server).

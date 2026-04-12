@@ -1,0 +1,6 @@
+{
+  "title": "Introduction",
+  "icon": "Lightbulb",
+  "pages": ["overview", "architecture"],
+  "defaultOpen": true
+}

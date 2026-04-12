@@ -1,0 +1,6 @@
+{
+  "title": "Integrations",
+  "icon": "Puzzle",
+  "pages": ["github-sync", "web-ui", "mcp-server"],
+  "defaultOpen": true
+}

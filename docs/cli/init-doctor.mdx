@@ -1,0 +1,23 @@
+---
+title: init & doctor
+description: Initialize hyper-pm in a repo and validate the event log.
+icon: Stethoscope
+---
+
+## `init`
+
+Creates or adopts the **orphan data branch** and writes **`.hyper-pm/config.json`**.
+
+Uses **global options only** — there are no `init`-specific flags beyond those shared flags (repo, data branch, remote, sync, GitHub slug, etc.).
+
+Typical first run:
+
+```bash
+hyper-pm init
+```
+
+## `doctor`
+
+Validates that the event log on the data branch **reads and replays** without structural errors. Exits non-zero when problems are found.
+
+No subcommand-specific options.

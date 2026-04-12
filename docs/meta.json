@@ -1,0 +1,14 @@
+{
+  "title": "Documentation",
+  "icon": "BookOpen",
+  "pages": [
+    "index",
+    "intro",
+    "getting-started",
+    "concepts",
+    "cli",
+    "integrations",
+    "development"
+  ],
+  "defaultOpen": true
+}

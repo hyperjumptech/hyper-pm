@@ -1,0 +1,31 @@
+---
+title: Monorepo
+description: Turborepo layout, scripts, and where hyper-pm packages live.
+icon: FolderGit2
+---
+
+## Layout
+
+This repository is a **pnpm** + **Turborepo** monorepo. Primary apps for Hyper PM:
+
+| Path                | Package          |
+| ------------------- | ---------------- |
+| `apps/hyper-pm`     | CLI (`hyper-pm`) |
+| `apps/hyper-pm-web` | Local web UI     |
+| `apps/hyper-pm-mcp` | MCP stdio server |
+
+Shared libraries live under **`packages/`** (for example **`@workspace/env`**, **`@workspace/hyper-pm-cli-runner`**).
+
+## Common scripts (root)
+
+| Script              | Purpose                                              |
+| ------------------- | ---------------------------------------------------- |
+| `pnpm install`      | Install workspace dependencies                       |
+| `pnpm build`        | `turbo build` across packages                        |
+| `pnpm code-quality` | Lint, tests, and type-check (gate for contributions) |
+| `pnpm docs:dev`     | Speed Docs dev server for `/docs` content            |
+| `pnpm docs:build`   | Static build of the documentation site               |
+
+## Database and other services
+
+Some workspace packages or tests may expect Postgres or other services via **`docker-compose`**. Follow the root **`README.md`** for local infra commands relevant to your task.

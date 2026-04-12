@@ -1,0 +1,12 @@
+{
+  "title": "CLI reference",
+  "icon": "Terminal",
+  "pages": [
+    "global-options",
+    "init-doctor",
+    "epics-stories",
+    "tickets",
+    "repo-sync-audit"
+  ],
+  "defaultOpen": true
+}

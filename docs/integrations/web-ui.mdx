@@ -1,0 +1,63 @@
+---
+title: Web UI (hyper-pm-web)
+description: Local browser UI that wraps the hyper-pm CLI bundle.
+icon: Monitor
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+import { Step, Steps } from "fumadocs-ui/components/steps";
+
+**`hyper-pm-web`** serves a small **local** UI around the same **`hyper-pm/dist/main.cjs`** binary the CLI uses, so behavior stays aligned.
+
+## Security defaults
+
+<Callout type="warn">
+
+- Defaults to **127.0.0.1** — see **`HYPER_PM_WEB_HOST`**. Do not expose the dev server to untrusted networks without TLS and authentication.
+- **`--repo`**, **`--temp-dir`**, and **`--format`** are **chosen by the server**; clients cannot override them through `argv`.
+- Optional **`HYPER_PM_WEB_TOKEN`**: when set, **`POST /api/run`** requires **`Authorization: Bearer <token>`**.
+
+</Callout>
+
+## Run locally
+
+<Steps>
+  <Step>
+
+### Build the CLI
+
+```bash
+pnpm --filter hyper-pm build
+```
+
+  </Step>
+  <Step>
+
+### Configure (optional)
+
+See **`apps/hyper-pm-web/README.md`** and root **`packages/env/env.example`**. Common variables include **`HYPER_PM_WEB_REPO`** (repo root for `--repo`, defaulting to server `cwd`), **`HYPER_PM_WEB_TEMP_DIR`** (worktree parent or ephemeral temp cleaned on shutdown), plus **`HYPER_PM_WEB_HOST`**, **`HYPER_PM_WEB_PORT`**, and **`HYPER_PM_WEB_TOKEN`**.
+
+  </Step>
+  <Step>
+
+### Start the app
+
+From the Git repo you want to manage (so default `--repo` is correct):
+
+```bash
+pnpm --filter hyper-pm-web dev
+```
+
+Or production-style **`build`** then **`start`**.
+
+  </Step>
+</Steps>
+
+Open the printed URL (default **`http://127.0.0.1:3847`**).
+
+## HTTP API
+
+- **`GET /api/health`** — `{ ok, repoPath, tempDirParent }`
+- **`POST /api/run`** — JSON body compatible with **`@workspace/hyper-pm-cli-runner`** input, except **`repo`** and **`tempDir`** in `argv` are ignored or forbidden; the server merges configured paths.
+
+GitHub sync and other features use the **same environment variables** as the CLI.

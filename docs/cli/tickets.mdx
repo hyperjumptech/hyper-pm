@@ -1,0 +1,49 @@
+---
+title: Tickets
+description: ticket create/read/update/delete, work, comment — flags and behaviors.
+icon: Ticket
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+## CRUD
+
+### `ticket create`
+
+- **Required:** `--title`
+- **Optional:** `--story`, `--body`, `--id`, `--status`, `--assignee`, **`--branch`** (repeatable), **`--label`** (repeatable), **`--priority`**, **`--size`**, **`--estimate`**, **`--start-at`**, **`--target-finish-at`**, **`--ai-draft`** (needs `HYPER_PM_AI_API_KEY`)
+
+### `ticket read`
+
+- **One ticket:** `--id` — JSON includes linked branches, comments, planning fields when set, and PR activity summaries when recorded.
+- **List:** omit `--id` and use filters documented in **`hyper-pm ticket read --help`** (story / epic / status / labels / dates / sort, etc.).
+
+### `ticket update`
+
+- **Required:** `--id`
+- **Patches:** title, body, status, story link (`--story` / `--unlink-story`), assignee, branches, labels, planning fields, clears for each family, **`--ai-improve`** (requires `--body` and API key).
+
+### `ticket delete`
+
+Soft-delete with **`--id`**.
+
+## `ticket work`
+
+Starts work in the **primary clone** (not the data worktree):
+
+- **Required:** `--id`
+- **Optional:** `--branch` (default `hyper-pm/<id>` with numeric suffix if taken), `--from` ref for the fork point.
+
+Creates and checks out the branch, sets ticket to **`in_progress`**, and appends the branch to **linked branches**. Rejects **`done`** / **`cancelled`**.
+
+## `ticket comment`
+
+Append a durable comment event:
+
+- **Required:** `--id`, **`--body`** (non-empty after trim)
+
+<Callout type="info">
+
+GitHub sync rules for assignees and issue creation vs updates are summarized on [GitHub sync](/integrations/github-sync).
+
+</Callout>

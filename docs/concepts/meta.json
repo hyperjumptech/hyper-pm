@@ -1,0 +1,6 @@
+{
+  "title": "Concepts",
+  "icon": "Boxes",
+  "pages": ["data-model", "event-log", "worktrees"],
+  "defaultOpen": true
+}

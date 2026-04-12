@@ -1,0 +1,44 @@
+---
+title: Overview
+description: What hyper-pm is for, how it stores data in Git, and when to use GitHub sync.
+icon: Info
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+## What hyper-pm is
+
+**hyper-pm** is a **Git-native** project manager: epics, stories, tickets, comments, and sync metadata live in **your repository** on a dedicated **data branch**, not only in a SaaS database. The CLI (and anything that wraps it) mutates state by **appending typed events** to a JSONL log and **replaying** them to build the current projection.
+
+That design gives you:
+
+- **Offline-first workflows** after clone and fetch — no hosted PM required for local reads and writes.
+- **Reviewable history** of who changed what, suitable for compliance-minded teams.
+- **Disposable worktrees** for mutations so your main checkout stays clean while the tool edits the data branch.
+
+## What it is not
+
+- A full replacement for GitHub Projects, Jira workflows, or cross-repo portfolio views out of the box.
+- A multi-tenant hosted service: security and backups are **your** Git hosting and practices.
+
+## Interfaces
+
+| Surface            | Role                                                                                                                |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| **`hyper-pm` CLI** | Canonical API: `init`, CRUD on epics/stories/tickets, `work`, `comment`, `sync`, `audit`, `doctor`, `repo` helpers. |
+| **`hyper-pm-web`** | Local browser UI that shells the same CLI bundle; good for browsing and editing without memorizing flags.           |
+| **`hyper-pm-mcp`** | stdio MCP server exposing `hyper_pm_run` so agents can invoke the CLI with structured JSON.                         |
+
+<Callout type="warn">
+
+Treat MCP and the web API as **powerful local automation**: only enable them in environments you trust, and prefer binding the web server to **loopback** unless you have auth and TLS in front.
+
+</Callout>
+
+## Optional GitHub Issues sync
+
+When **sync** is enabled and credentials are present, hyper-pm can **push** ticket changes to GitHub Issues and, in **full** mode, **pull** inbound edits and attach **PR timeline** signals for tickets that are in progress and linked to issues. See [GitHub sync](/integrations/github-sync) for behavior details and limits.
+
+## AI-assisted fields
+
+Some ticket commands support **`--ai-draft`** and **`--ai-improve`** when **`HYPER_PM_AI_API_KEY`** is set. These call out to your configured AI provider from the CLI environment — review outputs before committing them to shared tickets.

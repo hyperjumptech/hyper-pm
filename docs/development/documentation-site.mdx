@@ -1,0 +1,29 @@
+---
+title: Documentation site
+description: Authoring and previewing these docs with Speed Docs.
+icon: BookMarked
+---
+
+This site is generated with **[Speed Docs](https://speed-docs.dev)** from the **`docs/`** content directory at the repository root.
+
+## Local preview
+
+```bash
+pnpm docs:dev
+```
+
+## Production build
+
+```bash
+pnpm docs:build
+```
+
+The CLI writes static output (by default under **`docs-output/`** at the repo root — confirm with your Speed Docs version). Deploy that directory to any static host, or wire the [Speed Docs GitHub Action](https://github.com/nicnocquee/speed-docs-github-action) into CI.
+
+## Authoring conventions
+
+- Pages live under **`docs/docs/`** as **`.mdx`** with YAML **frontmatter** (`title`, optional `description`, optional `icon`).
+- Sidebar order is controlled by **`meta.json`** beside each folder.
+- Static assets (for example **`logo.png`**) sit next to **`config.json`** in **`docs/`** and are referenced with a **`/`** prefix.
+
+For component examples (Callout, Steps, Files), see the Speed Docs skill **`create-project-docs`** in this repository’s **`.cursor/skills`**.

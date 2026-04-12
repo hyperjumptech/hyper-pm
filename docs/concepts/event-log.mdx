@@ -1,0 +1,30 @@
+---
+title: Event log
+description: JSONL events, audit, and doctor — how durable history works.
+icon: ScrollText
+---
+
+## Append-only JSONL
+
+The data branch holds an append-only **JSONL** log. Each line is one **event** with a type and payload understood by the replay engine.
+
+Examples of event types (not exhaustive — see CLI `audit --help` for the authoritative list):
+
+- **`EpicCreated`**, **`EpicUpdated`**, **`EpicDeleted`**
+- **`StoryCreated`**, **`StoryUpdated`**, **`StoryDeleted`**
+- **`TicketCreated`**, **`TicketUpdated`**, **`TicketDeleted`**, **`TicketCommentAdded`**
+- **`SyncCursor`**, **`GithubInboundUpdate`**, **`GithubIssueLinked`**, **`GithubPrActivity`**
+
+## Audit
+
+**`hyper-pm audit`** streams matching events with filters:
+
+- **`--limit`** — keep the newest _n_ matches.
+- **`--type`** — filter by a single event type.
+- **`--entity-id`** — match ids embedded in payloads.
+
+Text output supports **`tsv`**, **`plain`**, and **`plain-links`** (adds compact JSON with URLs when repo metadata is known).
+
+## Doctor
+
+**`hyper-pm doctor`** validates that the log **parses and replays**. Use it after manual merges, tooling experiments, or before releases if you automate on top of hyper-pm data.

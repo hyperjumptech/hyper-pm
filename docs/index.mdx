@@ -1,0 +1,39 @@
+---
+title: Welcome
+description: Git-native project management with hyper-pm — CLI, local web UI, and MCP.
+icon: Home
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+**Hyper PM** is a Git-native project management toolkit for software teams who want durable work tracking next to the code, without giving up the terminal or their editor.
+
+At the center is the **`hyper-pm` CLI**: it stores epics, stories, and tickets on an **orphan data branch**, records every change in an **append-only JSONL event log**, and can optionally **sync** with GitHub Issues. A small **local web UI** (`hyper-pm-web`) and an **MCP server** (`hyper-pm-mcp`) wrap the same CLI so editors and agents can drive the same workflows.
+
+<Callout type="info">
+
+This site documents the **hyper-pm monorepo**. For day-to-day use you only need a built CLI (or published npm package), a Git repository, and optionally GitHub credentials for sync.
+
+</Callout>
+
+## What you can do
+
+- **Plan work** with epics → stories → tickets, or standalone tickets.
+- **Start work** from a ticket (`work`) to create a linked branch and move status forward.
+- **Comment and audit** with local ticket comments and a replayable event stream (`audit`, `doctor`).
+- **Integrate** with GitHub Issues when you want two-way labels, bodies, assignees, and PR activity signals.
+
+## Where to go next
+
+| Section                                     | Purpose                                              |
+| ------------------------------------------- | ---------------------------------------------------- |
+| [Introduction](/intro/overview)             | Goals, non-goals, and how hyper-pm fits in your repo |
+| [Getting started](/getting-started/install) | Install from source or npm, `init`, first commands   |
+| [Concepts](/concepts/data-model)            | Data branch, config, entities, and the event log     |
+| [CLI reference](/cli/global-options)        | Global flags and command groups                      |
+| [Integrations](/integrations/web-ui)        | Web UI, GitHub sync behavior, MCP                    |
+
+## Requirements
+
+- **Node.js 20+** for building and running the CLI and related apps from this repository.
+- A **Git** repository where you run `hyper-pm init` (or adopt an existing data layout).

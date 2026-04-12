@@ -1,0 +1,32 @@
+---
+title: Data model
+description: Epics, stories, tickets, statuses, and relationships in hyper-pm.
+icon: Database
+---
+
+## Hierarchy
+
+- **Epic** — top-level theme or release bucket.
+- **Story** — belongs to exactly one **epic** (soft-deleted stories retain history via events).
+- **Ticket** — may link to a **story** or remain **unlinked** until you attach one.
+
+GitHub outbound **issue creation** only runs for tickets that have a valid **epic → story** chain; tickets without a story can still be updated if they already have a linked GitHub issue.
+
+## Status values
+
+Epics and stories commonly use: **`backlog`**, **`todo`**, **`in_progress`**, **`done`**, **`cancelled`** (exact spellings match the CLI).
+
+Tickets default to **`todo`** on create and use the same general lifecycle vocabulary; **`ticket work`** refuses tickets already **`done`** or **`cancelled`**.
+
+## Ticket fields (selected)
+
+Beyond title and body, tickets can carry:
+
+- **Assignee** — at most one GitHub login; sync maps to the issue assignee set.
+- **Linked branches** — normalized branch names attached to the ticket (`work` appends automatically).
+- **Labels, priority, size, estimate** — planning metadata; outbound sync maps labels to GitHub (subject to GitHub limits) and embeds planning JSON in the issue body for round-tripping in **full** sync.
+- **Schedule** — optional **`startWorkAt`** / **`targetFinishAt`** (ISO-8601) with corresponding CLI flags.
+
+## Comments
+
+**`ticket comment`** appends a **`TicketCommentAdded`** event. **`ticket read --id`** includes a **`comments`** array built from the projection.
