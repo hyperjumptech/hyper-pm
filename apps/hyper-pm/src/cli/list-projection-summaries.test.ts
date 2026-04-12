@@ -214,6 +214,37 @@ describe("listActiveTicketSummaries", () => {
     ]);
   });
 
+  it("includes assignee when set on the ticket", () => {
+    const projection = projectionWith({
+      tickets: new Map([
+        [
+          "t1",
+          {
+            id: "t1",
+            storyId: "s1",
+            title: "Open",
+            body: "",
+            status: "todo",
+            linkedPrs: [],
+            assignee: "alice",
+            ...audit,
+            ...statusAudit,
+          },
+        ],
+      ]),
+    });
+    expect(listActiveTicketSummaries(projection)).toEqual([
+      {
+        id: "t1",
+        title: "Open",
+        status: "todo",
+        storyId: "s1",
+        assignee: "alice",
+        ...audit,
+      },
+    ]);
+  });
+
   it("includes lastPrActivity from prActivityRecent tail", () => {
     const projection = projectionWith({
       tickets: new Map([

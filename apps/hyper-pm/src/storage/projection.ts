@@ -1,3 +1,4 @@
+import { normalizeGithubLogin } from "../lib/github-assignee";
 import {
   GITHUB_PR_ACTIVITY_RECENT_CAP,
   parseGithubPrActivityPayload,
@@ -58,6 +59,8 @@ export type TicketRecord = {
   githubIssueNumber?: number;
   /** Recent PR sub-events from `GithubPrActivity` replay (capped). */
   prActivityRecent?: TicketPrActivitySummary[];
+  /** GitHub login (normalized), when the ticket has an assignee. */
+  assignee?: string;
   deleted?: boolean;
 } & EntityAudit &
   StatusTransitionAudit;
@@ -90,6 +93,29 @@ const parsePrRefs = (body: string): number[] => {
     m = re.exec(body);
   }
   return [...out];
+};
+
+/**
+ * Applies optional `assignee` from a ticket event payload (`TicketCreated`, `TicketUpdated`, `GithubInboundUpdate`).
+ * Missing key leaves the field unchanged; `null` clears; non-empty string sets a normalized login; whitespace-only clears.
+ *
+ * @param row - Mutable ticket row.
+ * @param payload - Event payload possibly containing `assignee`.
+ */
+const applyTicketAssigneeFromPayload = (
+  row: TicketRecord,
+  payload: Record<string, unknown>,
+): void => {
+  if (!Object.prototype.hasOwnProperty.call(payload, "assignee")) return;
+  const v = payload["assignee"];
+  if (v === null) {
+    delete row.assignee;
+    return;
+  }
+  if (typeof v !== "string") return;
+  const n = normalizeGithubLogin(v);
+  if (n === "") delete row.assignee;
+  else row.assignee = n;
 };
 
 /**
@@ -278,6 +304,7 @@ export const applyEvent = (projection: Projection, evt: EventLine): void => {
         updatedBy: "",
       };
       applyCreatedAudit(row, evt);
+      applyTicketAssigneeFromPayload(row, evt.payload);
       projection.tickets.set(id, row);
       break;
     }
@@ -296,6 +323,7 @@ export const applyEvent = (projection: Projection, evt: EventLine): void => {
       if (nextStatus !== undefined) {
         applyStatusIfChanged(cur, evt, nextStatus);
       }
+      applyTicketAssigneeFromPayload(cur, evt.payload);
       applyLastUpdate(cur, evt);
       break;
     }
@@ -342,6 +370,7 @@ export const applyEvent = (projection: Projection, evt: EventLine): void => {
         if (inboundStatus !== undefined) {
           applyStatusIfChanged(ticket, evt, inboundStatus);
         }
+        applyTicketAssigneeFromPayload(ticket, evt.payload);
         applyLastUpdate(ticket, evt);
       }
       break;

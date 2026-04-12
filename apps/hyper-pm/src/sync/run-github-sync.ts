@@ -1,5 +1,6 @@
 import { Octokit } from "@octokit/rest";
 import type { HyperPmConfig } from "../config/hyper-pm-config";
+import { assigneeFromGithubIssue } from "../lib/github-assignee";
 import {
   buildGithubIssueBody,
   parseHyperPmIdFromIssueBody,
@@ -73,6 +74,7 @@ export const runGithubOutboundSync = async (params: {
           description: ticket.body,
         }),
         state: statusToGithubIssueState(ticket.status),
+        assignees: ticket.assignee ? [ticket.assignee] : [],
       });
       continue;
     }
@@ -87,6 +89,7 @@ export const runGithubOutboundSync = async (params: {
         description: ticket.body,
       }),
       labels: ["hyper-pm", "ticket"],
+      assignees: ticket.assignee ? [ticket.assignee] : [],
     });
     const num = created.data.number;
     const linkEvt: EventLine = {
@@ -156,10 +159,12 @@ export const runGithubInboundSync = async (params: {
         ? issue.body.trim()
         : issue.body.slice(0, fenceIdx).trim();
     const ghTitle = (issue.title ?? "").replace(/^\[hyper-pm\]\s*/, "").trim();
+    const nextAssignee = assigneeFromGithubIssue(issue);
     if (
       ticket.title === ghTitle &&
       ticket.body === desc &&
-      ticket.status === nextStatus
+      ticket.status === nextStatus &&
+      ticket.assignee === nextAssignee
     ) {
       continue;
     }
@@ -175,6 +180,7 @@ export const runGithubInboundSync = async (params: {
         title: ghTitle,
         body: desc,
         status: nextStatus,
+        assignee: nextAssignee === undefined ? null : nextAssignee,
       },
     };
     out.push(evt);

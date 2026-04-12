@@ -37,6 +37,8 @@ export type TicketListSummary = {
   title: string;
   status: WorkItemStatus;
   storyId: string;
+  /** Normalized GitHub login when the ticket has an assignee. */
+  assignee?: string;
   lastPrActivity?: TicketLastPrActivitySummary;
 } & AuditSummaryFields;
 
@@ -130,6 +132,7 @@ export const listActiveTicketSummaries = (
         title: t.title,
         status: t.status,
         storyId: t.storyId,
+        ...(t.assignee !== undefined ? { assignee: t.assignee } : {}),
         ...(last !== undefined
           ? {
               lastPrActivity: {

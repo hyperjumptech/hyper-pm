@@ -303,4 +303,122 @@ describe("replayEvents", () => {
       GITHUB_PR_ACTIVITY_RECENT_CAP,
     );
   });
+
+  it("sets normalized assignee on TicketCreated and ignores non-string assignee", () => {
+    const lines = [
+      JSON.stringify({
+        schema: 1,
+        type: "TicketCreated",
+        id: "e1",
+        ts: "2026-01-02T00:00:00.000Z",
+        actor: "a",
+        payload: {
+          id: "t1",
+          storyId: "s1",
+          title: "T",
+          body: "",
+          status: "todo",
+          assignee: "  Pat  ",
+        },
+      }),
+    ];
+    const p = replayEvents(lines);
+    expect(p.tickets.get("t1")?.assignee).toBe("pat");
+
+    const linesBad = [
+      JSON.stringify({
+        schema: 1,
+        type: "TicketCreated",
+        id: "e1",
+        ts: "2026-01-02T00:00:00.000Z",
+        actor: "a",
+        payload: {
+          id: "t2",
+          storyId: "s1",
+          title: "T",
+          body: "",
+          status: "todo",
+          assignee: 99,
+        },
+      }),
+    ];
+    const p2 = replayEvents(linesBad);
+    expect(p2.tickets.get("t2")?.assignee).toBeUndefined();
+  });
+
+  it("patches and clears assignee via TicketUpdated", () => {
+    const lines = [
+      JSON.stringify({
+        schema: 1,
+        type: "TicketCreated",
+        id: "e1",
+        ts: "2026-01-02T00:00:00.000Z",
+        actor: "a",
+        payload: {
+          id: "t1",
+          storyId: "s1",
+          title: "T",
+          body: "",
+          status: "todo",
+        },
+      }),
+      JSON.stringify({
+        schema: 1,
+        type: "TicketUpdated",
+        id: "e2",
+        ts: "2026-01-03T00:00:00.000Z",
+        actor: "b",
+        payload: { id: "t1", assignee: "sam" },
+      }),
+      JSON.stringify({
+        schema: 1,
+        type: "TicketUpdated",
+        id: "e3",
+        ts: "2026-01-04T00:00:00.000Z",
+        actor: "c",
+        payload: { id: "t1", assignee: null },
+      }),
+    ];
+    const p = replayEvents(lines);
+    const ticket = p.tickets.get("t1");
+    expect(ticket?.assignee).toBeUndefined();
+    expect(ticket?.updatedBy).toBe("c");
+  });
+
+  it("applies assignee from GithubInboundUpdate", () => {
+    const lines = [
+      JSON.stringify({
+        schema: 1,
+        type: "TicketCreated",
+        id: "e1",
+        ts: "2026-01-02T00:00:00.000Z",
+        actor: "a1",
+        payload: {
+          id: "t1",
+          storyId: "s1",
+          title: "T",
+          body: "",
+          status: "todo",
+          assignee: "old",
+        },
+      }),
+      JSON.stringify({
+        schema: 1,
+        type: "GithubInboundUpdate",
+        id: "e2",
+        ts: "2026-01-03T00:00:00.000Z",
+        actor: "gh:bot",
+        payload: {
+          entity: "ticket",
+          entityId: "t1",
+          title: "T",
+          body: "",
+          status: "todo",
+          assignee: "new",
+        },
+      }),
+    ];
+    const p = replayEvents(lines);
+    expect(p.tickets.get("t1")?.assignee).toBe("new");
+  });
 });

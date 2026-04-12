@@ -9,6 +9,7 @@ import { Octokit } from "@octokit/rest";
 import { ulid } from "ulid";
 import { runAiDraft } from "./ai/run-ai-draft";
 import { ExitCode, type ExitCodeValue } from "./cli/exit-codes";
+import { normalizeGithubLogin } from "./lib/github-assignee";
 import {
   parseWorkItemStatus,
   type WorkItemStatus,
@@ -386,6 +387,10 @@ export const runCli = async (
       "--status <s>",
       "backlog|todo|in_progress|done|cancelled (default todo)",
     )
+    .option(
+      "--assignee <login>",
+      "optional GitHub login for the assignee (normalized)",
+    )
     .option("--ai-draft", "draft body via AI (explicit)", false)
     .action(async function (this: Command) {
       const g = readGlobals(this);
@@ -395,6 +400,7 @@ export const runCli = async (
         story: string;
         id?: string;
         status?: string;
+        assignee?: string;
         aiDraft?: boolean;
       }>();
       let body = o.body;
@@ -408,6 +414,10 @@ export const runCli = async (
           prompt: `Draft acceptance-style body for ticket titled: ${o.title}`,
         });
       }
+      if (o.assignee !== undefined && normalizeGithubLogin(o.assignee) === "") {
+        deps.error("--assignee must be a non-empty login");
+        deps.exit(ExitCode.UserError);
+      }
       await mutateDataBranch(g, deps, async (root, { actor }) => {
         const lines = await readAllEventLines(root);
         const proj = replayEvents(lines);
@@ -417,6 +427,10 @@ export const runCli = async (
         }
         const id = o.id ?? ulid();
         const status = parseCliWorkItemStatus(o.status, deps);
+        const assigneeCreate =
+          o.assignee !== undefined
+            ? { assignee: normalizeGithubLogin(o.assignee) }
+            : {};
         const evt = makeEvent(
           "TicketCreated",
           {
@@ -425,6 +439,7 @@ export const runCli = async (
             title: o.title,
             body,
             ...(status !== undefined ? { status } : {}),
+            ...assigneeCreate,
           },
           deps.clock,
           actor,
@@ -452,6 +467,11 @@ export const runCli = async (
     .option("--title <t>")
     .option("--body <b>")
     .option("--status <s>", "backlog|todo|in_progress|done|cancelled")
+    .option(
+      "--assignee <login>",
+      "set assignee to this GitHub login (normalized)",
+    )
+    .option("--unassign", "remove the ticket assignee", false)
     .option("--ai-improve", "expand description via AI (explicit)", false)
     .action(async function (this: Command) {
       const g = readGlobals(this);
@@ -460,6 +480,8 @@ export const runCli = async (
         title?: string;
         body?: string;
         status?: string;
+        assignee?: string;
+        unassign?: boolean;
         aiImprove?: boolean;
       }>();
       let body = o.body;
@@ -477,12 +499,25 @@ export const runCli = async (
           prompt: `Improve this ticket body:\n${body}`,
         });
       }
+      if (o.assignee !== undefined && o.unassign) {
+        deps.error("Cannot use --assignee and --unassign together");
+        deps.exit(ExitCode.UserError);
+      }
+      if (o.assignee !== undefined && normalizeGithubLogin(o.assignee) === "") {
+        deps.error("--assignee must be a non-empty login");
+        deps.exit(ExitCode.UserError);
+      }
       await mutateDataBranch(g, deps, async (root, { actor }) => {
         const status = parseCliWorkItemStatus(o.status, deps);
         const payload: Record<string, unknown> = { id: o.id };
         if (o.title !== undefined) payload["title"] = o.title;
         if (body !== undefined) payload["body"] = body;
         if (status !== undefined) payload["status"] = status;
+        if (o.unassign) {
+          payload["assignee"] = null;
+        } else if (o.assignee !== undefined) {
+          payload["assignee"] = normalizeGithubLogin(o.assignee);
+        }
         const evt = makeEvent("TicketUpdated", payload, deps.clock, actor);
         await appendEventLine(root, evt, deps.clock);
         return payload;
