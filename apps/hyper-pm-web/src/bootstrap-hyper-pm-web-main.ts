@@ -3,13 +3,18 @@ import { fileURLToPath } from "node:url";
 import { env } from "@workspace/env";
 import { runHyperPmCli } from "@workspace/hyper-pm-cli-runner";
 import { createHyperPmWebServer } from "./create-hyper-pm-web-server";
+import {
+  resolveHyperPmWebRepoRoot,
+  resolveHyperPmWebTempDirParent,
+} from "./resolve-hyper-pm-web-boot-paths";
 
 const DEFAULT_WEB_PORT = 3847;
 
 /**
- * Boots hyper-pm-web: validates env, creates the HTTP server, and listens.
+ * Boots hyper-pm-web: resolves repo/temp paths, creates the HTTP server, and listens.
  *
  * @param processEnv - Injectable env view (defaults to parsed `@workspace/env`).
+ * @param bootDeps - Optional `getCwd` for resolving the default repo root (defaults to `process.cwd`).
  */
 export const bootstrapHyperPmWebMain = async (
   processEnv: {
@@ -19,15 +24,16 @@ export const bootstrapHyperPmWebMain = async (
     HYPER_PM_WEB_PORT?: number;
     HYPER_PM_WEB_TOKEN?: string;
   } = env,
+  bootDeps: { getCwd?: () => string } = {},
 ): Promise<void> => {
-  const repoRoot = processEnv.HYPER_PM_WEB_REPO?.trim();
-  const tempParent = processEnv.HYPER_PM_WEB_TEMP_DIR?.trim();
-  if (!repoRoot || !tempParent) {
-    console.error(
-      "hyper-pm-web: set HYPER_PM_WEB_REPO and HYPER_PM_WEB_TEMP_DIR (absolute paths).",
-    );
-    process.exit(1);
-  }
+  const getCwd = bootDeps.getCwd ?? (() => process.cwd());
+  const repoRoot = resolveHyperPmWebRepoRoot(
+    processEnv.HYPER_PM_WEB_REPO,
+    getCwd,
+  );
+  const { tempDirParent, cleanup } = await resolveHyperPmWebTempDirParent(
+    processEnv.HYPER_PM_WEB_TEMP_DIR,
+  );
 
   const host = processEnv.HYPER_PM_WEB_HOST?.trim() || "127.0.0.1";
   const rawPort = processEnv.HYPER_PM_WEB_PORT;
@@ -51,7 +57,7 @@ export const bootstrapHyperPmWebMain = async (
 
   const server = createHyperPmWebServer({
     repoRoot,
-    tempDirParent: tempParent,
+    tempDirParent,
     publicDir,
     webToken: webToken && webToken.length > 0 ? webToken : undefined,
     runHyperPmCliFn: runHyperPmCli,
@@ -64,5 +70,31 @@ export const bootstrapHyperPmWebMain = async (
     server.on("error", reject);
   });
 
-  console.log(`hyper-pm-web listening on http://${host}:${port}`);
+  const shutdown = async (): Promise<void> => {
+    await new Promise<void>((resolve) => {
+      server.close(() => {
+        resolve();
+      });
+    });
+    if (cleanup !== undefined) {
+      await cleanup().catch(() => {});
+    }
+  };
+
+  for (const sig of ["SIGINT", "SIGTERM"] as const) {
+    process.once(sig, () => {
+      void shutdown()
+        .then(() => {
+          process.exit(0);
+        })
+        .catch((err: unknown) => {
+          console.error(err);
+          process.exit(1);
+        });
+    });
+  }
+
+  console.log(
+    `hyper-pm-web listening on http://${host}:${port} (repo=${repoRoot}, temp-dir=${tempDirParent})`,
+  );
 };

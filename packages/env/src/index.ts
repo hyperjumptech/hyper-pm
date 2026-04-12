@@ -26,9 +26,16 @@ const envSchema = z.object({
   HYPER_PM_WEB_HOST: z.string().optional(),
   /** TCP port for hyper-pm-web (coerced from string env). */
   HYPER_PM_WEB_PORT: z.coerce.number().optional(),
-  /** Absolute git repo root passed as `--repo` for hyper-pm-web runs. */
+  /**
+   * Git repo root for hyper-pm-web (`--repo`). When unset, defaults to `process.cwd()`
+   * (resolved to an absolute path).
+   */
   HYPER_PM_WEB_REPO: z.string().optional(),
-  /** Parent directory for disposable worktrees (`--temp-dir`) for hyper-pm-web. */
+  /**
+   * Parent directory for disposable worktrees (`--temp-dir`) for hyper-pm-web.
+   * When unset, the server creates a unique directory under the OS temp directory
+   * and removes it on SIGINT/SIGTERM.
+   */
   HYPER_PM_WEB_TEMP_DIR: z.string().optional(),
   /** When set, hyper-pm-web requires `Authorization: Bearer …` on POST /api/run. */
   HYPER_PM_WEB_TOKEN: z.string().optional(),

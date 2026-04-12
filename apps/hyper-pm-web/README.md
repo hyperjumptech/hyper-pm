@@ -5,7 +5,7 @@ Small **local** web UI around the `hyper-pm` CLI. The server spawns the same bun
 ## Security
 
 - Defaults to **127.0.0.1** (see `HYPER_PM_WEB_HOST`). Do not expose this service to untrusted networks without a proper reverse proxy and auth story.
-- **`HYPER_PM_WEB_REPO`** and **`HYPER_PM_WEB_TEMP_DIR`** are always injected by the server; the browser cannot override `--repo`, `--temp-dir`, or `--format`.
+- **`--repo`**, **`--temp-dir`**, and **`--format`** are always chosen by the server; the browser cannot override them via `argv`.
 - Optional **`HYPER_PM_WEB_TOKEN`**: when set, `POST /api/run` requires `Authorization: Bearer <token>`.
 
 ## Setup
@@ -16,14 +16,15 @@ Small **local** web UI around the `hyper-pm` CLI. The server spawns the same bun
    pnpm --filter hyper-pm build
    ```
 
-2. Set environment variables (see root `packages/env/env.example`):
-   - `HYPER_PM_WEB_REPO` — absolute path to the git repository
-   - `HYPER_PM_WEB_TEMP_DIR` — parent directory for disposable git worktrees
+2. Optional environment variables (see root `packages/env/env.example`):
+   - **`HYPER_PM_WEB_REPO`** — git repository root for `--repo`. If unset, defaults to **the current working directory** (`process.cwd()`), resolved to an absolute path.
+   - **`HYPER_PM_WEB_TEMP_DIR`** — parent directory for disposable git worktrees. If unset, the server **creates** a unique directory under the OS temp directory (same family as `os.tmpdir()`) and **deletes it** when the process receives `SIGINT` or `SIGTERM`.
    - Optional: `HYPER_PM_WEB_HOST`, `HYPER_PM_WEB_PORT`, `HYPER_PM_WEB_TOKEN`
 
-3. Run the web server:
+3. Run the web server from the repo you want to manage (so the default `--repo` is correct), or set `HYPER_PM_WEB_REPO`:
 
    ```bash
+   cd /path/to/your/git/repo
    pnpm --filter hyper-pm-web dev
    ```
 
