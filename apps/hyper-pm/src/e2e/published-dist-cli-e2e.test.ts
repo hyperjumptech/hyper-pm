@@ -377,7 +377,10 @@ describe("dist/main.cjs subprocess (JSON workflow parity)", () => {
     expect(doctor.code).toBe(ExitCode.Success);
     expect(doctor.json).toEqual({ ok: true });
 
-    const syncSkip = invokeBundled(["sync"], { repoRoot, tempDir });
+    const syncSkip = invokeBundled(["sync", "--no-github"], {
+      repoRoot,
+      tempDir,
+    });
     expect(syncSkip.code).toBe(ExitCode.Success);
     expect(syncSkip.json).toEqual(
       expect.objectContaining({ ok: true, skipped: true }),
@@ -487,12 +490,21 @@ describe("dist/main.cjs subprocess (JSON workflow parity)", () => {
     expect(epicW2.code).toBe(ExitCode.Success);
     await git(w2, ["push", "-u", "origin", "hyper-pm-data"]);
 
-    // Act — merge remote data branch into w1
-    await git(w1, ["fetch", "origin"]);
-    await git(w1, ["checkout", "hyper-pm-data"]);
-    await git(w1, ["merge", "origin/hyper-pm-data", "--no-edit"]);
-
-    await git(w1, ["checkout", "main"]);
+    // Act — merge remote data branch into w1 via CLI (no manual git on data branch)
+    const syncGitData = invokeBundled(["sync"], {
+      repoRoot: w1,
+      tempDir: temp1,
+    });
+    expect(syncGitData.code).toBe(ExitCode.Success);
+    expect(syncGitData.json).toEqual(
+      expect.objectContaining({
+        ok: true,
+        gitDataOnly: true,
+        dataBranchFetch: "ok",
+        dataBranchMerge: expect.any(String),
+        dataBranchPush: "pushed",
+      }),
+    );
 
     const doctorMerged = invokeBundled(["doctor"], {
       repoRoot: w1,

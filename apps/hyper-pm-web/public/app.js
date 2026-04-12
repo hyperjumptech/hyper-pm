@@ -2478,7 +2478,9 @@ function renderTools() {
       <div class="panel-head">
         <h2>Sync with GitHub</h2>
       </div>
-      <label><input type="checkbox" id="syncNoGithub" /> Skip GitHub network (<code>--no-github</code>)</label>
+      <label><input type="radio" name="syncMode" id="syncModeDefault" value="default" checked /> Data branch (<code>sync</code> default, git only)</label>
+      <label><input type="radio" name="syncMode" id="syncModeGithub" value="with-github" /> With GitHub Issues (<code>--with-github</code>)</label>
+      <label><input type="radio" name="syncMode" id="syncModeSkipNetwork" value="skip-network" /> Skip all network (<code>--skip-network</code>)</label>
       <div class="row">
         <button type="button" class="primary" id="btnSync">Run sync</button>
       </div>
@@ -2508,8 +2510,11 @@ function renderTools() {
   });
   document.getElementById("btnSync")?.addEventListener("click", async () => {
     const argv = ["sync"];
-    if (document.getElementById("syncNoGithub")?.checked)
-      argv.push("--no-github");
+    const mode = document.querySelector(
+      'input[name="syncMode"]:checked',
+    )?.value;
+    if (mode === "with-github") argv.push("--with-github");
+    if (mode === "skip-network") argv.push("--skip-network");
     try {
       await runCli(argv);
       toast("Sync finished", false);

@@ -33,6 +33,7 @@ import {
   type WorkItemStatus,
 } from "./lib/work-item-status";
 import { formatOutput } from "./cli/format-output";
+import { normalizeRawCliArgv } from "./cli/normalize-raw-cli-argv";
 import {
   isNoOpUpdatePayload,
   pruneEpicOrStoryUpdatePayloadAgainstRow,
@@ -88,6 +89,11 @@ import {
   formatDataBranchCommitMessage,
 } from "./run/commit-data";
 import { tryPushDataBranchToRemote } from "./run/push-data-branch";
+import {
+  type RemoteDataBranchGitSyncResult,
+  runRemoteDataBranchGitSync,
+  SyncRemoteDataBranchMergeError,
+} from "./run/sync-remote-data-branch";
 import { appendEventLine } from "./storage/append-event";
 import type { EventLine, EventType } from "./storage/event-line";
 import { eventTypeSchema } from "./storage/event-line";
@@ -1890,8 +1896,22 @@ export const runCli = async (
 
   program
     .command("sync")
-    .description("GitHub Issues sync")
-    .option("--no-github", "skip network sync", false)
+    .description("Sync data branch over git; optional GitHub Issues sync")
+    .option(
+      "--skip-network",
+      "skip all sync network operations (git fetch/merge/push and GitHub); legacy: --no-github",
+      false,
+    )
+    .option(
+      "--with-github",
+      "also run GitHub Issues sync (requires GITHUB_TOKEN or gh; needs sync not off in config)",
+      false,
+    )
+    .option(
+      "--git-data",
+      "legacy no-op: default sync already updates the data branch via git only",
+      false,
+    )
     .option(
       "--skip-push",
       "after a successful sync, do not push the data branch to the remote",
@@ -1899,120 +1919,185 @@ export const runCli = async (
     )
     .action(async function (this: Command) {
       const g = readGlobals(this);
-      const o = this.opts<{ noGithub?: boolean; skipPush?: boolean }>();
+      const o = this.opts<{
+        skipNetwork?: boolean;
+        skipPush?: boolean;
+        gitData?: boolean;
+        withGithub?: boolean;
+      }>();
       const repoRoot = await resolveRepoRoot(g.repo);
       const cfg = await loadMergedConfig(repoRoot, g);
-      if (cfg.sync === "off" || o.noGithub) {
+      if (o.withGithub && o.skipNetwork) {
+        deps.error("Cannot use --with-github together with --skip-network");
+        deps.exit(ExitCode.UserError);
+      }
+      if (o.skipNetwork) {
         deps.log(formatOutput(g.format, { ok: true, skipped: true }));
         deps.exit(ExitCode.Success);
       }
-      const githubToken = await resolveGithubTokenForSync({
-        envToken: env.GITHUB_TOKEN,
-        cwd: repoRoot,
-      });
-      if (!githubToken) {
-        deps.error(
-          "GitHub auth required for sync: set GITHUB_TOKEN or run `gh auth login`",
-        );
-        deps.exit(ExitCode.EnvironmentAuth);
+      if (o.withGithub) {
+        if (cfg.sync === "off") {
+          deps.error(
+            "GitHub Issues sync is off in config (sync: off). Omit --with-github to sync the data branch via git only, or set sync to outbound/full.",
+          );
+          deps.exit(ExitCode.UserError);
+        }
+        const githubToken = await resolveGithubTokenForSync({
+          envToken: env.GITHUB_TOKEN,
+          cwd: repoRoot,
+        });
+        if (!githubToken) {
+          deps.error(
+            "GitHub auth required for sync --with-github: set GITHUB_TOKEN or run `gh auth login`",
+          );
+          deps.exit(ExitCode.EnvironmentAuth);
+        }
+        const tmpBase = g.tempDir ?? env.TMPDIR ?? tmpdir();
+        const session = await openDataBranchWorktree({
+          repoRoot,
+          dataBranch: cfg.dataBranch,
+          tmpBase,
+          keepWorktree: g.keepWorktree,
+          runGit,
+        });
+        try {
+          const projection = await loadProjectionFromDataRoot(
+            session.worktreePath,
+          );
+          const gitDerivedSlug = await tryReadGithubOwnerRepoSlugFromGit({
+            repoRoot,
+            remote: cfg.remote,
+            runGit,
+          });
+          const { owner, repo } = resolveGithubRepo(
+            cfg,
+            env.GITHUB_REPO,
+            gitDerivedSlug,
+          );
+          const octokit = new Octokit({ auth: githubToken });
+          const outboundActor = await resolveGithubTokenActor(octokit);
+          const depsGh = {
+            octokit,
+            owner,
+            repo,
+            clock: deps.clock,
+            outboundActor,
+          };
+          await runGithubOutboundSync({
+            dataRoot: session.worktreePath,
+            projection,
+            config: cfg,
+            deps: depsGh,
+          });
+          await runGithubInboundSync({
+            dataRoot: session.worktreePath,
+            projection,
+            config: cfg,
+            deps: depsGh,
+          });
+          const projectionAfterInbound = await loadProjectionFromDataRoot(
+            session.worktreePath,
+          );
+          await runGithubPrActivitySync({
+            projection: projectionAfterInbound,
+            config: cfg,
+            deps: defaultGithubPrActivitySyncDeps({
+              dataRoot: session.worktreePath,
+              clock: deps.clock,
+              octokit,
+              owner,
+              repo,
+              actor: outboundActor,
+            }),
+          });
+          await commitDataWorktreeIfNeeded(
+            session.worktreePath,
+            formatDataBranchCommitMessage("hyper-pm: sync", outboundActor),
+            runGit,
+          );
+          let dataBranchPush: string;
+          let dataBranchPushDetail: string | undefined;
+          if (o.skipPush) {
+            dataBranchPush = "skipped_cli";
+            dataBranchPushDetail = "skip-push";
+          } else {
+            const pushResult = await tryPushDataBranchToRemote(
+              session.worktreePath,
+              cfg.remote,
+              cfg.dataBranch,
+              runGit,
+            );
+            dataBranchPush = pushResult.status;
+            dataBranchPushDetail = pushResult.detail;
+            if (pushResult.status === "failed" && pushResult.detail) {
+              deps.error(
+                `hyper-pm: data branch not pushed (${cfg.remote}/${cfg.dataBranch}): ${pushResult.detail}`,
+              );
+            }
+          }
+          deps.log(
+            formatOutput(g.format, {
+              ok: true,
+              githubSync: true,
+              dataBranchPush,
+              ...(dataBranchPushDetail !== undefined
+                ? { dataBranchPushDetail }
+                : {}),
+            }),
+          );
+        } catch (e) {
+          deps.error(e instanceof Error ? e.message : String(e));
+          deps.exit(ExitCode.ExternalApi);
+        } finally {
+          await session.dispose();
+        }
+        deps.exit(ExitCode.Success);
       }
-      const tmpBase = g.tempDir ?? env.TMPDIR ?? tmpdir();
-      const session = await openDataBranchWorktree({
+
+      const tmpBaseGit = g.tempDir ?? env.TMPDIR ?? tmpdir();
+      const sessionGit = await openDataBranchWorktree({
         repoRoot,
         dataBranch: cfg.dataBranch,
-        tmpBase,
+        tmpBase: tmpBaseGit,
         keepWorktree: g.keepWorktree,
         runGit,
       });
       try {
-        const projection = await loadProjectionFromDataRoot(
-          session.worktreePath,
-        );
-        const gitDerivedSlug = await tryReadGithubOwnerRepoSlugFromGit({
-          repoRoot,
-          remote: cfg.remote,
-          runGit,
-        });
-        const { owner, repo } = resolveGithubRepo(
-          cfg,
-          env.GITHUB_REPO,
-          gitDerivedSlug,
-        );
-        const octokit = new Octokit({ auth: githubToken });
-        const outboundActor = await resolveGithubTokenActor(octokit);
-        const depsGh = {
-          octokit,
-          owner,
-          repo,
-          clock: deps.clock,
-          outboundActor,
-        };
-        await runGithubOutboundSync({
-          dataRoot: session.worktreePath,
-          projection,
-          config: cfg,
-          deps: depsGh,
-        });
-        await runGithubInboundSync({
-          dataRoot: session.worktreePath,
-          projection,
-          config: cfg,
-          deps: depsGh,
-        });
-        const projectionAfterInbound = await loadProjectionFromDataRoot(
-          session.worktreePath,
-        );
-        await runGithubPrActivitySync({
-          projection: projectionAfterInbound,
-          config: cfg,
-          deps: defaultGithubPrActivitySyncDeps({
-            dataRoot: session.worktreePath,
-            clock: deps.clock,
-            octokit,
-            owner,
-            repo,
-            actor: outboundActor,
-          }),
-        });
-        await commitDataWorktreeIfNeeded(
-          session.worktreePath,
-          formatDataBranchCommitMessage("hyper-pm: sync", outboundActor),
-          runGit,
-        );
-        let dataBranchPush: string;
-        let dataBranchPushDetail: string | undefined;
-        if (o.skipPush) {
-          dataBranchPush = "skipped_cli";
-          dataBranchPushDetail = "skip-push";
-        } else {
-          const pushResult = await tryPushDataBranchToRemote(
-            session.worktreePath,
+        let syncResult: RemoteDataBranchGitSyncResult;
+        try {
+          syncResult = await runRemoteDataBranchGitSync(
+            sessionGit.worktreePath,
             cfg.remote,
             cfg.dataBranch,
             runGit,
+            Boolean(o.skipPush),
           );
-          dataBranchPush = pushResult.status;
-          dataBranchPushDetail = pushResult.detail;
-          if (pushResult.status === "failed" && pushResult.detail) {
-            deps.error(
-              `hyper-pm: data branch not pushed (${cfg.remote}/${cfg.dataBranch}): ${pushResult.detail}`,
-            );
+        } catch (e) {
+          if (e instanceof SyncRemoteDataBranchMergeError) {
+            deps.error(e.message);
+            deps.exit(ExitCode.UserError);
           }
+          deps.error(e instanceof Error ? e.message : String(e));
+          deps.exit(ExitCode.UserError);
+        }
+        if (
+          syncResult.dataBranchPush === "failed" &&
+          syncResult.dataBranchPushDetail !== undefined
+        ) {
+          deps.error(
+            `hyper-pm: data branch not pushed (${cfg.remote}/${cfg.dataBranch}): ${syncResult.dataBranchPushDetail}`,
+          );
         }
         deps.log(
           formatOutput(g.format, {
             ok: true,
-            dataBranchPush,
-            ...(dataBranchPushDetail !== undefined
-              ? { dataBranchPushDetail }
-              : {}),
+            gitDataOnly: true,
+            ...(o.gitData ? { legacyGitDataFlag: true } : {}),
+            ...syncResult,
           }),
         );
-      } catch (e) {
-        deps.error(e instanceof Error ? e.message : String(e));
-        deps.exit(ExitCode.ExternalApi);
       } finally {
-        await session.dispose();
+        await sessionGit.dispose();
       }
       deps.exit(ExitCode.Success);
     });
@@ -2210,7 +2295,7 @@ export const runCli = async (
       }
     });
 
-  await program.parseAsync(argv, { from: "node" });
+  await program.parseAsync(normalizeRawCliArgv(argv), { from: "node" });
 };
 
 /**

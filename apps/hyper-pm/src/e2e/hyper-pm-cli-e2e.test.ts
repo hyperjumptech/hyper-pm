@@ -661,7 +661,7 @@ describe("hyper-pm CLI (e2e)", () => {
     expect(doctor.code).toBe(ExitCode.Success);
     expect(doctor.json).toEqual({ ok: true });
 
-    const syncSkip = await invokeHyperPmCli(["sync"], {
+    const syncSkip = await invokeHyperPmCli(["sync", "--no-github"], {
       repoRoot,
       tempDir,
       clock,
@@ -782,12 +782,22 @@ describe("hyper-pm CLI (e2e)", () => {
     expect(epicW2.code).toBe(ExitCode.Success);
     await git(w2, ["push", "-u", "origin", "hyper-pm-data"]);
 
-    // Act — merge remote data branch into w1
-    await git(w1, ["fetch", "origin"]);
-    await git(w1, ["checkout", "hyper-pm-data"]);
-    await git(w1, ["merge", "origin/hyper-pm-data", "--no-edit"]);
-
-    await git(w1, ["checkout", "main"]);
+    // Act — merge remote data branch into w1 via default `sync` (git only)
+    const syncMerged = await invokeHyperPmCli(["sync"], {
+      repoRoot: w1,
+      tempDir: temp1,
+      clock: clock1,
+    });
+    expect(syncMerged.code).toBe(ExitCode.Success);
+    expect(syncMerged.json).toEqual(
+      expect.objectContaining({
+        ok: true,
+        gitDataOnly: true,
+        dataBranchFetch: "ok",
+        dataBranchMerge: expect.any(String),
+        dataBranchPush: "pushed",
+      }),
+    );
 
     const doctorMerged = await invokeHyperPmCli(["doctor"], {
       repoRoot: w1,
