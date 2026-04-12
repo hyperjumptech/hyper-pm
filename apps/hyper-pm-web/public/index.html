@@ -232,6 +232,13 @@
         letter-spacing: -0.02em;
       }
 
+      .panel-head-actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
       .panel h3 {
         margin: 1rem 0 0.5rem;
         font-size: 0.8125rem;
@@ -365,6 +372,21 @@
       button.ghost:hover {
         background: var(--accent-subtle);
         border-color: transparent;
+      }
+
+      /* Read-mode “Edit” — visible on focus/hover, not a primary CTA */
+      button.btn-subtle {
+        background: transparent;
+        border-color: var(--border);
+        color: var(--text-secondary);
+        font-weight: 500;
+        box-shadow: none;
+      }
+
+      button.btn-subtle:hover {
+        background: #fafafa;
+        color: var(--text);
+        border-color: var(--border-strong);
       }
 
       button.btn-inverted {
@@ -634,6 +656,17 @@
 
       .back-link {
         margin-bottom: 0.75rem;
+      }
+
+      .detail-page-top {
+        margin: 0 0 1rem;
+      }
+
+      .detail-page-top .detail-back {
+        font-size: 0.875rem;
+        font-weight: 500;
+        padding: 0.35rem 0.5rem;
+        margin: 0 -0.35rem 0 -0.5rem;
       }
 
       .pre-out {

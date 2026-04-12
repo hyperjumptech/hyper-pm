@@ -761,7 +761,10 @@ async function renderEpicEdit() {
             <p class="muted" style="margin:0 0 0.25rem;font-size:0.8125rem">Epic</p>
             <h2 style="margin:0">${escapeHtml(String(row.title))}</h2>
           </div>
-          <button type="button" class="primary" id="btnEpicEnterEdit">Edit</button>
+          <div class="panel-head-actions">
+            <button type="button" class="btn-subtle" id="btnEpicSeeStories">See stories</button>
+            <button type="button" class="btn-subtle" id="btnEpicEnterEdit">Edit</button>
+          </div>
         </div>
         <p class="muted" style="margin-top:0">${idChip(id)}</p>
         <div class="read-stack">
@@ -771,6 +774,7 @@ async function renderEpicEdit() {
     const formBlock = `
         <div class="panel-head" style="border-bottom:none;padding-bottom:0;margin-bottom:0.5rem">
           <h2>Edit epic</h2>
+          <button type="button" class="btn-subtle" id="btnEpicSeeStories">See stories</button>
         </div>
         <p class="muted" style="margin-top:0">${idChip(id)}</p>
         <label for="editEpicTitle">Title</label>
@@ -784,27 +788,16 @@ async function renderEpicEdit() {
           <button type="button" class="ghost" id="btnEpicCancelEdit">Cancel</button>
           <button type="button" class="danger" id="btnDeleteEpic">Delete epic</button>
         </div>`;
-    const epicTrail = `
-        <nav class="crumbs" aria-label="Breadcrumb">
-          <button type="button" class="ghost crumb-btn" id="bcEpicEpics">Epics</button>
-          <span class="crumb-sep" aria-hidden="true">/</span>
-          <span class="crumb-current">${escapeHtml(String(row.title))}</span>
-        </nav>
-        <div class="nav-related row">
-          <button type="button" class="ghost" id="btnEpicSeeStories">Stories in this epic</button>
-        </div>`;
+    const epicTopBar = `
+        <nav class="detail-page-top" aria-label="Epic">
+          <button type="button" class="ghost detail-back" id="btnBackEpics2">← Epics</button>
+        </nav>`;
     main.innerHTML = `
       <div class="panel">
-        <div class="back-link">
-          <button type="button" class="ghost" id="btnBackEpics2">← Epics</button>
-        </div>
-        ${epicTrail}
+        ${epicTopBar}
         ${showForm ? formBlock : readBlock}
       </div>`;
     document.getElementById("btnBackEpics2")?.addEventListener("click", () => {
-      window.history.back();
-    });
-    document.getElementById("bcEpicEpics")?.addEventListener("click", () => {
       void pushAppRoute({ kind: "epics" });
     });
     document
@@ -1070,7 +1063,6 @@ async function renderStoryEdit() {
       await runCli(["story", "read", "--id", id])
     );
     const epicId = String(row.epicId);
-    let epicCrumbEscaped = escapeHtml(epicId);
     let epicReadInner = idChip(epicId);
     let epicFormLine = `Epic id <code>${escapeHtml(epicId)}</code>`;
     try {
@@ -1078,24 +1070,11 @@ async function renderStoryEdit() {
         await runCli(["epic", "read", "--id", epicId])
       );
       const t = escapeHtml(String(epicRow.title));
-      epicCrumbEscaped = t;
       epicReadInner = `<span>${t}</span> · ${idChip(epicId)}`;
       epicFormLine = `Epic: ${t} (<code>${escapeHtml(epicId)}</code>)`;
     } catch {
       /* keep defaults */
     }
-    const storyTrail = `
-        <nav class="crumbs" aria-label="Breadcrumb">
-          <button type="button" class="ghost crumb-btn" id="bcStoryStories">Stories</button>
-          <span class="crumb-sep" aria-hidden="true">/</span>
-          <button type="button" class="ghost crumb-btn" id="bcStoryEpic">${epicCrumbEscaped}</button>
-          <span class="crumb-sep" aria-hidden="true">/</span>
-          <span class="crumb-current">${escapeHtml(String(row.title))}</span>
-        </nav>
-        <div class="nav-related row">
-          <button type="button" class="ghost" id="btnStoryOpenEpic">Open epic</button>
-          <button type="button" class="ghost" id="btnStorySeeTickets">Tickets for this story</button>
-        </div>`;
     const showForm = Boolean(state.storyDetailForm);
     setPageTitle(showForm ? "Edit story" : String(row.title));
     const readBlock = `
@@ -1104,7 +1083,11 @@ async function renderStoryEdit() {
             <p class="muted" style="margin:0 0 0.25rem;font-size:0.8125rem">Story</p>
             <h2 style="margin:0">${escapeHtml(String(row.title))}</h2>
           </div>
-          <button type="button" class="primary" id="btnStoryEnterEdit">Edit</button>
+          <div class="panel-head-actions">
+            <button type="button" class="btn-subtle" id="btnStoryOpenEpic">Open epic</button>
+            <button type="button" class="btn-subtle" id="btnStorySeeTickets">See tickets</button>
+            <button type="button" class="btn-subtle" id="btnStoryEnterEdit">Edit</button>
+          </div>
         </div>
         <p class="muted" style="margin-top:0">${idChip(id)}</p>
         <div class="read-stack">
@@ -1115,6 +1098,10 @@ async function renderStoryEdit() {
     const formBlock = `
         <div class="panel-head" style="border-bottom:none;padding-bottom:0;margin-bottom:0.5rem">
           <h2>Edit story</h2>
+          <div class="panel-head-actions">
+            <button type="button" class="btn-subtle" id="btnStoryOpenEpic">Open epic</button>
+            <button type="button" class="btn-subtle" id="btnStorySeeTickets">See tickets</button>
+          </div>
         </div>
         <p class="muted" style="margin-top:0">${idChip(id)} · ${epicFormLine}</p>
         <p class="muted" style="font-size:0.85rem">To move a story to another epic, delete and recreate it (CLI does not support changing epic on update).</p>
@@ -1129,25 +1116,20 @@ async function renderStoryEdit() {
           <button type="button" class="ghost" id="btnStoryCancelEdit">Cancel</button>
           <button type="button" class="danger" id="btnDeleteStory">Delete</button>
         </div>`;
+    const storyTopBar = `
+        <nav class="detail-page-top" aria-label="Story">
+          <button type="button" class="ghost detail-back" id="btnBackStories2">← Stories</button>
+        </nav>`;
     main.innerHTML = `
       <div class="panel">
-        <div class="back-link">
-          <button type="button" class="ghost" id="btnBackStories2">← Stories</button>
-        </div>
-        ${storyTrail}
+        ${storyTopBar}
         ${showForm ? formBlock : readBlock}
       </div>`;
     document
       .getElementById("btnBackStories2")
       ?.addEventListener("click", () => {
-        window.history.back();
+        void pushAppRoute({ kind: "stories", storyFilterEpic: epicId });
       });
-    document.getElementById("bcStoryStories")?.addEventListener("click", () => {
-      void pushAppRoute({ kind: "stories", storyFilterEpic: "" });
-    });
-    document.getElementById("bcStoryEpic")?.addEventListener("click", () => {
-      navigateToEpic(epicId);
-    });
     document
       .getElementById("btnStoryOpenEpic")
       ?.addEventListener("click", () => {
@@ -1466,23 +1448,10 @@ async function renderTicketEdit() {
         storyReadInner = idChip(curStory);
       }
     }
-    const ticketTrail = curStory
-      ? `<nav class="crumbs" aria-label="Breadcrumb">
-          <button type="button" class="ghost crumb-btn" id="bcTixTickets">Tickets</button>
-          <span class="crumb-sep" aria-hidden="true">/</span>
-          <button type="button" class="ghost crumb-btn" id="bcTixStory">${storyCrumbEscaped}</button>
-          <span class="crumb-sep" aria-hidden="true">/</span>
-          <span class="crumb-current">${escapeHtml(String(row.title))}</span>
-        </nav>
-        <div class="nav-related row">
-          <button type="button" class="ghost" id="btnTixOpenStory">Open story</button>
-          <button type="button" class="ghost" id="btnTixTicketsThisStory">Tickets in this story</button>
-        </div>`
-      : `<nav class="crumbs" aria-label="Breadcrumb">
-          <button type="button" class="ghost crumb-btn" id="bcTixTickets">Tickets</button>
-          <span class="crumb-sep" aria-hidden="true">/</span>
-          <span class="crumb-current">${escapeHtml(String(row.title))}</span>
-        </nav>`;
+    const ticketHeadActionsRead = curStory
+      ? `<button type="button" class="btn-subtle" id="btnTixOpenStory">Open story</button>
+            <button type="button" class="btn-subtle" id="btnTixSeeTickets">See tickets</button>`
+      : "";
     const storyOpts = [
       `<option value="">No story</option>`,
       ...stories.map((s) => {
@@ -1500,7 +1469,10 @@ async function renderTicketEdit() {
             <p class="muted" style="margin:0 0 0.25rem;font-size:0.8125rem">Ticket</p>
             <h2 style="margin:0">${escapeHtml(String(row.title))}</h2>
           </div>
-          <button type="button" class="primary" id="btnTicketEnterEdit">Edit</button>
+          <div class="panel-head-actions">
+            ${ticketHeadActionsRead}
+            <button type="button" class="btn-subtle" id="btnTicketEnterEdit">Edit</button>
+          </div>
         </div>
         <p class="muted" style="margin-top:0">${idChip(id)}</p>
         <div class="read-stack">
@@ -1508,9 +1480,16 @@ async function renderTicketEdit() {
           ${readRowHtml("Status", badgeHtml(String(row.status)))}
           ${readRowHtml("Description", readBodyHtml(row.body))}
         </div>`;
+    const ticketHeadActionsForm = curStory
+      ? `<button type="button" class="btn-subtle" id="btnTixOpenStory">Open story</button>
+            <button type="button" class="btn-subtle" id="btnTixSeeTickets">See tickets</button>`
+      : "";
     const formBlock = `
         <div class="panel-head" style="border-bottom:none;padding-bottom:0;margin-bottom:0.5rem">
           <h2>Edit ticket</h2>
+          <div class="panel-head-actions">
+            ${ticketHeadActionsForm}
+          </div>
         </div>
         <p class="muted" style="margin-top:0">${idChip(id)}</p>
         <label for="editTicketStory">Story</label>
@@ -1526,12 +1505,13 @@ async function renderTicketEdit() {
           <button type="button" class="ghost" id="btnTicketCancelEdit">Cancel</button>
           <button type="button" class="danger" id="btnDeleteTicket">Delete</button>
         </div>`;
+    const ticketTopBar = `
+        <nav class="detail-page-top" aria-label="Ticket">
+          <button type="button" class="ghost detail-back" id="btnBackTickets2">← Tickets</button>
+        </nav>`;
     main.innerHTML = `
       <div class="panel">
-        <div class="back-link">
-          <button type="button" class="ghost" id="btnBackTickets2">← Tickets</button>
-        </div>
-        ${ticketTrail}
+        ${ticketTopBar}
         ${showForm ? formBlock : readBlock}
       </div>
       <div class="panel">
@@ -1548,22 +1528,19 @@ async function renderTicketEdit() {
     document
       .getElementById("btnBackTickets2")
       ?.addEventListener("click", () => {
-        window.history.back();
+        void pushAppRoute({
+          kind: "tickets",
+          ticketFilterStory: curStory || "",
+        });
       });
-    document.getElementById("bcTixTickets")?.addEventListener("click", () => {
-      void pushAppRoute({ kind: "tickets", ticketFilterStory: "" });
-    });
     if (curStory) {
-      document.getElementById("bcTixStory")?.addEventListener("click", () => {
-        navigateToStory(curStory);
-      });
       document
         .getElementById("btnTixOpenStory")
         ?.addEventListener("click", () => {
           navigateToStory(curStory);
         });
       document
-        .getElementById("btnTixTicketsThisStory")
+        .getElementById("btnTixSeeTickets")
         ?.addEventListener("click", () => {
           navigateToTicketsForStory(curStory);
         });
