@@ -193,6 +193,8 @@ const buildTicketListQueryFromReadListOpts = (
   o: {
     status?: string | string[];
     epic?: string;
+    /** When true, restrict to tickets with no story (`withoutStoryOnly`). */
+    withoutStory?: boolean;
     createdAfter?: string;
     createdBefore?: string;
     updatedAfter?: string;
@@ -280,6 +282,9 @@ const buildTicketListQueryFromReadListOpts = (
   }
   if (o.githubLinked === true) {
     query.githubLinkedOnly = true;
+  }
+  if (o.withoutStory === true) {
+    query.withoutStoryOnly = true;
   }
   return Object.keys(query).length > 0 ? query : undefined;
 };
@@ -563,7 +568,10 @@ export const runCli = async (
   ticket
     .command("create")
     .requiredOption("--title <t>")
-    .requiredOption("--story <id>")
+    .option(
+      "--story <id>",
+      "optional story id; omit to create an unlinked ticket",
+    )
     .option("--body <b>", "", "")
     .option("--id <id>")
     .option(
@@ -580,7 +588,7 @@ export const runCli = async (
       const o = this.opts<{
         title: string;
         body: string;
-        story: string;
+        story?: string;
         id?: string;
         status?: string;
         assignee?: string;
@@ -604,9 +612,16 @@ export const runCli = async (
       await mutateDataBranch(g, deps, async (root, { actor }) => {
         const lines = await readAllEventLines(root);
         const proj = replayEvents(lines);
-        const storyRow = proj.stories.get(o.story);
-        if (!storyRow || storyRow.deleted) {
-          throw new Error(`Story not found: ${o.story}`);
+        const storyRaw = o.story;
+        const storyTrimmed =
+          storyRaw !== undefined && storyRaw !== ""
+            ? storyRaw.trim()
+            : undefined;
+        if (storyTrimmed !== undefined) {
+          const storyRow = proj.stories.get(storyTrimmed);
+          if (!storyRow || storyRow.deleted) {
+            throw new Error(`Story not found: ${storyTrimmed}`);
+          }
         }
         const id = o.id ?? ulid();
         const status = parseCliWorkItemStatus(o.status, deps);
@@ -614,11 +629,13 @@ export const runCli = async (
           o.assignee !== undefined
             ? { assignee: normalizeGithubLogin(o.assignee) }
             : {};
+        const storyPayload =
+          storyTrimmed !== undefined ? { storyId: storyTrimmed } : {};
         const evt = makeEvent(
           "TicketCreated",
           {
             id,
-            storyId: o.story,
+            ...storyPayload,
             title: o.title,
             body,
             ...(status !== undefined ? { status } : {}),
@@ -695,6 +712,11 @@ export const runCli = async (
       false,
     )
     .option(
+      "--without-story",
+      "when listing (no --id): only tickets without a story (cannot combine with --story or --epic)",
+      false,
+    )
+    .option(
       "--sort-by <field>",
       `when listing (no --id): sort field (${TICKET_LIST_SORT_FIELDS.join("|")}); default id`,
     )
@@ -717,6 +739,7 @@ export const runCli = async (
         statusChangedBy?: string;
         titleContains?: string;
         githubLinked?: boolean;
+        withoutStory?: boolean;
         sortBy?: string;
         sortDir?: string;
       }>();
@@ -728,6 +751,11 @@ export const runCli = async (
     .option("--title <t>")
     .option("--body <b>")
     .option("--status <s>", "backlog|todo|in_progress|done|cancelled")
+    .option(
+      "--story <id>",
+      "attach ticket to this story (must exist and not be deleted)",
+    )
+    .option("--unlink-story", "remove the ticket from its story", false)
     .option(
       "--assignee <login>",
       "set assignee to this GitHub login (normalized)",
@@ -741,6 +769,8 @@ export const runCli = async (
         title?: string;
         body?: string;
         status?: string;
+        story?: string;
+        unlinkStory?: boolean;
         assignee?: string;
         unassign?: boolean;
         aiImprove?: boolean;
@@ -764,16 +794,39 @@ export const runCli = async (
         deps.error("Cannot use --assignee and --unassign together");
         deps.exit(ExitCode.UserError);
       }
+      if (o.story !== undefined && o.unlinkStory) {
+        deps.error("Cannot use --story and --unlink-story together");
+        deps.exit(ExitCode.UserError);
+      }
       if (o.assignee !== undefined && normalizeGithubLogin(o.assignee) === "") {
         deps.error("--assignee must be a non-empty login");
         deps.exit(ExitCode.UserError);
       }
+      const storyTrimmed =
+        o.story !== undefined && o.story !== "" ? o.story.trim() : undefined;
+      if (o.story !== undefined && storyTrimmed === "") {
+        deps.error("--story must be a non-empty id");
+        deps.exit(ExitCode.UserError);
+      }
       await mutateDataBranch(g, deps, async (root, { actor }) => {
+        const lines = await readAllEventLines(root);
+        const proj = replayEvents(lines);
+        if (storyTrimmed !== undefined) {
+          const storyRow = proj.stories.get(storyTrimmed);
+          if (!storyRow || storyRow.deleted) {
+            throw new Error(`Story not found: ${storyTrimmed}`);
+          }
+        }
         const status = parseCliWorkItemStatus(o.status, deps);
         const payload: Record<string, unknown> = { id: o.id };
         if (o.title !== undefined) payload["title"] = o.title;
         if (body !== undefined) payload["body"] = body;
         if (status !== undefined) payload["status"] = status;
+        if (o.unlinkStory) {
+          payload["storyId"] = null;
+        } else if (storyTrimmed !== undefined) {
+          payload["storyId"] = storyTrimmed;
+        }
         if (o.unassign) {
           payload["assignee"] = null;
         } else if (o.assignee !== undefined) {
@@ -1236,9 +1289,10 @@ const readStory = async (
  *
  * When listing, optional `story` filters to tickets under that story (story must exist).
  * Advanced list flags are ignored when `--id` is set. `--story` and `--epic` cannot be used together.
+ * `--without-story` lists only tickets with no story and cannot be combined with `--story` or `--epic`.
  *
  * @param g - Global CLI flags (repo, format, worktree, etc.).
- * @param opts - Parsed `ticket read` options (`id`, `story`, list-only filters, sort flags).
+ * @param opts - Parsed `ticket read` options (`id`, `story`, `withoutStory`, list-only filters, sort flags).
  * @param deps - Injectable process boundary (log, error, exit).
  */
 const readTicket = async (
@@ -1259,6 +1313,7 @@ const readTicket = async (
     statusChangedBy?: string;
     titleContains?: string;
     githubLinked?: boolean;
+    withoutStory?: boolean;
     sortBy?: string;
     sortDir?: string;
   },
@@ -1289,9 +1344,11 @@ const readTicket = async (
         epic: epicIdRaw,
         sortBy: sortByOpt,
         sortDir: sortDirOpt,
+        withoutStory: withoutStoryRaw,
         ...listFlagRest
       } = opts;
       if (id === undefined || id === "") {
+        const listWithoutStory = withoutStoryRaw === true;
         const storyFilter =
           storyIdRaw !== undefined && storyIdRaw !== ""
             ? storyIdRaw
@@ -1317,6 +1374,16 @@ const readTicket = async (
         } else if (storyFilter !== undefined && epicFilter !== undefined) {
           deps.error(
             "Cannot use --story and --epic together when listing tickets",
+          );
+          exitCode = ExitCode.UserError;
+        } else if (listWithoutStory && storyFilter !== undefined) {
+          deps.error(
+            "Cannot use --without-story and --story together when listing tickets",
+          );
+          exitCode = ExitCode.UserError;
+        } else if (listWithoutStory && epicFilter !== undefined) {
+          deps.error(
+            "Cannot use --without-story and --epic together when listing tickets",
           );
           exitCode = ExitCode.UserError;
         } else if (epicFilter !== undefined) {
@@ -1360,6 +1427,20 @@ const readTicket = async (
               }),
             );
           }
+        } else if (listWithoutStory) {
+          const listQuery = buildTicketListQueryFromReadListOpts(
+            { withoutStory: true, ...listFlagRest },
+            deps,
+          );
+          deps.log(
+            formatOutput(g.format, {
+              items: listActiveTicketSummaries(proj, {
+                query: listQuery,
+                sortBy,
+                sortDir,
+              }),
+            }),
+          );
         } else {
           const listQuery = buildTicketListQueryFromReadListOpts(
             { epic: epicFilter, ...listFlagRest },

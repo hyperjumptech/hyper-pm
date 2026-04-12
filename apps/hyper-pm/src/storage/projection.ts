@@ -49,7 +49,8 @@ export type StoryRecord = {
 
 export type TicketRecord = {
   id: string;
-  storyId: string;
+  /** Present when the ticket belongs to a story; `null` when unlinked / never assigned. */
+  storyId: string | null;
   title: string;
   body: string;
   status: WorkItemStatus;
@@ -116,6 +117,47 @@ const applyTicketAssigneeFromPayload = (
   const n = normalizeGithubLogin(v);
   if (n === "") delete row.assignee;
   else row.assignee = n;
+};
+
+/**
+ * Resolves `storyId` for a new ticket from a `TicketCreated` payload.
+ *
+ * @param payload - Event payload possibly containing `storyId`.
+ * @returns A non-empty trimmed story id, or `null` when absent, cleared, or invalid.
+ */
+const storyIdFromTicketCreatedPayload = (
+  payload: Record<string, unknown>,
+): string | null => {
+  if (!Object.prototype.hasOwnProperty.call(payload, "storyId")) {
+    return null;
+  }
+  const v = payload["storyId"];
+  if (v === null) return null;
+  if (typeof v !== "string") return null;
+  const t = v.trim();
+  return t === "" ? null : t;
+};
+
+/**
+ * Applies optional `storyId` from a `TicketUpdated` payload.
+ * Missing key leaves the field unchanged; `null` or empty string clears to no story; non-string values are ignored.
+ *
+ * @param row - Mutable ticket row.
+ * @param payload - Event payload possibly containing `storyId`.
+ */
+const applyTicketStoryIdFromPayload = (
+  row: TicketRecord,
+  payload: Record<string, unknown>,
+): void => {
+  if (!Object.prototype.hasOwnProperty.call(payload, "storyId")) return;
+  const v = payload["storyId"];
+  if (v === null) {
+    row.storyId = null;
+    return;
+  }
+  if (typeof v !== "string") return;
+  const t = v.trim();
+  row.storyId = t === "" ? null : t;
 };
 
 /**
@@ -290,7 +332,7 @@ export const applyEvent = (projection: Projection, evt: EventLine): void => {
       const status = resolveStatusForNewTicketPayload(evt.payload);
       const row: TicketRecord = {
         id,
-        storyId: String(evt.payload["storyId"]),
+        storyId: storyIdFromTicketCreatedPayload(evt.payload),
         title: String(evt.payload["title"] ?? ""),
         body,
         status,
@@ -324,6 +366,7 @@ export const applyEvent = (projection: Projection, evt: EventLine): void => {
         applyStatusIfChanged(cur, evt, nextStatus);
       }
       applyTicketAssigneeFromPayload(cur, evt.payload);
+      applyTicketStoryIdFromPayload(cur, evt.payload);
       applyLastUpdate(cur, evt);
       break;
     }

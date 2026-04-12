@@ -234,6 +234,61 @@ describe("dist/main.cjs subprocess (JSON workflow parity)", () => {
       }),
     );
 
+    const ticketCreateOrphan = invokeBundled(
+      [
+        "ticket",
+        "create",
+        "--id",
+        "ticket-dist-e2e-orphan",
+        "--title",
+        "Orphan",
+        "--body",
+        "",
+      ],
+      { repoRoot, tempDir, actor: "e2e" },
+    );
+    expect(ticketCreateOrphan.code).toBe(ExitCode.Success);
+    const listOrphans = invokeBundled(["ticket", "read", "--without-story"], {
+      repoRoot,
+      tempDir,
+    });
+    expect(listOrphans.code).toBe(ExitCode.Success);
+    expect(listOrphans.json).toEqual(
+      expect.objectContaining({
+        items: [
+          expect.objectContaining({
+            id: "ticket-dist-e2e-orphan",
+            storyId: null,
+          }),
+        ],
+      }),
+    );
+    expect(
+      invokeBundled(
+        [
+          "ticket",
+          "update",
+          "--id",
+          "ticket-dist-e2e-orphan",
+          "--story",
+          "story-dist-e2e-1",
+        ],
+        { repoRoot, tempDir, actor: "e2e" },
+      ).code,
+    ).toBe(ExitCode.Success);
+    expect(
+      invokeBundled(
+        [
+          "ticket",
+          "update",
+          "--id",
+          "ticket-dist-e2e-orphan",
+          "--unlink-story",
+        ],
+        { repoRoot, tempDir, actor: "e2e" },
+      ).code,
+    ).toBe(ExitCode.Success);
+
     const ticketListByEpicAndStatus = invokeBundled(
       [
         "ticket",

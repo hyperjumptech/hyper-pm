@@ -39,6 +39,8 @@ export type TicketListQuery = {
   titleContainsLower?: string;
   /** When true, only tickets with a linked GitHub issue number. */
   githubLinkedOnly?: boolean;
+  /** When true, only tickets with no story (`storyId === null`). */
+  withoutStoryOnly?: boolean;
 };
 
 /**
@@ -72,8 +74,15 @@ export const ticketMatchesTicketListQuery = (
     }
   }
 
+  if (query.withoutStoryOnly === true && ticket.storyId !== null) {
+    return false;
+  }
+
   const epicId = query.epicId;
   if (epicId !== undefined) {
+    if (ticket.storyId === null) {
+      return false;
+    }
     const story = projection.stories.get(ticket.storyId);
     if (!story || story.deleted || story.epicId !== epicId) {
       return false;

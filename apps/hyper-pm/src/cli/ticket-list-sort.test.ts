@@ -303,6 +303,17 @@ describe("compareTicketsForListSort", () => {
     expect(byId).toBeLessThan(0);
   });
 
+  it("sorts null storyId like empty string before non-empty story ids", () => {
+    const orphan = baseTicket({ id: "t1", storyId: null });
+    const linked = baseTicket({ id: "t2", storyId: "s-a" });
+    expect(
+      compareTicketsForListSort(orphan, linked, "storyId", "asc"),
+    ).toBeLessThan(0);
+    expect(
+      compareTicketsForListSort(linked, orphan, "storyId", "asc"),
+    ).toBeGreaterThan(0);
+  });
+
   it("orders lastPrActivityAt by tail timestamp", () => {
     // Setup
     const early = baseTicket({

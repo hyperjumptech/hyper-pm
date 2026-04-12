@@ -189,4 +189,43 @@ describe("ticketMatchesTicketListQuery", () => {
       ),
     ).toBe(true);
   });
+
+  it("filters withoutStoryOnly to tickets with null storyId", () => {
+    const projection = emptyProjection();
+    const orphan = { ...baseTicket, id: "t0", storyId: null };
+    expect(
+      ticketMatchesTicketListQuery(orphan, projection, {
+        withoutStoryOnly: true,
+      }),
+    ).toBe(true);
+    expect(
+      ticketMatchesTicketListQuery(baseTicket, projection, {
+        withoutStoryOnly: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("does not match epicId when ticket has no story", () => {
+    const projection: Projection = {
+      ...emptyProjection(),
+      stories: new Map([
+        [
+          "s1",
+          {
+            id: "s1",
+            epicId: "e1",
+            title: "S",
+            body: "",
+            status: "backlog",
+            ...audit,
+            ...statusAudit,
+          },
+        ],
+      ]),
+    };
+    const orphan = { ...baseTicket, storyId: null };
+    expect(
+      ticketMatchesTicketListQuery(orphan, projection, { epicId: "e1" }),
+    ).toBe(false);
+  });
 });

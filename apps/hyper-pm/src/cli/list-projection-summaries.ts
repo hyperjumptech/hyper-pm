@@ -47,7 +47,7 @@ export type TicketListSummary = {
   id: string;
   title: string;
   status: WorkItemStatus;
-  storyId: string;
+  storyId: string | null;
   /** Normalized GitHub login when the ticket has an assignee. */
   assignee?: string;
   lastPrActivity?: TicketLastPrActivitySummary;
@@ -143,7 +143,10 @@ export const listActiveTicketSummaries = (
       if (t.deleted) {
         return false;
       }
-      if (options?.storyId !== undefined && t.storyId !== options.storyId) {
+      if (
+        options?.storyId !== undefined &&
+        (t.storyId === null || t.storyId !== options.storyId)
+      ) {
         return false;
       }
       const q = options?.query;

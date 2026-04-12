@@ -11,7 +11,7 @@ import {
 } from "../lib/work-item-status";
 import type { EventLine } from "../storage/event-line";
 import { appendEventLine } from "../storage/append-event";
-import type { Projection } from "../storage/projection";
+import type { Projection, TicketRecord } from "../storage/projection";
 import { replayEvents } from "../storage/projection";
 import { readAllEventLines } from "../storage/read-event-lines";
 import { githubInboundActorFromIssue } from "./github-inbound-actor";
@@ -55,12 +55,37 @@ export const runGithubOutboundSync = async (params: {
     params.deps.outboundActor ??
     (await resolveGithubTokenActor(params.deps.octokit));
   const ts = params.deps.clock.now().toISOString();
+  /**
+   * Resolves epic+story ids for GitHub issue metadata when the ticket is linked to a valid story chain.
+   *
+   * @param ticket - Ticket row from the projection (caller skips deleted tickets).
+   * @returns Both ids when story and epic exist and are not deleted; otherwise `undefined`.
+   */
+  const resolveTicketGithubParents = (
+    ticket: TicketRecord,
+  ): { epicId: string; storyId: string } | undefined => {
+    if (ticket.storyId === null) {
+      return undefined;
+    }
+    const story = params.projection.stories.get(ticket.storyId);
+    if (!story || story.deleted) {
+      return undefined;
+    }
+    const epic = params.projection.epics.get(story.epicId);
+    if (!epic || epic.deleted) {
+      return undefined;
+    }
+    return { epicId: epic.id, storyId: story.id };
+  };
+
   for (const ticket of params.projection.tickets.values()) {
     if (ticket.deleted) continue;
-    const story = params.projection.stories.get(ticket.storyId);
-    if (!story || story.deleted) continue;
-    const epic = params.projection.epics.get(story.epicId);
-    if (!epic || epic.deleted) continue;
+    const parents = resolveTicketGithubParents(ticket);
+    const parentIdsForBody =
+      parents !== undefined
+        ? { epic: parents.epicId, story: parents.storyId }
+        : ({} as Record<string, string | undefined>);
+
     if (ticket.githubIssueNumber !== undefined) {
       await params.deps.octokit.rest.issues.update({
         owner: params.deps.owner,
@@ -70,12 +95,15 @@ export const runGithubOutboundSync = async (params: {
         body: buildGithubIssueBody({
           hyperPmId: ticket.id,
           type: "ticket",
-          parentIds: { epic: epic.id, story: story.id },
+          parentIds: parentIdsForBody,
           description: ticket.body,
         }),
         state: statusToGithubIssueState(ticket.status),
         assignees: ticket.assignee ? [ticket.assignee] : [],
       });
+      continue;
+    }
+    if (parents === undefined) {
       continue;
     }
     const created = await params.deps.octokit.rest.issues.create({
@@ -85,7 +113,7 @@ export const runGithubOutboundSync = async (params: {
       body: buildGithubIssueBody({
         hyperPmId: ticket.id,
         type: "ticket",
-        parentIds: { epic: epic.id, story: story.id },
+        parentIds: { epic: parents.epicId, story: parents.storyId },
         description: ticket.body,
       }),
       labels: ["hyper-pm", "ticket"],

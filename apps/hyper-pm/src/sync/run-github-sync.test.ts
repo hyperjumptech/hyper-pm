@@ -188,6 +188,107 @@ describe("runGithubOutboundSync", () => {
       }),
     );
   });
+
+  it("updates linked ticket without story using issue body without parent ids", async () => {
+    const issuesUpdate = vi.fn().mockResolvedValue({ data: {} });
+    const issuesCreate = vi.fn();
+    const octokit = {
+      rest: {
+        issues: {
+          update: issuesUpdate,
+          create: issuesCreate,
+          listForRepo: vi.fn(),
+        },
+      },
+      paginate: vi.fn(),
+    } as unknown as Octokit;
+    const projection: Projection = {
+      ...epicStory(),
+      tickets: new Map([
+        [
+          "t-orphan",
+          {
+            id: "t-orphan",
+            storyId: null,
+            title: "Unlinked",
+            body: "hello",
+            status: "todo",
+            linkedPrs: [],
+            githubIssueNumber: 77,
+            ...audit,
+            ...statusAudit,
+          },
+        ],
+      ]),
+    };
+    const clock = { now: () => new Date("2026-02-03T00:00:00.000Z") };
+
+    await runGithubOutboundSync({
+      dataRoot: "/tmp/hyper-pm-test",
+      projection,
+      config: baseConfig,
+      deps: {
+        octokit,
+        owner: "acme",
+        repo: "app",
+        clock,
+        outboundActor: "github:tester",
+      },
+    });
+
+    expect(issuesUpdate).toHaveBeenCalledTimes(1);
+    expect(issuesCreate).not.toHaveBeenCalled();
+    const body = issuesUpdate.mock.calls[0]?.[0]?.body as string;
+    expect(body).toContain('"parent_ids": {}');
+  });
+
+  it("does not create GitHub issue for unlinked ticket without githubIssueNumber", async () => {
+    const issuesCreate = vi.fn();
+    const octokit = {
+      rest: {
+        issues: {
+          update: vi.fn(),
+          create: issuesCreate,
+          listForRepo: vi.fn(),
+        },
+      },
+      paginate: vi.fn(),
+    } as unknown as Octokit;
+    const projection: Projection = {
+      ...epicStory(),
+      tickets: new Map([
+        [
+          "t-new-orphan",
+          {
+            id: "t-new-orphan",
+            storyId: null,
+            title: "Orphan",
+            body: "",
+            status: "todo",
+            linkedPrs: [],
+            ...audit,
+            ...statusAudit,
+          },
+        ],
+      ]),
+    };
+    const clock = { now: () => new Date("2026-02-04T00:00:00.000Z") };
+
+    await runGithubOutboundSync({
+      dataRoot: "/tmp/hyper-pm-test",
+      projection,
+      config: baseConfig,
+      deps: {
+        octokit,
+        owner: "acme",
+        repo: "app",
+        clock,
+        outboundActor: "github:tester",
+      },
+    });
+
+    expect(issuesCreate).not.toHaveBeenCalled();
+  });
 });
 
 describe("runGithubInboundSync", () => {

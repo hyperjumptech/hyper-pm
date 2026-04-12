@@ -56,6 +56,7 @@ describe("replayEvents", () => {
     expect(ticket?.status).toBe("todo");
     expect(ticket?.statusChangedAt).toBe("2026-01-02T00:00:00.000Z");
     expect(ticket?.statusChangedBy).toBe("test");
+    expect(ticket?.storyId).toBe("s1");
     expect(ticket?.linkedPrs.sort((a: number, b: number) => a - b)).toEqual([
       10, 20,
     ]);
@@ -302,6 +303,162 @@ describe("replayEvents", () => {
     expect(p.tickets.get("t1")?.prActivityRecent?.length).toBe(
       GITHUB_PR_ACTIVITY_RECENT_CAP,
     );
+  });
+
+  it("creates ticket without story when storyId is omitted, null, empty, or non-string", () => {
+    const omitStory = [
+      JSON.stringify({
+        schema: 1,
+        type: "TicketCreated",
+        id: "e1",
+        ts: "2026-01-02T00:00:00.000Z",
+        actor: "a",
+        payload: {
+          id: "t-omit",
+          title: "Orphan",
+          body: "",
+          status: "todo",
+        },
+      }),
+    ];
+    expect(replayEvents(omitStory).tickets.get("t-omit")?.storyId).toBeNull();
+
+    const nullStory = [
+      JSON.stringify({
+        schema: 1,
+        type: "TicketCreated",
+        id: "e1",
+        ts: "2026-01-02T00:00:00.000Z",
+        actor: "a",
+        payload: {
+          id: "t-null",
+          storyId: null,
+          title: "Orphan",
+          body: "",
+          status: "todo",
+        },
+      }),
+    ];
+    expect(replayEvents(nullStory).tickets.get("t-null")?.storyId).toBeNull();
+
+    const emptyStory = [
+      JSON.stringify({
+        schema: 1,
+        type: "TicketCreated",
+        id: "e1",
+        ts: "2026-01-02T00:00:00.000Z",
+        actor: "a",
+        payload: {
+          id: "t-empty",
+          storyId: "",
+          title: "Orphan",
+          body: "",
+          status: "todo",
+        },
+      }),
+    ];
+    expect(replayEvents(emptyStory).tickets.get("t-empty")?.storyId).toBeNull();
+
+    const badType = [
+      JSON.stringify({
+        schema: 1,
+        type: "TicketCreated",
+        id: "e1",
+        ts: "2026-01-02T00:00:00.000Z",
+        actor: "a",
+        payload: {
+          id: "t-bad",
+          storyId: 42,
+          title: "Orphan",
+          body: "",
+          status: "todo",
+        },
+      }),
+    ];
+    expect(replayEvents(badType).tickets.get("t-bad")?.storyId).toBeNull();
+  });
+
+  it("trims storyId on TicketCreated when string", () => {
+    const lines = [
+      JSON.stringify({
+        schema: 1,
+        type: "TicketCreated",
+        id: "e1",
+        ts: "2026-01-02T00:00:00.000Z",
+        actor: "a",
+        payload: {
+          id: "t1",
+          storyId: "  s1  ",
+          title: "T",
+          body: "",
+          status: "todo",
+        },
+      }),
+    ];
+    expect(replayEvents(lines).tickets.get("t1")?.storyId).toBe("s1");
+  });
+
+  it("links and unlinks story via TicketUpdated and ignores non-string storyId", () => {
+    const lines = [
+      JSON.stringify({
+        schema: 1,
+        type: "TicketCreated",
+        id: "e1",
+        ts: "2026-01-02T00:00:00.000Z",
+        actor: "a",
+        payload: {
+          id: "t1",
+          title: "T",
+          body: "",
+          status: "todo",
+        },
+      }),
+      JSON.stringify({
+        schema: 1,
+        type: "TicketUpdated",
+        id: "e2",
+        ts: "2026-01-03T00:00:00.000Z",
+        actor: "b",
+        payload: { id: "t1", storyId: "s1" },
+      }),
+      JSON.stringify({
+        schema: 1,
+        type: "TicketUpdated",
+        id: "e3",
+        ts: "2026-01-04T00:00:00.000Z",
+        actor: "c",
+        payload: { id: "t1", storyId: null },
+      }),
+    ];
+    const p = replayEvents(lines);
+    expect(p.tickets.get("t1")?.storyId).toBeNull();
+    expect(p.tickets.get("t1")?.updatedBy).toBe("c");
+
+    const ignoreBad = [
+      JSON.stringify({
+        schema: 1,
+        type: "TicketCreated",
+        id: "e1",
+        ts: "2026-01-02T00:00:00.000Z",
+        actor: "a",
+        payload: {
+          id: "t2",
+          storyId: "s1",
+          title: "T",
+          body: "",
+          status: "todo",
+        },
+      }),
+      JSON.stringify({
+        schema: 1,
+        type: "TicketUpdated",
+        id: "e2",
+        ts: "2026-01-03T00:00:00.000Z",
+        actor: "b",
+        payload: { id: "t2", storyId: 99 },
+      }),
+    ];
+    expect(replayEvents(ignoreBad).tickets.get("t2")?.storyId).toBe("s1");
   });
 
   it("sets normalized assignee on TicketCreated and ignores non-string assignee", () => {

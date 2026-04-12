@@ -121,8 +121,12 @@ const compareTicketRecordsPrimaryAsc = (
       return a.title.localeCompare(b.title);
     case "status":
       return workItemStatusRank(a.status) - workItemStatusRank(b.status);
-    case "storyId":
-      return a.storyId.localeCompare(b.storyId);
+    case "storyId": {
+      /** Null / unlinked tickets sort like an empty id (before non-empty lexicographic ids). */
+      const sa = a.storyId ?? "";
+      const sb = b.storyId ?? "";
+      return sa.localeCompare(sb);
+    }
     case "createdAt":
       return (
         auditInstantMsForSort(a.createdAt) - auditInstantMsForSort(b.createdAt)

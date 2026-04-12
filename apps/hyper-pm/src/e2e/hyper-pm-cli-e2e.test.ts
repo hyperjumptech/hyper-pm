@@ -296,6 +296,84 @@ describe("hyper-pm CLI (e2e)", () => {
       }),
     );
 
+    const ticketCreateOrphan = await invokeHyperPmCli(
+      [
+        "ticket",
+        "create",
+        "--id",
+        "ticket-e2e-orphan",
+        "--title",
+        "Orphan ticket",
+        "--body",
+        "no story yet",
+        "--status",
+        "backlog",
+      ],
+      { repoRoot, tempDir, clock, actor: "e2e" },
+    );
+    expect(ticketCreateOrphan.code).toBe(ExitCode.Success);
+
+    const ticketListNoStory = await invokeHyperPmCli(
+      ["ticket", "read", "--without-story"],
+      { repoRoot, tempDir, clock },
+    );
+    expect(ticketListNoStory.code).toBe(ExitCode.Success);
+    expect(ticketListNoStory.json).toEqual(
+      expect.objectContaining({
+        items: [
+          expect.objectContaining({
+            id: "ticket-e2e-orphan",
+            storyId: null,
+          }),
+        ],
+      }),
+    );
+
+    const noStoryStoryConflict = await invokeHyperPmCli(
+      ["ticket", "read", "--without-story", "--story", "story-e2e-1"],
+      { repoRoot, tempDir, clock },
+    );
+    expect(noStoryStoryConflict.code).toBe(ExitCode.UserError);
+
+    const linkOrphan = await invokeHyperPmCli(
+      [
+        "ticket",
+        "update",
+        "--id",
+        "ticket-e2e-orphan",
+        "--story",
+        "story-e2e-1",
+      ],
+      { repoRoot, tempDir, clock, actor: "e2e" },
+    );
+    expect(linkOrphan.code).toBe(ExitCode.Success);
+    const orphanLinkedRead = await invokeHyperPmCli(
+      ["ticket", "read", "--id", "ticket-e2e-orphan"],
+      { repoRoot, tempDir, clock },
+    );
+    expect(orphanLinkedRead.json).toEqual(
+      expect.objectContaining({
+        id: "ticket-e2e-orphan",
+        storyId: "story-e2e-1",
+      }),
+    );
+
+    const unlinkOrphan = await invokeHyperPmCli(
+      ["ticket", "update", "--id", "ticket-e2e-orphan", "--unlink-story"],
+      { repoRoot, tempDir, clock, actor: "e2e" },
+    );
+    expect(unlinkOrphan.code).toBe(ExitCode.Success);
+    const orphanAgainRead = await invokeHyperPmCli(
+      ["ticket", "read", "--id", "ticket-e2e-orphan"],
+      { repoRoot, tempDir, clock },
+    );
+    expect(orphanAgainRead.json).toEqual(
+      expect.objectContaining({
+        id: "ticket-e2e-orphan",
+        storyId: null,
+      }),
+    );
+
     const ticketListSortSmoke = await invokeHyperPmCli(
       [
         "ticket",

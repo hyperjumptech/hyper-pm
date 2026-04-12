@@ -335,6 +335,52 @@ describe("listActiveTicketSummaries", () => {
     ]);
   });
 
+  it("filters by withoutStoryOnly in query", () => {
+    const projection = projectionWith({
+      tickets: new Map([
+        [
+          "t-orphan",
+          {
+            id: "t-orphan",
+            storyId: null,
+            title: "No story",
+            body: "",
+            status: "todo",
+            linkedPrs: [],
+            ...audit,
+            ...statusAudit,
+          },
+        ],
+        [
+          "t-linked",
+          {
+            id: "t-linked",
+            storyId: "s1",
+            title: "On S1",
+            body: "",
+            status: "todo",
+            linkedPrs: [],
+            ...audit,
+            ...statusAudit,
+          },
+        ],
+      ]),
+    });
+    expect(
+      listActiveTicketSummaries(projection, {
+        query: { withoutStoryOnly: true },
+      }),
+    ).toEqual([
+      {
+        id: "t-orphan",
+        title: "No story",
+        status: "todo",
+        storyId: null,
+        ...audit,
+      },
+    ]);
+  });
+
   it("returns empty when storyId filter matches no tickets", () => {
     const projection = projectionWith({
       tickets: new Map([
