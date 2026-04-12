@@ -20,6 +20,10 @@ import {
 } from "./lib/work-item-status";
 import { formatOutput } from "./cli/format-output";
 import { resolveCliActor } from "./cli/resolve-cli-actor";
+import {
+  formatAuditPlainLines,
+  parseAuditTextStyle,
+} from "./cli/format-audit-plain-lines";
 import { formatAuditTextLines, runAuditOnLines } from "./cli/run-audit";
 import {
   listActiveEpicSummaries,
@@ -1089,12 +1093,18 @@ export const runCli = async (
       "--entity-id <id>",
       "filter rows whose payload id, entityId, or ticketId matches",
     )
+    .option(
+      "--text-style <s>",
+      "when --format text: tsv (default) | plain | plain-links",
+      "tsv",
+    )
     .action(async function (this: Command) {
       const g = readGlobals(this);
       const o = this.opts<{
         limit?: number;
         type?: string;
         entityId?: string;
+        textStyle?: string;
       }>();
       let filterType: EventType | undefined;
       if (o.type !== undefined && o.type !== "") {
@@ -1137,7 +1147,31 @@ export const runCli = async (
               }),
             );
           } else {
-            deps.log(formatAuditTextLines(events));
+            const textStyle = parseAuditTextStyle(o.textStyle);
+            if (textStyle === undefined) {
+              deps.error(
+                `Invalid --text-style: ${String(o.textStyle)} (use tsv, plain, or plain-links)`,
+              );
+              deps.exit(ExitCode.UserError);
+            }
+            if (textStyle === "tsv") {
+              deps.log(formatAuditTextLines(events));
+            } else {
+              let githubRepo: { owner: string; repo: string } | undefined;
+              if (textStyle === "plain-links") {
+                try {
+                  githubRepo = resolveGithubRepo(cfg, env.GITHUB_REPO);
+                } catch {
+                  githubRepo = undefined;
+                }
+              }
+              deps.log(
+                formatAuditPlainLines(events, {
+                  style: textStyle,
+                  githubRepo,
+                }),
+              );
+            }
           }
         } finally {
           await session.dispose();

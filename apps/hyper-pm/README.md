@@ -92,17 +92,20 @@ When sync is not skipped, requires `GITHUB_TOKEN` **or** a local `gh` session (`
 
 List durable events (who / what / when) with optional filters.
 
-| Option             | Description                                                       |
-| ------------------ | ----------------------------------------------------------------- |
-| `--limit <n>`      | Keep only the **most recent** _n_ matching events                 |
-| `--type <t>`       | Filter by event type (must be one of the values below)            |
-| `--entity-id <id>` | Filter rows whose payload `id`, `entityId`, or `ticketId` matches |
+| Option             | Description                                                           |
+| ------------------ | --------------------------------------------------------------------- |
+| `--limit <n>`      | Keep only the **most recent** _n_ matching events                     |
+| `--type <t>`       | Filter by event type (must be one of the values below)                |
+| `--entity-id <id>` | Filter rows whose payload `id`, `entityId`, or `ticketId` matches     |
+| `--text-style <s>` | When `--format text` only: `tsv` (default), `plain`, or `plain-links` |
 
 Valid `--type` values: `EpicCreated`, `EpicUpdated`, `EpicDeleted`, `StoryCreated`, `StoryUpdated`, `StoryDeleted`, `TicketCreated`, `TicketUpdated`, `TicketDeleted`, `TicketCommentAdded`, `SyncCursor`, `GithubInboundUpdate`, `GithubIssueLinked`, `GithubPrActivity`.
 
 `GithubPrActivity` payloads include `ticketId`, `prNumber`, `kind` (`opened` | `updated` | `commented` | `reviewed` | `merged` | `closed` | `ready_for_review`), `sourceId`, `occurredAt`, and optionally `reviewState` / `url`.
 
-In `--format text`, output is human-readable lines; in `json`, the result includes `events` and any `invalidLines` skipped during parse.
+With `--format text`, `--text-style` selects output: **`tsv`** — tab-separated `ts`, `type`, `actor`, `id` (extra columns for `GithubPrActivity`); **`plain`** — one English sentence per event (`timestamp: actor …`); **`plain-links`** — same sentence plus a tab and compact JSON (ids and URLs; no ticket body/title text). For `plain-links`, if `githubRepo` resolves from config or `GITHUB_REPO`, derived `issueHtmlUrl` / `pullHtmlUrl` fields are included when applicable.
+
+With `--format json`, the result includes `events` and any `invalidLines` skipped during parse; `--text-style` is ignored.
 
 ### `doctor`
 
