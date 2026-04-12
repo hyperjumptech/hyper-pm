@@ -39,6 +39,11 @@ export type TicketListQuery = {
   titleContainsLower?: string;
   /** When true, only tickets with a linked GitHub issue number. */
   githubLinkedOnly?: boolean;
+  /**
+   * When set, only tickets whose `linkedBranches` contains this exact string
+   * (use `normalizeTicketBranchName` on the filter input before assigning).
+   */
+  branchNormalized?: string;
   /** When true, only tickets with no story (`storyId === null`). */
   withoutStoryOnly?: boolean;
 };
@@ -162,6 +167,13 @@ export const ticketMatchesTicketListQuery = (
   if (query.githubLinkedOnly === true) {
     const n = ticket.githubIssueNumber;
     if (n === undefined || !Number.isFinite(n)) {
+      return false;
+    }
+  }
+
+  const branchNeedle = query.branchNormalized;
+  if (branchNeedle !== undefined) {
+    if (!ticket.linkedBranches.includes(branchNeedle)) {
       return false;
     }
   }

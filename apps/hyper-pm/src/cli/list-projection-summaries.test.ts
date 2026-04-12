@@ -183,6 +183,7 @@ describe("listActiveTicketSummaries", () => {
             body: "",
             status: "done",
             linkedPrs: [],
+            linkedBranches: [],
             deleted: true,
             ...audit,
             ...statusAudit,
@@ -197,6 +198,7 @@ describe("listActiveTicketSummaries", () => {
             body: "",
             status: "todo",
             linkedPrs: [],
+            linkedBranches: [],
             ...audit,
             ...statusAudit,
           },
@@ -226,6 +228,7 @@ describe("listActiveTicketSummaries", () => {
             body: "",
             status: "todo",
             linkedPrs: [],
+            linkedBranches: [],
             assignee: "alice",
             ...audit,
             ...statusAudit,
@@ -245,6 +248,37 @@ describe("listActiveTicketSummaries", () => {
     ]);
   });
 
+  it("includes linkedBranches on list rows when non-empty", () => {
+    const projection = projectionWith({
+      tickets: new Map([
+        [
+          "t1",
+          {
+            id: "t1",
+            storyId: "s1",
+            title: "Open",
+            body: "",
+            status: "todo",
+            linkedPrs: [],
+            linkedBranches: ["feature/a"],
+            ...audit,
+            ...statusAudit,
+          },
+        ],
+      ]),
+    });
+    expect(listActiveTicketSummaries(projection)).toEqual([
+      {
+        id: "t1",
+        title: "Open",
+        status: "todo",
+        storyId: "s1",
+        linkedBranches: ["feature/a"],
+        ...audit,
+      },
+    ]);
+  });
+
   it("includes lastPrActivity from prActivityRecent tail", () => {
     const projection = projectionWith({
       tickets: new Map([
@@ -257,6 +291,7 @@ describe("listActiveTicketSummaries", () => {
             body: "",
             status: "in_progress",
             linkedPrs: [10],
+            linkedBranches: [],
             prActivityRecent: [
               {
                 prNumber: 10,
@@ -305,6 +340,7 @@ describe("listActiveTicketSummaries", () => {
             body: "",
             status: "todo",
             linkedPrs: [],
+            linkedBranches: [],
             ...audit,
             ...statusAudit,
           },
@@ -318,6 +354,7 @@ describe("listActiveTicketSummaries", () => {
             body: "",
             status: "backlog",
             linkedPrs: [],
+            linkedBranches: [],
             ...audit,
             ...statusAudit,
           },
@@ -347,6 +384,7 @@ describe("listActiveTicketSummaries", () => {
             body: "",
             status: "todo",
             linkedPrs: [],
+            linkedBranches: [],
             ...audit,
             ...statusAudit,
           },
@@ -360,6 +398,7 @@ describe("listActiveTicketSummaries", () => {
             body: "",
             status: "todo",
             linkedPrs: [],
+            linkedBranches: [],
             ...audit,
             ...statusAudit,
           },
@@ -393,6 +432,7 @@ describe("listActiveTicketSummaries", () => {
             body: "",
             status: "todo",
             linkedPrs: [],
+            linkedBranches: [],
             ...audit,
             ...statusAudit,
           },
@@ -416,6 +456,7 @@ describe("listActiveTicketSummaries", () => {
             body: "",
             status: "todo",
             linkedPrs: [],
+            linkedBranches: [],
             ...audit,
             ...statusAudit,
           },
@@ -429,6 +470,7 @@ describe("listActiveTicketSummaries", () => {
             body: "",
             status: "done",
             linkedPrs: [],
+            linkedBranches: [],
             ...audit,
             ...statusAudit,
           },
@@ -477,6 +519,7 @@ describe("listActiveTicketSummaries", () => {
             body: "",
             status: "todo",
             linkedPrs: [],
+            linkedBranches: [],
             ...audit,
             ...statusAudit,
           },
@@ -490,6 +533,7 @@ describe("listActiveTicketSummaries", () => {
             body: "",
             status: "todo",
             linkedPrs: [],
+            linkedBranches: [],
             ...audit,
             ...statusAudit,
           },
@@ -522,6 +566,7 @@ describe("listActiveTicketSummaries", () => {
             body: "",
             status: "todo",
             linkedPrs: [],
+            linkedBranches: [],
             createdAt: "2026-01-01T00:00:00.000Z",
             createdBy: "a",
             updatedAt: "2026-01-01T00:00:00.000Z",
@@ -538,6 +583,7 @@ describe("listActiveTicketSummaries", () => {
             body: "",
             status: "todo",
             linkedPrs: [],
+            linkedBranches: [],
             createdAt: "2026-01-01T00:00:00.000Z",
             createdBy: "a",
             updatedAt: "2026-06-01T00:00:00.000Z",

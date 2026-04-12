@@ -50,6 +50,8 @@ export type TicketListSummary = {
   storyId: string | null;
   /** Normalized GitHub login when the ticket has an assignee. */
   assignee?: string;
+  /** Linked git branch names when non-empty. */
+  linkedBranches?: string[];
   lastPrActivity?: TicketLastPrActivitySummary;
 } & AuditSummaryFields;
 
@@ -171,6 +173,9 @@ export const listActiveTicketSummaries = (
       status: t.status,
       storyId: t.storyId,
       ...(t.assignee !== undefined ? { assignee: t.assignee } : {}),
+      ...(t.linkedBranches.length > 0
+        ? { linkedBranches: t.linkedBranches }
+        : {}),
       ...(last !== undefined
         ? {
             lastPrActivity: {

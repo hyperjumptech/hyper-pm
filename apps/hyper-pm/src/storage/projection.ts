@@ -1,4 +1,5 @@
 import { normalizeGithubLogin } from "../lib/github-assignee";
+import { normalizeTicketBranchListFromPayloadValue } from "../lib/normalize-ticket-branches";
 import {
   GITHUB_PR_ACTIVITY_RECENT_CAP,
   parseGithubPrActivityPayload,
@@ -56,6 +57,8 @@ export type TicketRecord = {
   status: WorkItemStatus;
   /** Parsed PR refs from body (REQ-010). */
   linkedPrs: number[];
+  /** Git branch names linked to this ticket (from `TicketCreated` / `TicketUpdated` payloads). */
+  linkedBranches: string[];
   /** GitHub issue number when linked via sync. */
   githubIssueNumber?: number;
   /** Recent PR sub-events from `GithubPrActivity` replay (capped). */
@@ -158,6 +161,37 @@ const applyTicketStoryIdFromPayload = (
   if (typeof v !== "string") return;
   const t = v.trim();
   row.storyId = t === "" ? null : t;
+};
+
+/**
+ * Resolves `linkedBranches` for a new ticket from optional `branches` on `TicketCreated`.
+ *
+ * @param payload - Create event payload.
+ * @returns Normalized branch list; empty when the key is absent or not an array.
+ */
+const linkedBranchesFromTicketCreatedPayload = (
+  payload: Record<string, unknown>,
+): string[] => {
+  if (!Object.prototype.hasOwnProperty.call(payload, "branches")) {
+    return [];
+  }
+  return normalizeTicketBranchListFromPayloadValue(payload["branches"]);
+};
+
+/**
+ * Replaces `linkedBranches` when `TicketUpdated` includes a `branches` array; ignores invalid shapes.
+ *
+ * @param row - Mutable ticket row.
+ * @param payload - Update event payload.
+ */
+const applyTicketBranchesFromUpdatePayload = (
+  row: TicketRecord,
+  payload: Record<string, unknown>,
+): void => {
+  if (!Object.prototype.hasOwnProperty.call(payload, "branches")) return;
+  const v = payload["branches"];
+  if (!Array.isArray(v)) return;
+  row.linkedBranches = normalizeTicketBranchListFromPayloadValue(v);
 };
 
 /**
@@ -339,6 +373,7 @@ export const applyEvent = (projection: Projection, evt: EventLine): void => {
         statusChangedAt: evt.ts,
         statusChangedBy: evt.actor,
         linkedPrs: parsePrRefs(body),
+        linkedBranches: linkedBranchesFromTicketCreatedPayload(evt.payload),
         prActivityRecent: [],
         createdAt: "",
         createdBy: "",
@@ -367,6 +402,7 @@ export const applyEvent = (projection: Projection, evt: EventLine): void => {
       }
       applyTicketAssigneeFromPayload(cur, evt.payload);
       applyTicketStoryIdFromPayload(cur, evt.payload);
+      applyTicketBranchesFromUpdatePayload(cur, evt.payload);
       applyLastUpdate(cur, evt);
       break;
     }

@@ -60,6 +60,7 @@ describe("replayEvents", () => {
     expect(ticket?.linkedPrs.sort((a: number, b: number) => a - b)).toEqual([
       10, 20,
     ]);
+    expect(ticket?.linkedBranches).toEqual([]);
     expect(ticket?.createdAt).toBe("2026-01-02T00:00:00.000Z");
     expect(ticket?.createdBy).toBe("test");
     expect(ticket?.updatedAt).toBe("2026-01-02T00:00:00.000Z");
@@ -577,5 +578,100 @@ describe("replayEvents", () => {
     ];
     const p = replayEvents(lines);
     expect(p.tickets.get("t1")?.assignee).toBe("new");
+  });
+
+  it("sets linkedBranches on TicketCreated and replaces via TicketUpdated", () => {
+    const lines = [
+      JSON.stringify({
+        schema: 1,
+        type: "TicketCreated",
+        id: "e1",
+        ts: "2026-01-02T00:00:00.000Z",
+        actor: "a",
+        payload: {
+          id: "t1",
+          title: "T",
+          body: "",
+          status: "todo",
+          branches: ["  feature/a  ", "refs/heads/feature/b", "feature/a"],
+        },
+      }),
+      JSON.stringify({
+        schema: 1,
+        type: "TicketUpdated",
+        id: "e2",
+        ts: "2026-01-03T00:00:00.000Z",
+        actor: "b",
+        payload: { id: "t1", branches: ["main"] },
+      }),
+    ];
+    const p = replayEvents(lines);
+    expect(p.tickets.get("t1")?.linkedBranches).toEqual(["main"]);
+  });
+
+  it("leaves linkedBranches unchanged on GithubInboundUpdate", () => {
+    const lines = [
+      JSON.stringify({
+        schema: 1,
+        type: "TicketCreated",
+        id: "e1",
+        ts: "2026-01-02T00:00:00.000Z",
+        actor: "a",
+        payload: {
+          id: "t1",
+          title: "T",
+          body: "hello",
+          status: "todo",
+          branches: ["work/x"],
+        },
+      }),
+      JSON.stringify({
+        schema: 1,
+        type: "GithubInboundUpdate",
+        id: "e2",
+        ts: "2026-01-03T00:00:00.000Z",
+        actor: "gh",
+        payload: {
+          entity: "ticket",
+          entityId: "t1",
+          title: "T2",
+          body: "patched",
+        },
+      }),
+    ];
+    const p = replayEvents(lines);
+    const ticket = p.tickets.get("t1");
+    expect(ticket?.linkedBranches).toEqual(["work/x"]);
+    expect(ticket?.body).toBe("patched");
+  });
+
+  it("ignores TicketUpdated branches payload when value is not an array", () => {
+    const lines = [
+      JSON.stringify({
+        schema: 1,
+        type: "TicketCreated",
+        id: "e1",
+        ts: "2026-01-02T00:00:00.000Z",
+        actor: "a",
+        payload: {
+          id: "t1",
+          title: "T",
+          body: "",
+          status: "todo",
+          branches: ["keep"],
+        },
+      }),
+      JSON.stringify({
+        schema: 1,
+        type: "TicketUpdated",
+        id: "e2",
+        ts: "2026-01-03T00:00:00.000Z",
+        actor: "b",
+        payload: { id: "t1", branches: "not-an-array" },
+      }),
+    ];
+    expect(replayEvents(lines).tickets.get("t1")?.linkedBranches).toEqual([
+      "keep",
+    ]);
   });
 });

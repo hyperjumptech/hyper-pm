@@ -11,6 +11,10 @@ import { runAiDraft } from "./ai/run-ai-draft";
 import { ExitCode, type ExitCodeValue } from "./cli/exit-codes";
 import { normalizeGithubLogin } from "./lib/github-assignee";
 import {
+  normalizeTicketBranchListFromStrings,
+  normalizeTicketBranchName,
+} from "./lib/normalize-ticket-branches";
+import {
   parseWorkItemStatus,
   type WorkItemStatus,
 } from "./lib/work-item-status";
@@ -126,6 +130,17 @@ const normalizeCliStringList = (
 };
 
 /**
+ * Returns whether two branch name lists are identical (same length and pairwise `===`).
+ *
+ * @param a - First list (typically normalized).
+ * @param b - Second list.
+ */
+const ticketBranchListsEqual = (
+  a: readonly string[],
+  b: readonly string[],
+): boolean => a.length === b.length && a.every((x, i) => x === b[i]);
+
+/**
  * Parses an optional ISO-8601 instant for ticket list filters; exits when non-empty input is invalid.
  *
  * @param raw - Flag value (omit or empty to skip the bound).
@@ -206,6 +221,8 @@ const buildTicketListQueryFromReadListOpts = (
     statusChangedBy?: string;
     titleContains?: string;
     githubLinked?: boolean;
+    /** When set and non-empty, normalized exact match on a linked branch. */
+    branch?: string;
   },
   deps: {
     exit: (code: number) => never;
@@ -282,6 +299,14 @@ const buildTicketListQueryFromReadListOpts = (
   }
   if (o.githubLinked === true) {
     query.githubLinkedOnly = true;
+  }
+  if (o.branch !== undefined && o.branch !== "") {
+    const nb = normalizeTicketBranchName(o.branch);
+    if (nb === undefined) {
+      deps.error("--branch must be a non-empty valid branch name");
+      deps.exit(ExitCode.UserError);
+    }
+    query.branchNormalized = nb;
   }
   if (o.withoutStory === true) {
     query.withoutStoryOnly = true;
@@ -582,6 +607,12 @@ export const runCli = async (
       "--assignee <login>",
       "optional GitHub login for the assignee (normalized)",
     )
+    .option(
+      "--branch <name>",
+      "link a git branch name (repeatable)",
+      (value: string, previous: string[]) => [...previous, value],
+      [],
+    )
     .option("--ai-draft", "draft body via AI (explicit)", false)
     .action(async function (this: Command) {
       const g = readGlobals(this);
@@ -592,6 +623,7 @@ export const runCli = async (
         id?: string;
         status?: string;
         assignee?: string;
+        branch?: string | string[];
         aiDraft?: boolean;
       }>();
       let body = o.body;
@@ -631,6 +663,10 @@ export const runCli = async (
             : {};
         const storyPayload =
           storyTrimmed !== undefined ? { storyId: storyTrimmed } : {};
+        const branchTokens = normalizeCliStringList(o.branch);
+        const branchesNorm = normalizeTicketBranchListFromStrings(branchTokens);
+        const branchesPayload =
+          branchesNorm.length > 0 ? { branches: branchesNorm } : {};
         const evt = makeEvent(
           "TicketCreated",
           {
@@ -640,6 +676,7 @@ export const runCli = async (
             body,
             ...(status !== undefined ? { status } : {}),
             ...assigneeCreate,
+            ...branchesPayload,
           },
           deps.clock,
           actor,
@@ -712,6 +749,10 @@ export const runCli = async (
       false,
     )
     .option(
+      "--branch <name>",
+      "when listing (no --id): only tickets linked to this branch (normalized exact match)",
+    )
+    .option(
       "--without-story",
       "when listing (no --id): only tickets without a story (cannot combine with --story or --epic)",
       false,
@@ -739,6 +780,7 @@ export const runCli = async (
         statusChangedBy?: string;
         titleContains?: string;
         githubLinked?: boolean;
+        branch?: string;
         withoutStory?: boolean;
         sortBy?: string;
         sortDir?: string;
@@ -761,6 +803,23 @@ export const runCli = async (
       "set assignee to this GitHub login (normalized)",
     )
     .option("--unassign", "remove the ticket assignee", false)
+    .option(
+      "--add-branch <name>",
+      "link another git branch (repeatable)",
+      (value: string, previous: string[]) => [...previous, value],
+      [],
+    )
+    .option(
+      "--remove-branch <name>",
+      "unlink a git branch by name (repeatable)",
+      (value: string, previous: string[]) => [...previous, value],
+      [],
+    )
+    .option(
+      "--clear-branches",
+      "remove all linked git branches from the ticket",
+      false,
+    )
     .option("--ai-improve", "expand description via AI (explicit)", false)
     .action(async function (this: Command) {
       const g = readGlobals(this);
@@ -773,6 +832,9 @@ export const runCli = async (
         unlinkStory?: boolean;
         assignee?: string;
         unassign?: boolean;
+        addBranch?: string | string[];
+        removeBranch?: string | string[];
+        clearBranches?: boolean;
         aiImprove?: boolean;
       }>();
       let body = o.body;
@@ -808,6 +870,17 @@ export const runCli = async (
         deps.error("--story must be a non-empty id");
         deps.exit(ExitCode.UserError);
       }
+      const addBranchTokens = normalizeCliStringList(o.addBranch);
+      const removeBranchTokens = normalizeCliStringList(o.removeBranch);
+      if (
+        o.clearBranches === true &&
+        (addBranchTokens.length > 0 || removeBranchTokens.length > 0)
+      ) {
+        deps.error(
+          "Cannot use --clear-branches with --add-branch or --remove-branch",
+        );
+        deps.exit(ExitCode.UserError);
+      }
       await mutateDataBranch(g, deps, async (root, { actor }) => {
         const lines = await readAllEventLines(root);
         const proj = replayEvents(lines);
@@ -831,6 +904,37 @@ export const runCli = async (
           payload["assignee"] = null;
         } else if (o.assignee !== undefined) {
           payload["assignee"] = normalizeGithubLogin(o.assignee);
+        }
+        const wantsBranchChange =
+          o.clearBranches === true ||
+          addBranchTokens.length > 0 ||
+          removeBranchTokens.length > 0;
+        if (wantsBranchChange) {
+          const curRow = proj.tickets.get(o.id);
+          if (curRow === undefined || curRow.deleted) {
+            throw new Error(`Ticket not found: ${o.id}`);
+          }
+          let next: string[];
+          if (o.clearBranches === true) {
+            next = [];
+          } else {
+            const removeSet = new Set(
+              removeBranchTokens
+                .map((x) => normalizeTicketBranchName(x))
+                .filter((x): x is string => x !== undefined),
+            );
+            next = curRow.linkedBranches.filter((b) => !removeSet.has(b));
+            for (const raw of addBranchTokens) {
+              const nb = normalizeTicketBranchName(raw);
+              if (nb !== undefined && !next.includes(nb)) {
+                next.push(nb);
+              }
+            }
+            next = normalizeTicketBranchListFromStrings(next);
+          }
+          if (!ticketBranchListsEqual(next, curRow.linkedBranches)) {
+            payload["branches"] = next;
+          }
         }
         const evt = makeEvent("TicketUpdated", payload, deps.clock, actor);
         await appendEventLine(root, evt, deps.clock);
@@ -1313,6 +1417,7 @@ const readTicket = async (
     statusChangedBy?: string;
     titleContains?: string;
     githubLinked?: boolean;
+    branch?: string;
     withoutStory?: boolean;
     sortBy?: string;
     sortDir?: string;

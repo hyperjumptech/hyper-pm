@@ -32,6 +32,7 @@ const baseTicket = {
   body: "",
   status: "todo" as const,
   linkedPrs: [] as number[],
+  linkedBranches: [] as string[],
   ...audit,
   ...statusAudit,
 };
@@ -226,6 +227,27 @@ describe("ticketMatchesTicketListQuery", () => {
     const orphan = { ...baseTicket, storyId: null };
     expect(
       ticketMatchesTicketListQuery(orphan, projection, { epicId: "e1" }),
+    ).toBe(false);
+  });
+
+  it("filters by linked branch using normalized exact match", () => {
+    // Setup
+    const projection = emptyProjection();
+
+    // Act / Assert
+    expect(
+      ticketMatchesTicketListQuery(
+        { ...baseTicket, linkedBranches: ["feature/x"] },
+        projection,
+        { branchNormalized: "feature/x" },
+      ),
+    ).toBe(true);
+    expect(
+      ticketMatchesTicketListQuery(
+        { ...baseTicket, linkedBranches: ["other"] },
+        projection,
+        { branchNormalized: "feature/x" },
+      ),
     ).toBe(false);
   });
 });
