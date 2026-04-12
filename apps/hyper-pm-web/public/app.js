@@ -71,13 +71,303 @@ function trimU(v) {
 }
 
 /**
+ * @typedef {{
+ *   kind: 'dashboard'|'epics'|'epicNew'|'epicEdit'|'stories'|'storyNew'|'storyEdit'|'tickets'|'ticketNew'|'ticketEdit'|'tools'|'advanced';
+ *   epicId?: string; storyId?: string; ticketId?: string;
+ *   epicForm?: boolean; storyForm?: boolean; ticketForm?: boolean;
+ *   storyFilterEpic?: string; ticketFilterStory?: string;
+ * }} AppRoute
+ */
+
+/**
+ * Parses `location.hash` into a structured route.
+ * @returns {AppRoute}
+ */
+function parseHash() {
+  try {
+    let raw = (window.location.hash || "").replace(/^#/, "").trim();
+    if (!raw || raw === "/") return { kind: "dashboard" };
+    const qIndex = raw.indexOf("?");
+    const pathPart = qIndex === -1 ? raw : raw.slice(0, qIndex);
+    const qs = qIndex === -1 ? "" : raw.slice(qIndex + 1);
+    const params = new URLSearchParams(qs);
+    const path = pathPart.startsWith("/") ? pathPart : `/${pathPart}`;
+    const parts = path.split("/").filter(Boolean);
+
+    if (parts[0] === "dashboard" && parts.length === 1) {
+      return { kind: "dashboard" };
+    }
+    if (parts[0] === "epics" && parts.length === 1) return { kind: "epics" };
+    if (parts[0] === "epic" && parts[1] === "new") return { kind: "epicNew" };
+    if (parts[0] === "epic" && parts.length >= 2 && parts[1] !== "new") {
+      const id = decodeURIComponent(parts[1]);
+      if (!trimU(id)) return { kind: "dashboard" };
+      const epicForm = parts[2] === "edit";
+      return { kind: "epicEdit", epicId: id, epicForm };
+    }
+    if (parts[0] === "stories" && parts.length === 1) {
+      const epic = params.get("epic") || "";
+      return { kind: "stories", storyFilterEpic: epic };
+    }
+    if (parts[0] === "story" && parts[1] === "new") return { kind: "storyNew" };
+    if (parts[0] === "story" && parts.length >= 2 && parts[1] !== "new") {
+      const id = decodeURIComponent(parts[1]);
+      if (!trimU(id)) return { kind: "dashboard" };
+      const storyForm = parts[2] === "edit";
+      return { kind: "storyEdit", storyId: id, storyForm };
+    }
+    if (parts[0] === "tickets" && parts.length === 1) {
+      const st = params.get("story") || "";
+      return { kind: "tickets", ticketFilterStory: st };
+    }
+    if (parts[0] === "ticket" && parts[1] === "new")
+      return { kind: "ticketNew" };
+    if (parts[0] === "ticket" && parts.length >= 2 && parts[1] !== "new") {
+      const id = decodeURIComponent(parts[1]);
+      if (!trimU(id)) return { kind: "dashboard" };
+      const ticketForm = parts[2] === "edit";
+      return { kind: "ticketEdit", ticketId: id, ticketForm };
+    }
+    if (parts[0] === "tools" && parts.length === 1) return { kind: "tools" };
+    if (parts[0] === "advanced" && parts.length === 1) {
+      return { kind: "advanced" };
+    }
+  } catch {
+    /* fall through */
+  }
+  return { kind: "dashboard" };
+}
+
+/**
+ * @param {AppRoute} r
+ * @returns {string} path and optional query, without leading #
+ */
+function routeToHashPath(r) {
+  switch (r.kind) {
+    case "dashboard":
+      return "/";
+    case "epics":
+      return "/epics";
+    case "epicNew":
+      return "/epic/new";
+    case "epicEdit": {
+      const id = encodeURIComponent(r.epicId || "");
+      return r.epicForm ? `/epic/${id}/edit` : `/epic/${id}`;
+    }
+    case "stories": {
+      const fe = trimU(r.storyFilterEpic);
+      return fe ? `/stories?epic=${encodeURIComponent(fe)}` : "/stories";
+    }
+    case "storyNew":
+      return "/story/new";
+    case "storyEdit": {
+      const id = encodeURIComponent(r.storyId || "");
+      return r.storyForm ? `/story/${id}/edit` : `/story/${id}`;
+    }
+    case "tickets": {
+      const fs = trimU(r.ticketFilterStory);
+      return fs ? `/tickets?story=${encodeURIComponent(fs)}` : "/tickets";
+    }
+    case "ticketNew":
+      return "/ticket/new";
+    case "ticketEdit": {
+      const id = encodeURIComponent(r.ticketId || "");
+      return r.ticketForm ? `/ticket/${id}/edit` : `/ticket/${id}`;
+    }
+    case "tools":
+      return "/tools";
+    case "advanced":
+      return "/advanced";
+    default:
+      return "/";
+  }
+}
+
+/**
+ * Applies route fields to in-memory `state` (single source with URL after navigation).
+ * @param {AppRoute} r
+ */
+function syncStateFromRoute(r) {
+  switch (r.kind) {
+    case "dashboard":
+      state.view = "dashboard";
+      delete state.epicId;
+      delete state.storyId;
+      delete state.ticketId;
+      state.storyFilterEpic = "";
+      state.ticketFilterStory = "";
+      delete state.epicDetailForm;
+      delete state.storyDetailForm;
+      delete state.ticketDetailForm;
+      break;
+    case "epics":
+      state.view = "epics";
+      delete state.epicId;
+      delete state.epicDetailForm;
+      state.storyFilterEpic = "";
+      state.ticketFilterStory = "";
+      delete state.storyId;
+      delete state.ticketId;
+      delete state.storyDetailForm;
+      delete state.ticketDetailForm;
+      break;
+    case "epicNew":
+      state.view = "epicNew";
+      delete state.epicId;
+      delete state.epicDetailForm;
+      state.storyFilterEpic = "";
+      state.ticketFilterStory = "";
+      delete state.storyId;
+      delete state.ticketId;
+      delete state.storyDetailForm;
+      delete state.ticketDetailForm;
+      break;
+    case "epicEdit":
+      state.view = "epicEdit";
+      state.epicId = r.epicId;
+      state.epicDetailForm = Boolean(r.epicForm);
+      state.storyFilterEpic = "";
+      state.ticketFilterStory = "";
+      break;
+    case "stories":
+      state.view = "stories";
+      state.storyFilterEpic = r.storyFilterEpic || "";
+      state.ticketFilterStory = "";
+      delete state.storyId;
+      delete state.storyDetailForm;
+      break;
+    case "storyNew":
+      state.view = "storyNew";
+      delete state.storyId;
+      delete state.storyDetailForm;
+      state.ticketFilterStory = "";
+      break;
+    case "storyEdit":
+      state.view = "storyEdit";
+      state.storyId = r.storyId;
+      state.storyDetailForm = Boolean(r.storyForm);
+      state.storyFilterEpic = "";
+      state.ticketFilterStory = "";
+      break;
+    case "tickets":
+      state.view = "tickets";
+      state.ticketFilterStory = r.ticketFilterStory || "";
+      state.storyFilterEpic = "";
+      delete state.ticketId;
+      delete state.ticketDetailForm;
+      break;
+    case "ticketNew":
+      state.view = "ticketNew";
+      delete state.ticketId;
+      delete state.ticketDetailForm;
+      state.storyFilterEpic = "";
+      break;
+    case "ticketEdit":
+      state.view = "ticketEdit";
+      state.ticketId = r.ticketId;
+      state.ticketDetailForm = Boolean(r.ticketForm);
+      state.storyFilterEpic = "";
+      state.ticketFilterStory = "";
+      break;
+    case "tools":
+      state.view = "tools";
+      delete state.epicId;
+      delete state.storyId;
+      delete state.ticketId;
+      delete state.epicDetailForm;
+      delete state.storyDetailForm;
+      delete state.ticketDetailForm;
+      break;
+    case "advanced":
+      state.view = "advanced";
+      delete state.epicId;
+      delete state.storyId;
+      delete state.ticketId;
+      delete state.epicDetailForm;
+      delete state.storyDetailForm;
+      delete state.ticketDetailForm;
+      break;
+    default:
+      break;
+  }
+}
+
+/**
+ * @param {AppRoute} r
+ * @returns {void|Promise<void>}
+ */
+function renderForRoute(r) {
+  switch (r.kind) {
+    case "dashboard":
+      return renderDashboard();
+    case "epics":
+      return renderEpicsList();
+    case "epicNew":
+      return renderEpicNew();
+    case "epicEdit":
+      return renderEpicEdit();
+    case "stories":
+      return renderStoriesList();
+    case "storyNew":
+      return renderStoryNew();
+    case "storyEdit":
+      return renderStoryEdit();
+    case "tickets":
+      return renderTicketsList();
+    case "ticketNew":
+      return renderTicketNew();
+    case "ticketEdit":
+      return renderTicketEdit();
+    case "tools":
+      renderTools();
+      return undefined;
+    case "advanced":
+      renderAdvanced();
+      return undefined;
+    default:
+      return renderDashboard();
+  }
+}
+
+/**
+ * Updates the URL and renders. Use `replace: true` for filter-only or post-save URL fixes.
+ * @param {AppRoute} r
+ * @param {{ replace?: boolean }} [opts]
+ */
+function pushAppRoute(r, opts) {
+  const next = `#${routeToHashPath(r)}`;
+  const useReplace = Boolean(opts?.replace);
+  if (window.location.hash !== next) {
+    history[useReplace ? "replaceState" : "pushState"](null, "", next);
+  }
+  syncStateFromRoute(r);
+  const out = renderForRoute(r);
+  setNavCurrent();
+  return out;
+}
+
+/**
+ * @param {AppRoute} r
+ */
+function replaceAppRoute(r) {
+  pushAppRoute(r, { replace: true });
+}
+
+function wireHistoryNavigation() {
+  window.addEventListener("popstate", () => {
+    const r = parseHash();
+    syncStateFromRoute(r);
+    void renderForRoute(r);
+    setNavCurrent();
+  });
+}
+
+/**
  * Opens an epic in read mode (detail view).
  * @param {string} epicId
  */
 function navigateToEpic(epicId) {
-  state.epicId = epicId;
-  state.epicDetailForm = false;
-  void renderEpicEdit();
+  void pushAppRoute({ kind: "epicEdit", epicId, epicForm: false });
 }
 
 /**
@@ -85,9 +375,7 @@ function navigateToEpic(epicId) {
  * @param {string} storyId
  */
 function navigateToStory(storyId) {
-  state.storyId = storyId;
-  state.storyDetailForm = false;
-  void renderStoryEdit();
+  void pushAppRoute({ kind: "storyEdit", storyId, storyForm: false });
 }
 
 /**
@@ -95,9 +383,7 @@ function navigateToStory(storyId) {
  * @param {string} ticketId
  */
 function navigateToTicket(ticketId) {
-  state.ticketId = ticketId;
-  state.ticketDetailForm = false;
-  void renderTicketEdit();
+  void pushAppRoute({ kind: "ticketEdit", ticketId, ticketForm: false });
 }
 
 /**
@@ -105,9 +391,7 @@ function navigateToTicket(ticketId) {
  * @param {string} epicId
  */
 function navigateToStoriesForEpic(epicId) {
-  state.storyFilterEpic = epicId;
-  state.view = "stories";
-  void renderStoriesList();
+  void pushAppRoute({ kind: "stories", storyFilterEpic: epicId });
 }
 
 /**
@@ -115,9 +399,7 @@ function navigateToStoriesForEpic(epicId) {
  * @param {string} storyId
  */
 function navigateToTicketsForStory(storyId) {
-  state.ticketFilterStory = storyId;
-  state.view = "tickets";
-  void renderTicketsList();
+  void pushAppRoute({ kind: "tickets", ticketFilterStory: storyId });
 }
 
 /**
@@ -347,22 +629,17 @@ async function renderDashboard() {
         </div>
       </div>`;
     document.getElementById("dashOpenEpics")?.addEventListener("click", () => {
-      state.view = "epics";
-      void renderEpicsList();
+      void pushAppRoute({ kind: "epics" });
     });
     document
       .getElementById("dashOpenStories")
       ?.addEventListener("click", () => {
-        state.storyFilterEpic = "";
-        state.view = "stories";
-        void renderStoriesList();
+        void pushAppRoute({ kind: "stories", storyFilterEpic: "" });
       });
     document
       .getElementById("dashOpenTickets")
       ?.addEventListener("click", () => {
-        state.ticketFilterStory = "";
-        state.view = "tickets";
-        void renderTicketsList();
+        void pushAppRoute({ kind: "tickets", ticketFilterStory: "" });
       });
   } catch (e) {
     main.innerHTML = `<div class="panel"><p class="muted">${escapeHtml(String(e))}</p></div>`;
@@ -390,8 +667,7 @@ async function renderEpicsList() {
         ${tableHtml(items, epicRowHtml)}
       </div>`;
     document.getElementById("btnNewEpic")?.addEventListener("click", () => {
-      state.view = "epicNew";
-      void renderEpicNew();
+      void pushAppRoute({ kind: "epicNew" });
     });
     main.querySelectorAll(".btn-open-epic").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -429,7 +705,7 @@ async function renderEpicNew() {
       </div>
     </div>`;
   document.getElementById("btnBackEpics")?.addEventListener("click", () => {
-    void renderEpicsList();
+    void pushAppRoute({ kind: "epics" });
   });
   document
     .getElementById("btnCreateEpic")
@@ -455,7 +731,7 @@ async function renderEpicNew() {
       try {
         await runCli(argv);
         toast("Epic created", false);
-        void renderEpicsList();
+        void pushAppRoute({ kind: "epics" });
       } catch (e) {
         toast(String(e), true);
       }
@@ -465,7 +741,7 @@ async function renderEpicNew() {
 async function renderEpicEdit() {
   const id = state.epicId;
   if (!id) {
-    void renderEpicsList();
+    void pushAppRoute({ kind: "epics" });
     return;
   }
   state.view = "epicEdit";
@@ -526,10 +802,10 @@ async function renderEpicEdit() {
         ${showForm ? formBlock : readBlock}
       </div>`;
     document.getElementById("btnBackEpics2")?.addEventListener("click", () => {
-      void renderEpicsList();
+      window.history.back();
     });
     document.getElementById("bcEpicEpics")?.addEventListener("click", () => {
-      void renderEpicsList();
+      void pushAppRoute({ kind: "epics" });
     });
     document
       .getElementById("btnEpicSeeStories")
@@ -540,15 +816,13 @@ async function renderEpicEdit() {
       document
         .getElementById("btnEpicEnterEdit")
         ?.addEventListener("click", () => {
-          state.epicDetailForm = true;
-          void renderEpicEdit();
+          void pushAppRoute({ kind: "epicEdit", epicId: id, epicForm: true });
         });
     } else {
       document
         .getElementById("btnEpicCancelEdit")
         ?.addEventListener("click", () => {
-          state.epicDetailForm = false;
-          void renderEpicEdit();
+          window.history.back();
         });
       document
         .getElementById("btnSaveEpic")
@@ -577,8 +851,7 @@ async function renderEpicEdit() {
               status,
             ]);
             toast("Epic saved", false);
-            state.epicDetailForm = false;
-            void renderEpicEdit();
+            replaceAppRoute({ kind: "epicEdit", epicId: id, epicForm: false });
           } catch (e) {
             toast(String(e), true);
           }
@@ -591,7 +864,7 @@ async function renderEpicEdit() {
           try {
             await runCli(["epic", "delete", "--id", id]);
             toast("Epic deleted", false);
-            void renderEpicsList();
+            void pushAppRoute({ kind: "epics" });
           } catch (e) {
             toast(String(e), true);
           }
@@ -600,7 +873,7 @@ async function renderEpicEdit() {
   } catch (e) {
     main.innerHTML = `<div class="panel"><p class="muted">${escapeHtml(String(e))}</p><button type="button" class="ghost" id="btnEpicErrBack">← Epics</button></div>`;
     document.getElementById("btnEpicErrBack")?.addEventListener("click", () => {
-      void renderEpicsList();
+      void pushAppRoute({ kind: "epics" });
     });
   }
 }
@@ -673,14 +946,11 @@ async function renderStoriesList() {
     document
       .getElementById("filterStoryEpic")
       ?.addEventListener("change", (ev) => {
-        state.storyFilterEpic = /** @type {HTMLSelectElement} */ (
-          ev.target
-        ).value;
-        void renderStoriesList();
+        const val = /** @type {HTMLSelectElement} */ (ev.target).value;
+        replaceAppRoute({ kind: "stories", storyFilterEpic: val });
       });
     document.getElementById("btnNewStory")?.addEventListener("click", () => {
-      state.view = "storyNew";
-      void renderStoryNew();
+      void pushAppRoute({ kind: "storyNew" });
     });
     if (fe) {
       document
@@ -691,8 +961,7 @@ async function renderStoriesList() {
       document
         .getElementById("btnStoriesClearEpic")
         ?.addEventListener("click", () => {
-          state.storyFilterEpic = "";
-          void renderStoriesList();
+          void pushAppRoute({ kind: "stories", storyFilterEpic: "" });
         });
     }
     main.querySelectorAll(".btn-open-story").forEach((btn) => {
@@ -748,7 +1017,7 @@ async function renderStoryNew() {
       </div>
     </div>`;
   document.getElementById("btnBackStories")?.addEventListener("click", () => {
-    void renderStoriesList();
+    window.history.back();
   });
   document
     .getElementById("btnCreateStory")
@@ -778,7 +1047,7 @@ async function renderStoryNew() {
           status,
         ]);
         toast("Story created", false);
-        void renderStoriesList();
+        void pushAppRoute({ kind: "stories", storyFilterEpic: epic });
       } catch (e) {
         toast(String(e), true);
       }
@@ -788,7 +1057,7 @@ async function renderStoryNew() {
 async function renderStoryEdit() {
   const id = state.storyId;
   if (!id) {
-    void renderStoriesList();
+    void pushAppRoute({ kind: "stories", storyFilterEpic: "" });
     return;
   }
   state.view = "storyEdit";
@@ -871,11 +1140,10 @@ async function renderStoryEdit() {
     document
       .getElementById("btnBackStories2")
       ?.addEventListener("click", () => {
-        void renderStoriesList();
+        window.history.back();
       });
     document.getElementById("bcStoryStories")?.addEventListener("click", () => {
-      state.storyFilterEpic = "";
-      void renderStoriesList();
+      void pushAppRoute({ kind: "stories", storyFilterEpic: "" });
     });
     document.getElementById("bcStoryEpic")?.addEventListener("click", () => {
       navigateToEpic(epicId);
@@ -894,15 +1162,17 @@ async function renderStoryEdit() {
       document
         .getElementById("btnStoryEnterEdit")
         ?.addEventListener("click", () => {
-          state.storyDetailForm = true;
-          void renderStoryEdit();
+          void pushAppRoute({
+            kind: "storyEdit",
+            storyId: id,
+            storyForm: true,
+          });
         });
     } else {
       document
         .getElementById("btnStoryCancelEdit")
         ?.addEventListener("click", () => {
-          state.storyDetailForm = false;
-          void renderStoryEdit();
+          window.history.back();
         });
       document
         .getElementById("btnSaveStory")
@@ -931,8 +1201,11 @@ async function renderStoryEdit() {
               status,
             ]);
             toast("Story saved", false);
-            state.storyDetailForm = false;
-            void renderStoryEdit();
+            replaceAppRoute({
+              kind: "storyEdit",
+              storyId: id,
+              storyForm: false,
+            });
           } catch (e) {
             toast(String(e), true);
           }
@@ -944,7 +1217,7 @@ async function renderStoryEdit() {
           try {
             await runCli(["story", "delete", "--id", id]);
             toast("Story deleted", false);
-            void renderStoriesList();
+            void pushAppRoute({ kind: "stories", storyFilterEpic: "" });
           } catch (e) {
             toast(String(e), true);
           }
@@ -955,7 +1228,7 @@ async function renderStoryEdit() {
     document
       .getElementById("btnStoryErrBack")
       ?.addEventListener("click", () => {
-        void renderStoriesList();
+        void pushAppRoute({ kind: "stories", storyFilterEpic: "" });
       });
   }
 }
@@ -1026,14 +1299,11 @@ async function renderTicketsList() {
     document
       .getElementById("filterTicketStory")
       ?.addEventListener("change", (ev) => {
-        state.ticketFilterStory = /** @type {HTMLSelectElement} */ (
-          ev.target
-        ).value;
-        void renderTicketsList();
+        const val = /** @type {HTMLSelectElement} */ (ev.target).value;
+        replaceAppRoute({ kind: "tickets", ticketFilterStory: val });
       });
     document.getElementById("btnNewTicket")?.addEventListener("click", () => {
-      state.view = "ticketNew";
-      void renderTicketNew();
+      void pushAppRoute({ kind: "ticketNew" });
     });
     if (fs) {
       document
@@ -1044,8 +1314,7 @@ async function renderTicketsList() {
       document
         .getElementById("btnTicketsClearStory")
         ?.addEventListener("click", () => {
-          state.ticketFilterStory = "";
-          void renderTicketsList();
+          void pushAppRoute({ kind: "tickets", ticketFilterStory: "" });
         });
     }
     main.querySelectorAll(".btn-open-ticket").forEach((btn) => {
@@ -1102,7 +1371,7 @@ async function renderTicketNew() {
       </div>
     </div>`;
   document.getElementById("btnBackTickets")?.addEventListener("click", () => {
-    void renderTicketsList();
+    window.history.back();
   });
   document
     .getElementById("btnCreateTicket")
@@ -1134,7 +1403,10 @@ async function renderTicketNew() {
       try {
         await runCli(argv);
         toast("Ticket created", false);
-        void renderTicketsList();
+        void pushAppRoute({
+          kind: "tickets",
+          ticketFilterStory: story || "",
+        });
       } catch (e) {
         toast(String(e), true);
       }
@@ -1164,7 +1436,7 @@ function commentsHtml(comments) {
 async function renderTicketEdit() {
   const id = state.ticketId;
   if (!id) {
-    void renderTicketsList();
+    void pushAppRoute({ kind: "tickets", ticketFilterStory: "" });
     return;
   }
   state.view = "ticketEdit";
@@ -1276,11 +1548,10 @@ async function renderTicketEdit() {
     document
       .getElementById("btnBackTickets2")
       ?.addEventListener("click", () => {
-        void renderTicketsList();
+        window.history.back();
       });
     document.getElementById("bcTixTickets")?.addEventListener("click", () => {
-      state.ticketFilterStory = "";
-      void renderTicketsList();
+      void pushAppRoute({ kind: "tickets", ticketFilterStory: "" });
     });
     if (curStory) {
       document.getElementById("bcTixStory")?.addEventListener("click", () => {
@@ -1301,15 +1572,17 @@ async function renderTicketEdit() {
       document
         .getElementById("btnTicketEnterEdit")
         ?.addEventListener("click", () => {
-          state.ticketDetailForm = true;
-          void renderTicketEdit();
+          void pushAppRoute({
+            kind: "ticketEdit",
+            ticketId: id,
+            ticketForm: true,
+          });
         });
     } else {
       document
         .getElementById("btnTicketCancelEdit")
         ?.addEventListener("click", () => {
-          state.ticketDetailForm = false;
-          void renderTicketEdit();
+          window.history.back();
         });
       document
         .getElementById("btnSaveTicket")
@@ -1346,8 +1619,11 @@ async function renderTicketEdit() {
           try {
             await runCli(argv);
             toast("Ticket saved", false);
-            state.ticketDetailForm = false;
-            void renderTicketEdit();
+            replaceAppRoute({
+              kind: "ticketEdit",
+              ticketId: id,
+              ticketForm: false,
+            });
           } catch (e) {
             toast(String(e), true);
           }
@@ -1359,7 +1635,7 @@ async function renderTicketEdit() {
           try {
             await runCli(["ticket", "delete", "--id", id]);
             toast("Ticket deleted", false);
-            void renderTicketsList();
+            void pushAppRoute({ kind: "tickets", ticketFilterStory: "" });
           } catch (e) {
             toast(String(e), true);
           }
@@ -1387,7 +1663,7 @@ async function renderTicketEdit() {
     document
       .getElementById("btnTicketErrBack")
       ?.addEventListener("click", () => {
-        void renderTicketsList();
+        void pushAppRoute({ kind: "tickets", ticketFilterStory: "" });
       });
   }
 }
@@ -1514,33 +1790,11 @@ function renderAdvanced() {
 }
 
 function refreshCurrentView() {
-  switch (state.view) {
-    case "dashboard":
-      return renderDashboard();
-    case "epics":
-    case "epicNew":
-      return state.view === "epicNew" ? renderEpicNew() : renderEpicsList();
-    case "epicEdit":
-      return renderEpicEdit();
-    case "stories":
-    case "storyNew":
-      return state.view === "storyNew" ? renderStoryNew() : renderStoriesList();
-    case "storyEdit":
-      return renderStoryEdit();
-    case "tickets":
-    case "ticketNew":
-      return state.view === "ticketNew"
-        ? renderTicketNew()
-        : renderTicketsList();
-    case "ticketEdit":
-      return renderTicketEdit();
-    case "tools":
-      return Promise.resolve(renderTools());
-    case "advanced":
-      return Promise.resolve(renderAdvanced());
-    default:
-      return renderDashboard();
-  }
+  const r = parseHash();
+  syncStateFromRoute(r);
+  const out = renderForRoute(r);
+  setNavCurrent();
+  return out;
 }
 
 function wireNav() {
@@ -1548,17 +1802,14 @@ function wireNav() {
     btn.addEventListener("click", () => {
       const v = /** @type {HTMLButtonElement} */ (btn).dataset.nav;
       if (!v) return;
-      state.view = v;
-      if (v === "dashboard") void renderDashboard();
-      else if (v === "epics") void renderEpicsList();
+      if (v === "dashboard") void pushAppRoute({ kind: "dashboard" });
+      else if (v === "epics") void pushAppRoute({ kind: "epics" });
       else if (v === "stories") {
-        state.storyFilterEpic = "";
-        void renderStoriesList();
+        void pushAppRoute({ kind: "stories", storyFilterEpic: "" });
       } else if (v === "tickets") {
-        state.ticketFilterStory = "";
-        void renderTicketsList();
-      } else if (v === "tools") renderTools();
-      else if (v === "advanced") renderAdvanced();
+        void pushAppRoute({ kind: "tickets", ticketFilterStory: "" });
+      } else if (v === "tools") void pushAppRoute({ kind: "tools" });
+      else if (v === "advanced") void pushAppRoute({ kind: "advanced" });
     });
   });
   document.getElementById("btnRefresh")?.addEventListener("click", () => {
@@ -1577,9 +1828,19 @@ window.addEventListener("DOMContentLoaded", async () => {
   const existing = localStorage.getItem(TOKEN_KEY);
   const bearerInput = document.getElementById("bearer");
   if (bearerInput && existing) bearerInput.value = existing;
+  wireHistoryNavigation();
   wireNav();
   await loadHealth();
-  state.view = "dashboard";
-  setNavCurrent();
-  await renderDashboard();
+  const h = window.location.hash;
+  if (!h || h === "#") {
+    history.replaceState(null, "", "#/");
+    syncStateFromRoute({ kind: "dashboard" });
+    setNavCurrent();
+    await renderDashboard();
+  } else {
+    const initial = parseHash();
+    syncStateFromRoute(initial);
+    setNavCurrent();
+    await renderForRoute(initial);
+  }
 });
