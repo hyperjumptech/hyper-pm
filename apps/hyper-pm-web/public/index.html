@@ -687,6 +687,131 @@
         margin: 0;
       }
 
+      /* Ticket (and similar) detail: main column + metadata sidebar */
+      .issue-detail-layout {
+        display: grid;
+        gap: 1.5rem;
+        align-items: start;
+      }
+
+      @media (min-width: 768px) {
+        .issue-detail-layout {
+          grid-template-columns: minmax(0, 1fr) 16.5rem;
+          gap: 1.75rem 2rem;
+        }
+      }
+
+      .issue-main input[type="text"],
+      .issue-main textarea {
+        max-width: none;
+      }
+
+      .issue-sidebar select {
+        max-width: none;
+      }
+
+      .issue-panel-head.panel-head {
+        margin-bottom: 0.75rem;
+      }
+
+      .panel-head h2.issue-title {
+        margin: 0;
+        font-size: 1.375rem;
+        font-weight: 600;
+        letter-spacing: -0.03em;
+        line-height: 1.25;
+        color: var(--text);
+      }
+
+      @media (min-width: 768px) {
+        .panel-head h2.issue-title {
+          font-size: 1.625rem;
+        }
+      }
+
+      .issue-kicker {
+        font-size: 0.8125rem;
+      }
+
+      .issue-body {
+        margin-top: 0.25rem;
+        padding-top: 0.25rem;
+      }
+
+      .issue-body .read-body {
+        font-size: 1rem;
+        line-height: 1.65;
+      }
+
+      .issue-sidebar {
+        padding-top: 0.25rem;
+      }
+
+      @media (min-width: 768px) {
+        .issue-sidebar {
+          padding-top: 0;
+          padding-left: 1.25rem;
+          margin: 0;
+          border-left: 1px solid var(--border);
+        }
+      }
+
+      @media (max-width: 767.98px) {
+        .issue-sidebar {
+          padding-top: 1rem;
+          border-top: 1px solid var(--border);
+        }
+      }
+
+      .issue-meta-stack {
+        gap: 1rem;
+        margin-top: 0;
+      }
+
+      .issue-meta-stack .read-row .read-label {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        font-weight: 600;
+      }
+
+      .issue-sidebar-story-nav {
+        margin-bottom: 0.5rem;
+      }
+
+      button.link-title.issue-meta-link {
+        display: inline;
+        vertical-align: baseline;
+        font-size: inherit;
+        font-weight: 500;
+        white-space: normal;
+        text-align: left;
+        word-break: break-word;
+        max-width: 100%;
+      }
+
+      .issue-meta-sep {
+        color: var(--text-tertiary);
+        user-select: none;
+      }
+
+      .label-pill-wrap {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+      }
+
+      .label-pill {
+        display: inline-block;
+        font-size: 0.75rem;
+        font-weight: 500;
+        padding: 0.2rem 0.5rem;
+        border-radius: 999px;
+        background: #f4f4f5;
+        border: 1px solid var(--border);
+        color: var(--text-secondary);
+      }
+
       .read-stack {
         display: flex;
         flex-direction: column;

@@ -1433,25 +1433,57 @@ async function renderTicketEdit() {
     const sj = await runCli(["story", "read"]);
     const stories = listFromJson(sj);
     const curStory = row.storyId == null ? "" : String(row.storyId);
-    let storyCrumbEscaped = "";
     let storyReadInner = '<span class="muted">No linked story</span>';
+    /** @type {string} */
+    let storyTitleBtn = "";
+    /** @type {unknown | undefined} */
+    let linkedStoryRow;
     if (curStory) {
-      const st = stories.find(
+      linkedStoryRow = stories.find(
         (s) => String(/** @type {{id:string}} */ (s).id) === curStory,
       );
-      if (st) {
-        const stit = String(/** @type {{title:string}} */ (st).title);
-        storyCrumbEscaped = escapeHtml(stit);
-        storyReadInner = `<span>${storyCrumbEscaped}</span> · ${idChip(curStory)}`;
-      } else {
-        storyCrumbEscaped = escapeHtml(curStory);
-        storyReadInner = idChip(curStory);
+      const storyLinkLabel = linkedStoryRow
+        ? escapeHtml(
+            String(/** @type {{title:string}} */ (linkedStoryRow).title),
+          )
+        : escapeHtml(curStory);
+      storyTitleBtn = `<button type="button" class="link-title issue-meta-link" id="ticketSidebarStoryLink">${storyLinkLabel}</button>`;
+      storyReadInner = linkedStoryRow
+        ? `${storyTitleBtn}<span class="issue-meta-sep"> · </span>${idChip(curStory)}`
+        : storyTitleBtn;
+    }
+    /** @type {string} */
+    let storyEpicId = "";
+    if (
+      linkedStoryRow &&
+      /** @type {{epicId?: unknown}} */ (linkedStoryRow).epicId != null &&
+      String(/** @type {{epicId?: unknown}} */ (linkedStoryRow).epicId) !== ""
+    ) {
+      storyEpicId = String(
+        /** @type {{epicId: string}} */ (linkedStoryRow).epicId,
+      );
+    }
+    let epicReadInner = '<span class="muted">—</span>';
+    if (storyEpicId) {
+      try {
+        const epicRow = /** @type {Record<string, unknown>} */ (
+          await runCli(["epic", "read", "--id", storyEpicId])
+        );
+        const et = escapeHtml(String(epicRow.title));
+        const epicLink = `<button type="button" class="link-title issue-meta-link" id="ticketSidebarEpicLink">${et}</button>`;
+        epicReadInner = `${epicLink}<span class="issue-meta-sep"> · </span>${idChip(storyEpicId)}`;
+      } catch {
+        epicReadInner = `<button type="button" class="link-title issue-meta-link" id="ticketSidebarEpicLink">${escapeHtml(storyEpicId)}</button>`;
       }
     }
-    const ticketHeadActionsRead = curStory
-      ? `<button type="button" class="btn-subtle" id="btnTixOpenStory">Open story</button>
-            <button type="button" class="btn-subtle" id="btnTixSeeTickets">See tickets</button>`
-      : "";
+    const rawLabels = Array.isArray(row.labels) ? row.labels : [];
+    const labelStrs = rawLabels.map((x) => String(x));
+    const labelsInner =
+      labelStrs.length === 0
+        ? '<span class="muted">None</span>'
+        : `<div class="label-pill-wrap">${labelStrs
+            .map((lb) => `<span class="label-pill">${escapeHtml(lb)}</span>`)
+            .join("")}</div>`;
     const storyOpts = [
       `<option value="">No story</option>`,
       ...stories.map((s) => {
@@ -1464,46 +1496,70 @@ async function renderTicketEdit() {
     const showForm = Boolean(state.ticketDetailForm);
     setPageTitle(showForm ? "Edit ticket" : String(row.title));
     const readBlock = `
-        <div class="panel-head">
-          <div>
-            <p class="muted" style="margin:0 0 0.25rem;font-size:0.8125rem">Ticket</p>
-            <h2 style="margin:0">${escapeHtml(String(row.title))}</h2>
+        <div class="issue-detail-layout">
+          <div class="issue-main">
+            <div class="panel-head issue-panel-head">
+              <div>
+                <p class="muted issue-kicker" style="margin:0 0 0.25rem">Ticket</p>
+                <h2 class="issue-title">${escapeHtml(String(row.title))}</h2>
+              </div>
+              <div class="panel-head-actions">
+                <button type="button" class="btn-subtle" id="btnTicketEnterEdit">Edit</button>
+              </div>
+            </div>
+            <div class="issue-body">
+              ${readBodyHtml(row.body)}
+            </div>
           </div>
-          <div class="panel-head-actions">
-            ${ticketHeadActionsRead}
-            <button type="button" class="btn-subtle" id="btnTicketEnterEdit">Edit</button>
-          </div>
-        </div>
-        <p class="muted" style="margin-top:0">${idChip(id)}</p>
-        <div class="read-stack">
-          ${readRowHtml("Story", storyReadInner)}
-          ${readRowHtml("Status", badgeHtml(String(row.status)))}
-          ${readRowHtml("Description", readBodyHtml(row.body))}
+          <aside class="issue-sidebar" aria-label="Ticket metadata">
+            <div class="read-stack issue-meta-stack">
+              ${readRowHtml("Ticket ID", idChip(id))}
+              ${readRowHtml("Story", storyReadInner)}
+              ${readRowHtml("Epic", epicReadInner)}
+              ${readRowHtml("Status", badgeHtml(String(row.status)))}
+              ${readRowHtml("Labels", labelsInner)}
+            </div>
+          </aside>
         </div>`;
-    const ticketHeadActionsForm = curStory
-      ? `<button type="button" class="btn-subtle" id="btnTixOpenStory">Open story</button>
-            <button type="button" class="btn-subtle" id="btnTixSeeTickets">See tickets</button>`
-      : "";
     const formBlock = `
-        <div class="panel-head" style="border-bottom:none;padding-bottom:0;margin-bottom:0.5rem">
-          <h2>Edit ticket</h2>
-          <div class="panel-head-actions">
-            ${ticketHeadActionsForm}
+        <div class="issue-detail-layout">
+          <div class="issue-main">
+            <div class="panel-head issue-panel-head" style="border-bottom:none;padding-bottom:0;margin-bottom:0.5rem">
+              <h2 class="issue-title">Edit ticket</h2>
+            </div>
+            <label for="editTicketTitle">Title</label>
+            <input type="text" id="editTicketTitle" value="${escapeHtml(String(row.title))}" />
+            <label for="editTicketBody">Description</label>
+            <textarea id="editTicketBody" rows="8">${escapeHtml(String(row.body ?? ""))}</textarea>
+            <div class="row">
+              <button type="button" class="primary" id="btnSaveTicket">Save</button>
+              <button type="button" class="ghost" id="btnTicketCancelEdit">Cancel</button>
+              <button type="button" class="danger" id="btnDeleteTicket">Delete</button>
+            </div>
           </div>
-        </div>
-        <p class="muted" style="margin-top:0">${idChip(id)}</p>
-        <label for="editTicketStory">Story</label>
-        <select id="editTicketStory">${storyOpts}</select>
-        <label for="editTicketTitle">Title</label>
-        <input type="text" id="editTicketTitle" value="${escapeHtml(String(row.title))}" />
-        <label for="editTicketBody">Description</label>
-        <textarea id="editTicketBody" rows="8">${escapeHtml(String(row.body ?? ""))}</textarea>
-        <label for="editTicketStatus">Status</label>
-        ${statusOptionsHtml("editTicketStatus", String(row.status))}
-        <div class="row">
-          <button type="button" class="primary" id="btnSaveTicket">Save</button>
-          <button type="button" class="ghost" id="btnTicketCancelEdit">Cancel</button>
-          <button type="button" class="danger" id="btnDeleteTicket">Delete</button>
+          <aside class="issue-sidebar" aria-label="Ticket fields">
+            <div class="read-stack issue-meta-stack">
+              ${readRowHtml("Ticket ID", idChip(id))}
+              <div class="read-row">
+                <div class="read-label">Story</div>
+                <div class="read-value">
+                  ${
+                    curStory
+                      ? `<div class="issue-sidebar-story-nav">${storyTitleBtn}</div>`
+                      : ""
+                  }
+                  <select id="editTicketStory">${storyOpts}</select>
+                </div>
+              </div>
+              ${readRowHtml("Epic", epicReadInner)}
+              <div class="read-row">
+                <div class="read-label">Status</div>
+                <div class="read-value">${statusOptionsHtml("editTicketStatus", String(row.status))}</div>
+              </div>
+              ${readRowHtml("Labels", labelsInner)}
+              <p class="muted" style="font-size:0.8125rem;margin:0;line-height:1.45">Change labels with <code>hyper-pm ticket update</code> in the CLI.</p>
+            </div>
+          </aside>
         </div>`;
     const ticketTopBar = `
         <nav class="detail-page-top" aria-label="Ticket">
@@ -1533,18 +1589,16 @@ async function renderTicketEdit() {
           ticketFilterStory: curStory || "",
         });
       });
-    if (curStory) {
-      document
-        .getElementById("btnTixOpenStory")
-        ?.addEventListener("click", () => {
-          navigateToStory(curStory);
-        });
-      document
-        .getElementById("btnTixSeeTickets")
-        ?.addEventListener("click", () => {
-          navigateToTicketsForStory(curStory);
-        });
-    }
+    document
+      .getElementById("ticketSidebarStoryLink")
+      ?.addEventListener("click", () => {
+        navigateToStory(curStory);
+      });
+    document
+      .getElementById("ticketSidebarEpicLink")
+      ?.addEventListener("click", () => {
+        navigateToEpic(storyEpicId);
+      });
     if (!showForm) {
       document
         .getElementById("btnTicketEnterEdit")
