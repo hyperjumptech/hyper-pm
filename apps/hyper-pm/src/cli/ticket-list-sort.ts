@@ -1,3 +1,7 @@
+import {
+  ticketPrioritySortRank,
+  ticketSizeSortRank,
+} from "../lib/ticket-planning-fields";
 import { workItemStatusRank } from "../lib/work-item-status";
 import type { TicketRecord } from "../storage/projection";
 
@@ -15,6 +19,11 @@ export const TICKET_LIST_SORT_FIELDS = [
   "assignee",
   "githubIssueNumber",
   "lastPrActivityAt",
+  "priority",
+  "size",
+  "estimate",
+  "startWorkAt",
+  "targetFinishAt",
 ] as const;
 
 /**
@@ -174,6 +183,38 @@ const compareTicketRecordsPrimaryAsc = (
     }
     case "lastPrActivityAt":
       return lastPrActivityMsForSort(a) - lastPrActivityMsForSort(b);
+    case "priority":
+      return (
+        ticketPrioritySortRank(a.priority) - ticketPrioritySortRank(b.priority)
+      );
+    case "size":
+      return ticketSizeSortRank(a.size) - ticketSizeSortRank(b.size);
+    case "estimate": {
+      const ea = a.estimate;
+      const eb = b.estimate;
+      const hasA = ea !== undefined && Number.isFinite(ea);
+      const hasB = eb !== undefined && Number.isFinite(eb);
+      if (!hasA && !hasB) {
+        return 0;
+      }
+      if (!hasA) {
+        return 1;
+      }
+      if (!hasB) {
+        return -1;
+      }
+      return ea - eb;
+    }
+    case "startWorkAt":
+      return (
+        auditInstantMsForSort(a.startWorkAt ?? "") -
+        auditInstantMsForSort(b.startWorkAt ?? "")
+      );
+    case "targetFinishAt":
+      return (
+        auditInstantMsForSort(a.targetFinishAt ?? "") -
+        auditInstantMsForSort(b.targetFinishAt ?? "")
+      );
   }
 };
 

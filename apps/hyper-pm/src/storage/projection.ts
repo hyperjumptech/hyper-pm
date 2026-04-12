@@ -13,6 +13,15 @@ import {
   resolveTicketStatusFromUpdatePayload,
   type WorkItemStatus,
 } from "../lib/work-item-status";
+import {
+  readTicketEstimatePatch,
+  readTicketIsoInstantPatch,
+  readTicketPriorityPatch,
+  readTicketSizePatch,
+  ticketLabelsFromPayloadValue,
+  type TicketPriority,
+  type TicketSize,
+} from "../lib/ticket-planning-fields";
 import { eventLineSchema, type EventLine } from "./event-line";
 
 /** Audit fields copied from durable events (`ts` / `actor`) for CLI read output. */
@@ -74,6 +83,18 @@ export type TicketRecord = {
   prActivityRecent?: TicketPrActivitySummary[];
   /** GitHub login (normalized), when the ticket has an assignee. */
   assignee?: string;
+  /** Normalized labels from `TicketCreated` / `TicketUpdated` payloads when non-empty. */
+  labels?: string[];
+  /** Planning priority when set. */
+  priority?: TicketPriority;
+  /** Planning size when set. */
+  size?: TicketSize;
+  /** Non-negative estimate (e.g. story points) when set. */
+  estimate?: number;
+  /** ISO-8601 instant when work is planned to start. */
+  startWorkAt?: string;
+  /** ISO-8601 instant for planned completion. */
+  targetFinishAt?: string;
   /** Chronological thread from `TicketCommentAdded` events (replay order). */
   comments?: TicketCommentRecord[];
   deleted?: boolean;
@@ -203,6 +224,100 @@ const applyTicketBranchesFromUpdatePayload = (
   const v = payload["branches"];
   if (!Array.isArray(v)) return;
   row.linkedBranches = normalizeTicketBranchListFromPayloadValue(v);
+};
+
+/**
+ * Applies optional planning fields from a `TicketCreated` payload (invalid values are ignored).
+ *
+ * @param row - Newly created ticket row.
+ * @param payload - Create event payload.
+ */
+const applyTicketPlanningFieldsFromCreatePayload = (
+  row: TicketRecord,
+  payload: Record<string, unknown>,
+): void => {
+  if (Object.prototype.hasOwnProperty.call(payload, "labels")) {
+    const v = ticketLabelsFromPayloadValue(payload["labels"]);
+    if (v !== undefined && v.length > 0) {
+      row.labels = v;
+    }
+  }
+  const pr = readTicketPriorityPatch(payload);
+  if (typeof pr === "string") {
+    row.priority = pr;
+  }
+  const sz = readTicketSizePatch(payload);
+  if (typeof sz === "string") {
+    row.size = sz;
+  }
+  const est = readTicketEstimatePatch(payload);
+  if (typeof est === "number") {
+    row.estimate = est;
+  }
+  const sw = readTicketIsoInstantPatch(payload, "startWorkAt");
+  if (typeof sw === "string") {
+    row.startWorkAt = sw;
+  }
+  const tf = readTicketIsoInstantPatch(payload, "targetFinishAt");
+  if (typeof tf === "string") {
+    row.targetFinishAt = tf;
+  }
+};
+
+/**
+ * Applies planning field patches from a `TicketUpdated` payload (`null` clears).
+ *
+ * @param row - Mutable ticket row.
+ * @param payload - Update event payload.
+ */
+const applyTicketPlanningFieldsFromUpdatePayload = (
+  row: TicketRecord,
+  payload: Record<string, unknown>,
+): void => {
+  if (Object.prototype.hasOwnProperty.call(payload, "labels")) {
+    if (payload["labels"] === null) {
+      delete row.labels;
+    } else {
+      const v = ticketLabelsFromPayloadValue(payload["labels"]);
+      if (v !== undefined) {
+        if (v.length === 0) {
+          delete row.labels;
+        } else {
+          row.labels = v;
+        }
+      }
+    }
+  }
+  const pr = readTicketPriorityPatch(payload);
+  if (pr === null) {
+    delete row.priority;
+  } else if (typeof pr === "string") {
+    row.priority = pr;
+  }
+  const sz = readTicketSizePatch(payload);
+  if (sz === null) {
+    delete row.size;
+  } else if (typeof sz === "string") {
+    row.size = sz;
+  }
+  const est = readTicketEstimatePatch(payload);
+  if (est === null) {
+    delete row.estimate;
+  } else if (typeof est === "number") {
+    row.estimate = est;
+  }
+  const sw = readTicketIsoInstantPatch(payload, "startWorkAt");
+  if (sw === null) {
+    delete row.startWorkAt;
+  } else if (typeof sw === "string") {
+    row.startWorkAt = sw;
+  }
+  const tf = readTicketIsoInstantPatch(payload, "targetFinishAt");
+  if (tf === null) {
+    delete row.targetFinishAt;
+  } else if (typeof tf === "string") {
+    row.targetFinishAt = tf;
+  }
 };
 
 /**
@@ -413,6 +528,7 @@ export const applyEvent = (projection: Projection, evt: EventLine): void => {
       };
       applyCreatedAudit(row, evt);
       applyTicketAssigneeFromPayload(row, evt.payload);
+      applyTicketPlanningFieldsFromCreatePayload(row, evt.payload);
       projection.tickets.set(id, row);
       break;
     }
@@ -434,6 +550,7 @@ export const applyEvent = (projection: Projection, evt: EventLine): void => {
       applyTicketAssigneeFromPayload(cur, evt.payload);
       applyTicketStoryIdFromPayload(cur, evt.payload);
       applyTicketBranchesFromUpdatePayload(cur, evt.payload);
+      applyTicketPlanningFieldsFromUpdatePayload(cur, evt.payload);
       applyLastUpdate(cur, evt);
       break;
     }

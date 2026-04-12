@@ -351,6 +351,46 @@ describe("compareTicketsForListSort", () => {
     // Assert
     expect(cmp).toBeLessThan(0);
   });
+
+  it("compares priority and size ranks", () => {
+    const low = baseTicket({ id: "t1", priority: "low" });
+    const urgent = baseTicket({ id: "t2", priority: "urgent" });
+    expect(
+      compareTicketsForListSort(low, urgent, "priority", "asc"),
+    ).toBeLessThan(0);
+    const xs = baseTicket({ id: "t1", size: "xs" });
+    const xl = baseTicket({ id: "t2", size: "xl" });
+    expect(compareTicketsForListSort(xs, xl, "size", "asc")).toBeLessThan(0);
+  });
+
+  it("compares estimate and places missing last for asc", () => {
+    const a = baseTicket({ id: "t1", estimate: 1 });
+    const b = baseTicket({ id: "t2", estimate: 10 });
+    expect(compareTicketsForListSort(a, b, "estimate", "asc")).toBeLessThan(0);
+    const none = baseTicket({ id: "t3", estimate: undefined });
+    expect(compareTicketsForListSort(a, none, "estimate", "asc")).toBeLessThan(
+      0,
+    );
+  });
+
+  it("compares startWorkAt and targetFinishAt as time", () => {
+    const early = baseTicket({
+      id: "t1",
+      startWorkAt: "2026-01-01T00:00:00.000Z",
+      targetFinishAt: "2026-01-05T00:00:00.000Z",
+    });
+    const late = baseTicket({
+      id: "t2",
+      startWorkAt: "2026-06-01T00:00:00.000Z",
+      targetFinishAt: "2026-06-10T00:00:00.000Z",
+    });
+    expect(
+      compareTicketsForListSort(early, late, "startWorkAt", "asc"),
+    ).toBeLessThan(0);
+    expect(
+      compareTicketsForListSort(early, late, "targetFinishAt", "asc"),
+    ).toBeLessThan(0);
+  });
 });
 
 describe("sortTicketRecordsForList", () => {

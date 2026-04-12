@@ -771,4 +771,147 @@ describe("replayEvents", () => {
     expect(p.tickets.get("t1")?.deleted).toBe(true);
     expect(p.tickets.get("t1")?.comments).toBeUndefined();
   });
+
+  it("applies planning fields on TicketCreated when valid", () => {
+    const lines = [
+      JSON.stringify({
+        schema: 1,
+        type: "TicketCreated",
+        id: "e1",
+        ts: "2026-01-02T00:00:00.000Z",
+        actor: "a",
+        payload: {
+          id: "t1",
+          title: "T",
+          body: "",
+          status: "todo",
+          labels: ["x", "x", " y "],
+          priority: "high",
+          size: "m",
+          estimate: 5,
+          startWorkAt: "2026-02-01T00:00:00.000Z",
+          targetFinishAt: "2026-02-10T00:00:00.000Z",
+        },
+      }),
+    ];
+    const t = replayEvents(lines).tickets.get("t1");
+    expect(t?.labels).toEqual(["x", "y"]);
+    expect(t?.priority).toBe("high");
+    expect(t?.size).toBe("m");
+    expect(t?.estimate).toBe(5);
+    expect(t?.startWorkAt).toBe("2026-02-01T00:00:00.000Z");
+    expect(t?.targetFinishAt).toBe("2026-02-10T00:00:00.000Z");
+  });
+
+  it("omits labels on TicketCreated when labels array is empty", () => {
+    const lines = [
+      JSON.stringify({
+        schema: 1,
+        type: "TicketCreated",
+        id: "e1",
+        ts: "2026-01-02T00:00:00.000Z",
+        actor: "a",
+        payload: {
+          id: "t1",
+          title: "T",
+          body: "",
+          status: "todo",
+          labels: [],
+        },
+      }),
+    ];
+    const t = replayEvents(lines).tickets.get("t1");
+    expect(t?.labels).toBeUndefined();
+  });
+
+  it("patches and clears planning fields via TicketUpdated", () => {
+    const lines = [
+      JSON.stringify({
+        schema: 1,
+        type: "TicketCreated",
+        id: "e1",
+        ts: "2026-01-02T00:00:00.000Z",
+        actor: "a",
+        payload: {
+          id: "t1",
+          title: "T",
+          body: "",
+          status: "todo",
+          labels: ["a"],
+          priority: "low",
+          size: "s",
+          estimate: 1,
+          startWorkAt: "2026-03-01T00:00:00.000Z",
+          targetFinishAt: "2026-03-05T00:00:00.000Z",
+        },
+      }),
+      JSON.stringify({
+        schema: 1,
+        type: "TicketUpdated",
+        id: "e2",
+        ts: "2026-01-03T00:00:00.000Z",
+        actor: "b",
+        payload: {
+          id: "t1",
+          labels: ["b"],
+          priority: "urgent",
+          size: "xl",
+          estimate: 8,
+          startWorkAt: "2026-04-01T00:00:00.000Z",
+          targetFinishAt: "2026-04-15T00:00:00.000Z",
+        },
+      }),
+      JSON.stringify({
+        schema: 1,
+        type: "TicketUpdated",
+        id: "e3",
+        ts: "2026-01-04T00:00:00.000Z",
+        actor: "c",
+        payload: {
+          id: "t1",
+          labels: null,
+          priority: null,
+          size: null,
+          estimate: null,
+          startWorkAt: null,
+          targetFinishAt: null,
+        },
+      }),
+    ];
+    const t = replayEvents(lines).tickets.get("t1");
+    expect(t?.labels).toBeUndefined();
+    expect(t?.priority).toBeUndefined();
+    expect(t?.size).toBeUndefined();
+    expect(t?.estimate).toBeUndefined();
+    expect(t?.startWorkAt).toBeUndefined();
+    expect(t?.targetFinishAt).toBeUndefined();
+  });
+
+  it("clears labels when TicketUpdated sends empty labels array", () => {
+    const lines = [
+      JSON.stringify({
+        schema: 1,
+        type: "TicketCreated",
+        id: "e1",
+        ts: "2026-01-02T00:00:00.000Z",
+        actor: "a",
+        payload: {
+          id: "t1",
+          title: "T",
+          body: "",
+          status: "todo",
+          labels: ["z"],
+        },
+      }),
+      JSON.stringify({
+        schema: 1,
+        type: "TicketUpdated",
+        id: "e2",
+        ts: "2026-01-03T00:00:00.000Z",
+        actor: "b",
+        payload: { id: "t1", labels: [] },
+      }),
+    ];
+    expect(replayEvents(lines).tickets.get("t1")?.labels).toBeUndefined();
+  });
 });

@@ -250,4 +250,105 @@ describe("ticketMatchesTicketListQuery", () => {
       ),
     ).toBe(false);
   });
+
+  it("filters by priority OR-set", () => {
+    const projection = emptyProjection();
+    const q: TicketListQuery = { priorities: ["high", "urgent"] };
+    expect(
+      ticketMatchesTicketListQuery(
+        { ...baseTicket, priority: "low" },
+        projection,
+        q,
+      ),
+    ).toBe(false);
+    expect(
+      ticketMatchesTicketListQuery(
+        { ...baseTicket, priority: "high" },
+        projection,
+        q,
+      ),
+    ).toBe(true);
+    expect(ticketMatchesTicketListQuery({ ...baseTicket }, projection, q)).toBe(
+      false,
+    );
+  });
+
+  it("filters by size OR-set", () => {
+    const projection = emptyProjection();
+    const q: TicketListQuery = { sizes: ["s", "m"] };
+    expect(
+      ticketMatchesTicketListQuery(
+        { ...baseTicket, size: "xl" },
+        projection,
+        q,
+      ),
+    ).toBe(false);
+    expect(
+      ticketMatchesTicketListQuery({ ...baseTicket, size: "m" }, projection, q),
+    ).toBe(true);
+  });
+
+  it("filters by labelsAll (AND)", () => {
+    const projection = emptyProjection();
+    const q: TicketListQuery = { labelsAll: ["a", "b"] };
+    expect(
+      ticketMatchesTicketListQuery(
+        { ...baseTicket, labels: ["a"] },
+        projection,
+        q,
+      ),
+    ).toBe(false);
+    expect(
+      ticketMatchesTicketListQuery(
+        { ...baseTicket, labels: ["a", "b"] },
+        projection,
+        q,
+      ),
+    ).toBe(true);
+  });
+
+  it("filters by estimate bounds", () => {
+    const projection = emptyProjection();
+    expect(
+      ticketMatchesTicketListQuery({ ...baseTicket, estimate: 5 }, projection, {
+        estimateMin: 3,
+        estimateMax: 7,
+      }),
+    ).toBe(true);
+    expect(
+      ticketMatchesTicketListQuery({ ...baseTicket, estimate: 2 }, projection, {
+        estimateMin: 3,
+      }),
+    ).toBe(false);
+    expect(
+      ticketMatchesTicketListQuery({ ...baseTicket }, projection, {
+        estimateMax: 1,
+      }),
+    ).toBe(false);
+  });
+
+  it("filters by startWorkAt and targetFinishAt bounds", () => {
+    const projection = emptyProjection();
+    const t = {
+      ...baseTicket,
+      startWorkAt: "2026-02-15T12:00:00.000Z",
+      targetFinishAt: "2026-02-20T12:00:00.000Z",
+    };
+    const mid = Date.parse("2026-02-16T00:00:00.000Z");
+    expect(
+      ticketMatchesTicketListQuery(t, projection, {
+        startWorkAfterMs: mid,
+      }),
+    ).toBe(false);
+    expect(
+      ticketMatchesTicketListQuery(t, projection, {
+        startWorkBeforeMs: mid,
+      }),
+    ).toBe(true);
+    expect(
+      ticketMatchesTicketListQuery(t, projection, {
+        targetFinishAfterMs: Date.parse("2026-02-19T00:00:00.000Z"),
+      }),
+    ).toBe(true);
+  });
 });

@@ -266,6 +266,18 @@ describe("hyper-pm CLI (e2e)", () => {
         "acceptance",
         "--status",
         "todo",
+        "--label",
+        "e2e-label",
+        "--priority",
+        "medium",
+        "--size",
+        "s",
+        "--estimate",
+        "2",
+        "--start-at",
+        "2026-06-01T00:00:00.000Z",
+        "--target-finish-at",
+        "2026-06-15T00:00:00.000Z",
       ],
       { repoRoot, tempDir, clock, actor: "e2e" },
     );
@@ -277,8 +289,73 @@ describe("hyper-pm CLI (e2e)", () => {
     );
     expect(ticketRead.code).toBe(ExitCode.Success);
     expect(ticketRead.json).toEqual(
-      expect.objectContaining({ id: "ticket-e2e-1", title: "Ticket A" }),
+      expect.objectContaining({
+        id: "ticket-e2e-1",
+        title: "Ticket A",
+        labels: ["e2e-label"],
+        priority: "medium",
+        size: "s",
+        estimate: 2,
+        startWorkAt: "2026-06-01T00:00:00.000Z",
+        targetFinishAt: "2026-06-15T00:00:00.000Z",
+      }),
     );
+
+    const ticketListPlanningFilter = await invokeHyperPmCli(
+      [
+        "ticket",
+        "read",
+        "--story",
+        "story-e2e-1",
+        "--priority",
+        "medium",
+        "--label",
+        "e2e-label",
+        "--estimate-min",
+        "1",
+      ],
+      { repoRoot, tempDir, clock },
+    );
+    expect(ticketListPlanningFilter.code).toBe(ExitCode.Success);
+    expect(ticketListPlanningFilter.json).toEqual(
+      expect.objectContaining({
+        items: [
+          expect.objectContaining({
+            id: "ticket-e2e-1",
+            labels: ["e2e-label"],
+            priority: "medium",
+          }),
+        ],
+      }),
+    );
+
+    const ticketPlanningPatch = await invokeHyperPmCli(
+      [
+        "ticket",
+        "update",
+        "--id",
+        "ticket-e2e-1",
+        "--add-label",
+        "extra",
+        "--estimate",
+        "5",
+        "--clear-start-at",
+      ],
+      { repoRoot, tempDir, clock, actor: "e2e" },
+    );
+    expect(ticketPlanningPatch.code).toBe(ExitCode.Success);
+    const ticketReadAfterPlanningPatch = await invokeHyperPmCli(
+      ["ticket", "read", "--id", "ticket-e2e-1"],
+      { repoRoot, tempDir, clock },
+    );
+    expect(ticketReadAfterPlanningPatch.json).toEqual(
+      expect.objectContaining({
+        id: "ticket-e2e-1",
+        labels: ["e2e-label", "extra"],
+        estimate: 5,
+      }),
+    );
+    expect(ticketReadAfterPlanningPatch.json).not.toHaveProperty("startWorkAt");
 
     const ticketComment = await invokeHyperPmCli(
       [

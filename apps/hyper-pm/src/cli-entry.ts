@@ -15,6 +15,14 @@ import {
   normalizeTicketBranchName,
 } from "./lib/normalize-ticket-branches";
 import {
+  normalizeTicketLabelList,
+  ticketLabelListsEqual,
+  tryParseTicketPriority,
+  tryParseTicketSize,
+  type TicketPriority,
+  type TicketSize,
+} from "./lib/ticket-planning-fields";
+import {
   parseWorkItemStatus,
   type WorkItemStatus,
 } from "./lib/work-item-status";
@@ -174,6 +182,117 @@ const parseCliOptionalIsoMillis = (
 };
 
 /**
+ * Parses an optional ISO-8601 instant for ticket payloads; exits when non-empty input is invalid.
+ *
+ * @param raw - Flag value (omit or empty to skip).
+ * @param flagName - Flag label for error messages.
+ * @param deps - Process boundary for user-facing errors.
+ * @returns Trimmed instant string, or `undefined` when `raw` is absent or empty.
+ */
+const parseCliOptionalIsoInstantString = (
+  raw: string | undefined,
+  flagName: string,
+  deps: {
+    exit: (code: number) => never;
+    error: typeof console.error;
+  },
+): string | undefined => {
+  if (raw === undefined || raw === "") {
+    return undefined;
+  }
+  const t = raw.trim();
+  if (tryParseIsoDateMillis(t) === null) {
+    deps.error(
+      `Invalid ${flagName} ${JSON.stringify(raw)} (expected a parseable ISO-8601 date/time)`,
+    );
+    deps.exit(ExitCode.UserError);
+  }
+  return t;
+};
+
+/**
+ * Parses an optional non-negative finite number for estimate bounds.
+ *
+ * @param raw - Flag value.
+ * @param flagName - Flag label for errors.
+ * @param deps - Process boundary for user-facing errors.
+ */
+const parseCliOptionalEstimateBound = (
+  raw: string | undefined,
+  flagName: string,
+  deps: {
+    exit: (code: number) => never;
+    error: typeof console.error;
+  },
+): number | undefined => {
+  if (raw === undefined || raw === "") {
+    return undefined;
+  }
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) {
+    deps.error(
+      `Invalid ${flagName} ${JSON.stringify(raw)} (expected a non-negative finite number)`,
+    );
+    deps.exit(ExitCode.UserError);
+  }
+  return n;
+};
+
+/**
+ * Parses repeated `--priority` list tokens for ticket list filters.
+ *
+ * @param raws - Non-empty raw strings.
+ * @param deps - Process boundary for user-facing errors.
+ */
+const parseCliTicketPriorityList = (
+  raws: readonly string[],
+  deps: {
+    exit: (code: number) => never;
+    error: typeof console.error;
+  },
+): TicketPriority[] => {
+  const out: TicketPriority[] = [];
+  for (const raw of raws) {
+    const p = tryParseTicketPriority(raw);
+    if (p === undefined) {
+      deps.error(
+        `Invalid --priority ${JSON.stringify(raw)} (expected low|medium|high|urgent)`,
+      );
+      deps.exit(ExitCode.UserError);
+    }
+    out.push(p);
+  }
+  return out;
+};
+
+/**
+ * Parses repeated `--size` list tokens for ticket list filters.
+ *
+ * @param raws - Non-empty raw strings.
+ * @param deps - Process boundary for user-facing errors.
+ */
+const parseCliTicketSizeList = (
+  raws: readonly string[],
+  deps: {
+    exit: (code: number) => never;
+    error: typeof console.error;
+  },
+): TicketSize[] => {
+  const out: TicketSize[] = [];
+  for (const raw of raws) {
+    const s = tryParseTicketSize(raw);
+    if (s === undefined) {
+      deps.error(
+        `Invalid --size ${JSON.stringify(raw)} (expected xs|s|m|l|xl)`,
+      );
+      deps.exit(ExitCode.UserError);
+    }
+    out.push(s);
+  }
+  return out;
+};
+
+/**
  * Parses repeated `--status` tokens into workflow statuses, exiting on the first invalid token.
  *
  * @param raws - Non-empty list of raw status strings.
@@ -227,6 +346,15 @@ const buildTicketListQueryFromReadListOpts = (
     githubLinked?: boolean;
     /** When set and non-empty, normalized exact match on a linked branch. */
     branch?: string;
+    priority?: string | string[];
+    size?: string | string[];
+    label?: string | string[];
+    estimateMin?: string;
+    estimateMax?: string;
+    startAfter?: string;
+    startBefore?: string;
+    targetFinishAfter?: string;
+    targetFinishBefore?: string;
   },
   deps: {
     exit: (code: number) => never;
@@ -315,6 +443,71 @@ const buildTicketListQueryFromReadListOpts = (
   if (o.withoutStory === true) {
     query.withoutStoryOnly = true;
   }
+
+  const priorityTokens = normalizeCliStringList(o.priority);
+  if (priorityTokens.length > 0) {
+    query.priorities = parseCliTicketPriorityList(priorityTokens, deps);
+  }
+  const sizeTokens = normalizeCliStringList(o.size);
+  if (sizeTokens.length > 0) {
+    query.sizes = parseCliTicketSizeList(sizeTokens, deps);
+  }
+  const labelTokens = normalizeCliStringList(o.label);
+  const labelsAll = labelTokens.map((x) => x.trim()).filter((x) => x !== "");
+  if (labelsAll.length > 0) {
+    query.labelsAll = labelsAll;
+  }
+
+  const estimateMin = parseCliOptionalEstimateBound(
+    o.estimateMin,
+    "--estimate-min",
+    deps,
+  );
+  if (estimateMin !== undefined) {
+    query.estimateMin = estimateMin;
+  }
+  const estimateMax = parseCliOptionalEstimateBound(
+    o.estimateMax,
+    "--estimate-max",
+    deps,
+  );
+  if (estimateMax !== undefined) {
+    query.estimateMax = estimateMax;
+  }
+
+  const startWorkAfterMs = parseCliOptionalIsoMillis(
+    o.startAfter,
+    "--start-after",
+    deps,
+  );
+  if (startWorkAfterMs !== undefined) {
+    query.startWorkAfterMs = startWorkAfterMs;
+  }
+  const startWorkBeforeMs = parseCliOptionalIsoMillis(
+    o.startBefore,
+    "--start-before",
+    deps,
+  );
+  if (startWorkBeforeMs !== undefined) {
+    query.startWorkBeforeMs = startWorkBeforeMs;
+  }
+  const targetFinishAfterMs = parseCliOptionalIsoMillis(
+    o.targetFinishAfter,
+    "--target-finish-after",
+    deps,
+  );
+  if (targetFinishAfterMs !== undefined) {
+    query.targetFinishAfterMs = targetFinishAfterMs;
+  }
+  const targetFinishBeforeMs = parseCliOptionalIsoMillis(
+    o.targetFinishBefore,
+    "--target-finish-before",
+    deps,
+  );
+  if (targetFinishBeforeMs !== undefined) {
+    query.targetFinishBeforeMs = targetFinishBeforeMs;
+  }
+
   return Object.keys(query).length > 0 ? query : undefined;
 };
 
@@ -617,6 +810,17 @@ export const runCli = async (
       (value: string, previous: string[]) => [...previous, value],
       [],
     )
+    .option(
+      "--label <name>",
+      "planning label (repeatable)",
+      (value: string, previous: string[]) => [...previous, value],
+      [],
+    )
+    .option("--priority <p>", "low|medium|high|urgent")
+    .option("--size <s>", "xs|s|m|l|xl")
+    .option("--estimate <n>", "non-negative estimate (e.g. story points)")
+    .option("--start-at <iso>", "planned start work at (ISO-8601)")
+    .option("--target-finish-at <iso>", "planned target finish at (ISO-8601)")
     .option("--ai-draft", "draft body via AI (explicit)", false)
     .action(async function (this: Command) {
       const g = readGlobals(this);
@@ -628,6 +832,12 @@ export const runCli = async (
         status?: string;
         assignee?: string;
         branch?: string | string[];
+        label?: string | string[];
+        priority?: string;
+        size?: string;
+        estimate?: string;
+        startAt?: string;
+        targetFinishAt?: string;
         aiDraft?: boolean;
       }>();
       let body = o.body;
@@ -645,6 +855,61 @@ export const runCli = async (
         deps.error("--assignee must be a non-empty login");
         deps.exit(ExitCode.UserError);
       }
+      const labelTokensCreate = normalizeCliStringList(o.label);
+      const labelsNormCreate = normalizeTicketLabelList(labelTokensCreate);
+      const labelsPayloadCreate =
+        labelsNormCreate.length > 0 ? { labels: labelsNormCreate } : {};
+      let priorityParsed: TicketPriority | undefined;
+      if (o.priority !== undefined && o.priority !== "") {
+        priorityParsed = tryParseTicketPriority(o.priority);
+        if (priorityParsed === undefined) {
+          deps.error(
+            `Invalid --priority ${JSON.stringify(o.priority)} (expected low|medium|high|urgent)`,
+          );
+          deps.exit(ExitCode.UserError);
+        }
+      }
+      let sizeParsed: TicketSize | undefined;
+      if (o.size !== undefined && o.size !== "") {
+        sizeParsed = tryParseTicketSize(o.size);
+        if (sizeParsed === undefined) {
+          deps.error(
+            `Invalid --size ${JSON.stringify(o.size)} (expected xs|s|m|l|xl)`,
+          );
+          deps.exit(ExitCode.UserError);
+        }
+      }
+      let estimateParsed: number | undefined;
+      if (o.estimate !== undefined && o.estimate !== "") {
+        const n = Number(o.estimate);
+        if (!Number.isFinite(n) || n < 0) {
+          deps.error(
+            `Invalid --estimate ${JSON.stringify(o.estimate)} (expected a non-negative finite number)`,
+          );
+          deps.exit(ExitCode.UserError);
+        }
+        estimateParsed = n;
+      }
+      const startAtStr = parseCliOptionalIsoInstantString(
+        o.startAt,
+        "--start-at",
+        deps,
+      );
+      const targetFinishAtStr = parseCliOptionalIsoInstantString(
+        o.targetFinishAt,
+        "--target-finish-at",
+        deps,
+      );
+      const planningPayload: Record<string, unknown> = {
+        ...labelsPayloadCreate,
+        ...(priorityParsed !== undefined ? { priority: priorityParsed } : {}),
+        ...(sizeParsed !== undefined ? { size: sizeParsed } : {}),
+        ...(estimateParsed !== undefined ? { estimate: estimateParsed } : {}),
+        ...(startAtStr !== undefined ? { startWorkAt: startAtStr } : {}),
+        ...(targetFinishAtStr !== undefined
+          ? { targetFinishAt: targetFinishAtStr }
+          : {}),
+      };
       await mutateDataBranch(g, deps, async (root, { actor }) => {
         const lines = await readAllEventLines(root);
         const proj = replayEvents(lines);
@@ -681,6 +946,7 @@ export const runCli = async (
             ...(status !== undefined ? { status } : {}),
             ...assigneeCreate,
             ...branchesPayload,
+            ...planningPayload,
           },
           deps.clock,
           actor,
@@ -757,6 +1023,48 @@ export const runCli = async (
       "when listing (no --id): only tickets linked to this branch (normalized exact match)",
     )
     .option(
+      "--priority <p>",
+      "when listing (no --id): OR-set of priorities (repeat flag); low|medium|high|urgent",
+      (value: string, previous: string[]) => [...previous, value],
+      [],
+    )
+    .option(
+      "--size <s>",
+      "when listing (no --id): OR-set of sizes (repeat flag); xs|s|m|l|xl",
+      (value: string, previous: string[]) => [...previous, value],
+      [],
+    )
+    .option(
+      "--label <name>",
+      "when listing (no --id): ticket must include this label (repeat = AND all listed)",
+      (value: string, previous: string[]) => [...previous, value],
+      [],
+    )
+    .option(
+      "--estimate-min <n>",
+      "when listing (no --id): inclusive lower bound on estimate",
+    )
+    .option(
+      "--estimate-max <n>",
+      "when listing (no --id): inclusive upper bound on estimate",
+    )
+    .option(
+      "--start-after <iso>",
+      "when listing (no --id): inclusive lower bound on startWorkAt (ISO-8601)",
+    )
+    .option(
+      "--start-before <iso>",
+      "when listing (no --id): inclusive upper bound on startWorkAt (ISO-8601)",
+    )
+    .option(
+      "--target-finish-after <iso>",
+      "when listing (no --id): inclusive lower bound on targetFinishAt (ISO-8601)",
+    )
+    .option(
+      "--target-finish-before <iso>",
+      "when listing (no --id): inclusive upper bound on targetFinishAt (ISO-8601)",
+    )
+    .option(
       "--without-story",
       "when listing (no --id): only tickets without a story (cannot combine with --story or --epic)",
       false,
@@ -786,6 +1094,15 @@ export const runCli = async (
         githubLinked?: boolean;
         branch?: string;
         withoutStory?: boolean;
+        priority?: string | string[];
+        size?: string | string[];
+        label?: string | string[];
+        estimateMin?: string;
+        estimateMax?: string;
+        startAfter?: string;
+        startBefore?: string;
+        targetFinishAfter?: string;
+        targetFinishBefore?: string;
         sortBy?: string;
         sortDir?: string;
       }>();
@@ -824,6 +1141,33 @@ export const runCli = async (
       "remove all linked git branches from the ticket",
       false,
     )
+    .option(
+      "--add-label <name>",
+      "add a planning label (repeatable)",
+      (value: string, previous: string[]) => [...previous, value],
+      [],
+    )
+    .option(
+      "--remove-label <name>",
+      "remove a planning label by exact text (repeatable)",
+      (value: string, previous: string[]) => [...previous, value],
+      [],
+    )
+    .option(
+      "--clear-labels",
+      "remove all planning labels from the ticket",
+      false,
+    )
+    .option("--priority <p>", "low|medium|high|urgent")
+    .option("--clear-priority", "remove priority", false)
+    .option("--size <s>", "xs|s|m|l|xl")
+    .option("--clear-size", "remove size", false)
+    .option("--estimate <n>", "non-negative estimate (e.g. story points)")
+    .option("--clear-estimate", "remove estimate", false)
+    .option("--start-at <iso>", "planned start work at (ISO-8601)")
+    .option("--clear-start-at", "remove start work date", false)
+    .option("--target-finish-at <iso>", "planned target finish at (ISO-8601)")
+    .option("--clear-target-finish-at", "remove target finish date", false)
     .option("--ai-improve", "expand description via AI (explicit)", false)
     .action(async function (this: Command) {
       const g = readGlobals(this);
@@ -839,6 +1183,19 @@ export const runCli = async (
         addBranch?: string | string[];
         removeBranch?: string | string[];
         clearBranches?: boolean;
+        addLabel?: string | string[];
+        removeLabel?: string | string[];
+        clearLabels?: boolean;
+        priority?: string;
+        clearPriority?: boolean;
+        size?: string;
+        clearSize?: boolean;
+        estimate?: string;
+        clearEstimate?: boolean;
+        startAt?: string;
+        clearStartAt?: boolean;
+        targetFinishAt?: string;
+        clearTargetFinishAt?: boolean;
         aiImprove?: boolean;
       }>();
       let body = o.body;
@@ -885,6 +1242,89 @@ export const runCli = async (
         );
         deps.exit(ExitCode.UserError);
       }
+      const addLabelTokens = normalizeCliStringList(o.addLabel);
+      const removeLabelTokens = normalizeCliStringList(o.removeLabel);
+      if (
+        o.clearLabels === true &&
+        (addLabelTokens.length > 0 || removeLabelTokens.length > 0)
+      ) {
+        deps.error(
+          "Cannot use --clear-labels with --add-label or --remove-label",
+        );
+        deps.exit(ExitCode.UserError);
+      }
+      const mutual = (
+        clear: boolean | undefined,
+        set: string | undefined,
+        clearName: string,
+        setName: string,
+      ): void => {
+        if (clear === true && set !== undefined && set !== "") {
+          deps.error(`Cannot use ${clearName} and ${setName} together`);
+          deps.exit(ExitCode.UserError);
+        }
+      };
+      mutual(o.clearPriority, o.priority, "--clear-priority", "--priority");
+      mutual(o.clearSize, o.size, "--clear-size", "--size");
+      mutual(o.clearEstimate, o.estimate, "--clear-estimate", "--estimate");
+      mutual(o.clearStartAt, o.startAt, "--clear-start-at", "--start-at");
+      mutual(
+        o.clearTargetFinishAt,
+        o.targetFinishAt,
+        "--clear-target-finish-at",
+        "--target-finish-at",
+      );
+      let priorityUpdate: TicketPriority | null | undefined;
+      if (o.clearPriority === true) {
+        priorityUpdate = null;
+      } else if (o.priority !== undefined && o.priority !== "") {
+        const p = tryParseTicketPriority(o.priority);
+        if (p === undefined) {
+          deps.error(
+            `Invalid --priority ${JSON.stringify(o.priority)} (expected low|medium|high|urgent)`,
+          );
+          deps.exit(ExitCode.UserError);
+        }
+        priorityUpdate = p;
+      }
+      let sizeUpdate: TicketSize | null | undefined;
+      if (o.clearSize === true) {
+        sizeUpdate = null;
+      } else if (o.size !== undefined && o.size !== "") {
+        const s = tryParseTicketSize(o.size);
+        if (s === undefined) {
+          deps.error(
+            `Invalid --size ${JSON.stringify(o.size)} (expected xs|s|m|l|xl)`,
+          );
+          deps.exit(ExitCode.UserError);
+        }
+        sizeUpdate = s;
+      }
+      let estimateUpdate: number | null | undefined;
+      if (o.clearEstimate === true) {
+        estimateUpdate = null;
+      } else if (o.estimate !== undefined && o.estimate !== "") {
+        const n = Number(o.estimate);
+        if (!Number.isFinite(n) || n < 0) {
+          deps.error(
+            `Invalid --estimate ${JSON.stringify(o.estimate)} (expected a non-negative finite number)`,
+          );
+          deps.exit(ExitCode.UserError);
+        }
+        estimateUpdate = n;
+      }
+      const startAtUpdate: string | null | undefined =
+        o.clearStartAt === true
+          ? null
+          : parseCliOptionalIsoInstantString(o.startAt, "--start-at", deps);
+      const targetFinishUpdate: string | null | undefined =
+        o.clearTargetFinishAt === true
+          ? null
+          : parseCliOptionalIsoInstantString(
+              o.targetFinishAt,
+              "--target-finish-at",
+              deps,
+            );
       await mutateDataBranch(g, deps, async (root, { actor }) => {
         const lines = await readAllEventLines(root);
         const proj = replayEvents(lines);
@@ -939,6 +1379,49 @@ export const runCli = async (
           if (!ticketBranchListsEqual(next, curRow.linkedBranches)) {
             payload["branches"] = next;
           }
+        }
+        const wantsLabelChange =
+          o.clearLabels === true ||
+          addLabelTokens.length > 0 ||
+          removeLabelTokens.length > 0;
+        if (wantsLabelChange) {
+          const curRow = proj.tickets.get(o.id);
+          if (curRow === undefined || curRow.deleted) {
+            throw new Error(`Ticket not found: ${o.id}`);
+          }
+          let nextLabels: string[];
+          if (o.clearLabels === true) {
+            nextLabels = [];
+          } else {
+            const removeSet = new Set(
+              normalizeTicketLabelList(removeLabelTokens),
+            );
+            nextLabels = normalizeTicketLabelList(
+              (curRow.labels ?? []).filter((lb) => !removeSet.has(lb)),
+            );
+            nextLabels = normalizeTicketLabelList([
+              ...nextLabels,
+              ...addLabelTokens,
+            ]);
+          }
+          if (!ticketLabelListsEqual(curRow.labels, nextLabels)) {
+            payload["labels"] = nextLabels;
+          }
+        }
+        if (priorityUpdate !== undefined) {
+          payload["priority"] = priorityUpdate;
+        }
+        if (sizeUpdate !== undefined) {
+          payload["size"] = sizeUpdate;
+        }
+        if (estimateUpdate !== undefined) {
+          payload["estimate"] = estimateUpdate;
+        }
+        if (startAtUpdate !== undefined) {
+          payload["startWorkAt"] = startAtUpdate;
+        }
+        if (targetFinishUpdate !== undefined) {
+          payload["targetFinishAt"] = targetFinishUpdate;
         }
         const evt = makeEvent("TicketUpdated", payload, deps.clock, actor);
         await appendEventLine(root, evt, deps.clock);
@@ -1483,6 +1966,15 @@ const readTicket = async (
     githubLinked?: boolean;
     branch?: string;
     withoutStory?: boolean;
+    priority?: string | string[];
+    size?: string | string[];
+    label?: string | string[];
+    estimateMin?: string;
+    estimateMax?: string;
+    startAfter?: string;
+    startBefore?: string;
+    targetFinishAfter?: string;
+    targetFinishBefore?: string;
     sortBy?: string;
     sortDir?: string;
   },

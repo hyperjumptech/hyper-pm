@@ -603,4 +603,51 @@ describe("listActiveTicketSummaries", () => {
     // Assert
     expect(rows.map((r) => r.id)).toEqual(["t-late", "t-early"]);
   });
+
+  it("includes planning metadata in summaries when set on tickets", () => {
+    const projection = projectionWith({
+      tickets: new Map([
+        [
+          "t1",
+          {
+            id: "t1",
+            storyId: null,
+            title: "T",
+            body: "",
+            status: "todo",
+            linkedPrs: [],
+            linkedBranches: [],
+            labels: ["bug"],
+            priority: "high",
+            size: "m",
+            estimate: 3,
+            startWorkAt: "2026-02-01T00:00:00.000Z",
+            targetFinishAt: "2026-02-10T00:00:00.000Z",
+            ...audit,
+            ...statusAudit,
+          },
+        ],
+      ]),
+    });
+
+    // Act
+    const rows = listActiveTicketSummaries(projection);
+
+    // Assert
+    expect(rows).toEqual([
+      {
+        id: "t1",
+        title: "T",
+        status: "todo",
+        storyId: null,
+        labels: ["bug"],
+        priority: "high",
+        size: "m",
+        estimate: 3,
+        startWorkAt: "2026-02-01T00:00:00.000Z",
+        targetFinishAt: "2026-02-10T00:00:00.000Z",
+        ...audit,
+      },
+    ]);
+  });
 });

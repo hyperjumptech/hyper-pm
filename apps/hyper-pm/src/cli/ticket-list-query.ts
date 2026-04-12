@@ -1,3 +1,4 @@
+import type { TicketPriority, TicketSize } from "../lib/ticket-planning-fields";
 import type { WorkItemStatus } from "../lib/work-item-status";
 import type { Projection, TicketRecord } from "../storage/projection";
 
@@ -5,7 +6,8 @@ import type { Projection, TicketRecord } from "../storage/projection";
  * Advanced filters for listing tickets (`ticket read` without `--id`).
  *
  * Dimensions combine with **AND**. Multiple `--status` values combine with **OR**
- * (ticket matches if its status is any listed status).
+ * (ticket matches if its status is any listed status). The same **OR** rule applies
+ * to repeated `--priority` and `--size` flags.
  *
  * Time bounds are **inclusive** on the parsed instant (`>=` after, `<=` before).
  */
@@ -46,6 +48,26 @@ export type TicketListQuery = {
   branchNormalized?: string;
   /** When true, only tickets with no story (`storyId === null`). */
   withoutStoryOnly?: boolean;
+  /** When non-empty, ticket `priority` must be one of these (OR). */
+  priorities?: readonly TicketPriority[];
+  /** When non-empty, ticket `size` must be one of these (OR). */
+  sizes?: readonly TicketSize[];
+  /**
+   * When non-empty, the ticket must include **every** listed label (trimmed exact match on `ticket.labels`).
+   */
+  labelsAll?: readonly string[];
+  /** Inclusive lower bound on `estimate` (tickets without `estimate` do not match). */
+  estimateMin?: number;
+  /** Inclusive upper bound on `estimate` (tickets without `estimate` do not match). */
+  estimateMax?: number;
+  /** Inclusive lower bound on `startWorkAt` (epoch ms). */
+  startWorkAfterMs?: number;
+  /** Inclusive upper bound on `startWorkAt` (epoch ms). */
+  startWorkBeforeMs?: number;
+  /** Inclusive lower bound on `targetFinishAt` (epoch ms). */
+  targetFinishAfterMs?: number;
+  /** Inclusive upper bound on `targetFinishAt` (epoch ms). */
+  targetFinishBeforeMs?: number;
 };
 
 /**
@@ -174,6 +196,70 @@ export const ticketMatchesTicketListQuery = (
   const branchNeedle = query.branchNormalized;
   if (branchNeedle !== undefined) {
     if (!ticket.linkedBranches.includes(branchNeedle)) {
+      return false;
+    }
+  }
+
+  const priorities = query.priorities;
+  if (priorities !== undefined && priorities.length > 0) {
+    const p = ticket.priority;
+    if (p === undefined || !priorities.includes(p)) {
+      return false;
+    }
+  }
+
+  const sizes = query.sizes;
+  if (sizes !== undefined && sizes.length > 0) {
+    const s = ticket.size;
+    if (s === undefined || !sizes.includes(s)) {
+      return false;
+    }
+  }
+
+  const labelsAll = query.labelsAll;
+  if (labelsAll !== undefined && labelsAll.length > 0) {
+    const labs = ticket.labels ?? [];
+    for (const need of labelsAll) {
+      if (!labs.includes(need)) {
+        return false;
+      }
+    }
+  }
+
+  const est = ticket.estimate;
+  if (query.estimateMin !== undefined) {
+    if (est === undefined || est < query.estimateMin) {
+      return false;
+    }
+  }
+  if (query.estimateMax !== undefined) {
+    if (est === undefined || est > query.estimateMax) {
+      return false;
+    }
+  }
+
+  const startMs =
+    ticket.startWorkAt !== undefined ? parseTs(ticket.startWorkAt) : null;
+  if (query.startWorkAfterMs !== undefined) {
+    if (startMs === null || startMs < query.startWorkAfterMs) {
+      return false;
+    }
+  }
+  if (query.startWorkBeforeMs !== undefined) {
+    if (startMs === null || startMs > query.startWorkBeforeMs) {
+      return false;
+    }
+  }
+
+  const targetMs =
+    ticket.targetFinishAt !== undefined ? parseTs(ticket.targetFinishAt) : null;
+  if (query.targetFinishAfterMs !== undefined) {
+    if (targetMs === null || targetMs < query.targetFinishAfterMs) {
+      return false;
+    }
+  }
+  if (query.targetFinishBeforeMs !== undefined) {
+    if (targetMs === null || targetMs > query.targetFinishBeforeMs) {
       return false;
     }
   }

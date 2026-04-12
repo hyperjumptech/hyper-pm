@@ -1,4 +1,5 @@
 import type { GithubPrActivityKind } from "../lib/github-pr-activity";
+import type { TicketPriority, TicketSize } from "../lib/ticket-planning-fields";
 import type { WorkItemStatus } from "../lib/work-item-status";
 import type { Projection, TicketRecord } from "../storage/projection";
 import {
@@ -53,6 +54,12 @@ export type TicketListSummary = {
   /** Linked git branch names when non-empty. */
   linkedBranches?: string[];
   lastPrActivity?: TicketLastPrActivitySummary;
+  labels?: string[];
+  priority?: TicketPriority;
+  size?: TicketSize;
+  estimate?: number;
+  startWorkAt?: string;
+  targetFinishAt?: string;
 } & AuditSummaryFields;
 
 /**
@@ -173,6 +180,16 @@ export const listActiveTicketSummaries = (
       status: t.status,
       storyId: t.storyId,
       ...(t.assignee !== undefined ? { assignee: t.assignee } : {}),
+      ...(t.labels !== undefined && t.labels.length > 0
+        ? { labels: t.labels }
+        : {}),
+      ...(t.priority !== undefined ? { priority: t.priority } : {}),
+      ...(t.size !== undefined ? { size: t.size } : {}),
+      ...(t.estimate !== undefined ? { estimate: t.estimate } : {}),
+      ...(t.startWorkAt !== undefined ? { startWorkAt: t.startWorkAt } : {}),
+      ...(t.targetFinishAt !== undefined
+        ? { targetFinishAt: t.targetFinishAt }
+        : {}),
       ...(t.linkedBranches.length > 0
         ? { linkedBranches: t.linkedBranches }
         : {}),

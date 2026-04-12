@@ -123,6 +123,55 @@ const workItemUpdateAspects = (
   if (kind === "ticket" && payload["branches"] !== undefined) {
     aspects.push(branchesPhrase(normalizeBranchList(payload["branches"])));
   }
+  if (kind === "ticket" && payload["labels"] !== undefined) {
+    if (payload["labels"] === null) {
+      aspects.push("cleared labels");
+    } else {
+      const lb = normalizeBranchList(payload["labels"]);
+      if (lb.length > 0) {
+        aspects.push(`set labels to (${lb.join(", ")})`);
+      } else {
+        aspects.push("cleared labels");
+      }
+    }
+  }
+  if (kind === "ticket" && payload["priority"] !== undefined) {
+    if (payload["priority"] === null) {
+      aspects.push("cleared priority");
+    } else {
+      aspects.push(
+        `set priority to ${quoteStatus(String(payload["priority"]))}`,
+      );
+    }
+  }
+  if (kind === "ticket" && payload["size"] !== undefined) {
+    if (payload["size"] === null) {
+      aspects.push("cleared size");
+    } else {
+      aspects.push(`set size to ${quoteStatus(String(payload["size"]))}`);
+    }
+  }
+  if (kind === "ticket" && payload["estimate"] !== undefined) {
+    if (payload["estimate"] === null) {
+      aspects.push("cleared estimate");
+    } else {
+      aspects.push(`set estimate to ${String(payload["estimate"])}`);
+    }
+  }
+  if (kind === "ticket" && payload["startWorkAt"] !== undefined) {
+    if (payload["startWorkAt"] === null) {
+      aspects.push("cleared start work date");
+    } else {
+      aspects.push("updated start work date");
+    }
+  }
+  if (kind === "ticket" && payload["targetFinishAt"] !== undefined) {
+    if (payload["targetFinishAt"] === null) {
+      aspects.push("cleared target finish date");
+    } else {
+      aspects.push("updated target finish date");
+    }
+  }
   if (payload["title"] !== undefined) {
     aspects.push("changed the title");
   }
@@ -257,6 +306,29 @@ const formatEpicStoryTicketCreated = (
       } else if (b.length > MAX_BRANCH_NAMES_TO_LIST) {
         parts.push("with linked branches");
       }
+    }
+    if (p["labels"] !== undefined) {
+      const lb = normalizeBranchList(p["labels"]);
+      if (lb.length > 0 && lb.length <= MAX_BRANCH_NAMES_TO_LIST) {
+        parts.push(`with labels (${lb.join(", ")})`);
+      } else if (lb.length > MAX_BRANCH_NAMES_TO_LIST) {
+        parts.push("with labels");
+      }
+    }
+    if (p["priority"] !== undefined) {
+      parts.push(`with priority ${quoteStatus(String(p["priority"]))}`);
+    }
+    if (p["size"] !== undefined) {
+      parts.push(`with size ${quoteStatus(String(p["size"]))}`);
+    }
+    if (p["estimate"] !== undefined) {
+      parts.push(`with estimate ${String(p["estimate"])}`);
+    }
+    if (p["startWorkAt"] !== undefined) {
+      parts.push("with a start work date");
+    }
+    if (p["targetFinishAt"] !== undefined) {
+      parts.push("with a target finish date");
     }
   }
   return parts.join(" ");
