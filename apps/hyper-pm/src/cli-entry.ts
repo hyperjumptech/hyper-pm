@@ -27,6 +27,11 @@ import {
   type TicketListQuery,
 } from "./cli/ticket-list-query";
 import {
+  TICKET_LIST_SORT_FIELDS,
+  tryParseTicketListSortDir,
+  tryParseTicketListSortField,
+} from "./cli/ticket-list-sort";
+import {
   hyperPmConfigSchema,
   type HyperPmConfig,
 } from "./config/hyper-pm-config";
@@ -689,6 +694,11 @@ export const runCli = async (
       "when listing (no --id): only tickets with a linked GitHub issue number",
       false,
     )
+    .option(
+      "--sort-by <field>",
+      `when listing (no --id): sort field (${TICKET_LIST_SORT_FIELDS.join("|")}); default id`,
+    )
+    .option("--sort-dir <d>", "when listing (no --id): asc|desc (default asc)")
     .action(async function (this: Command) {
       const g = readGlobals(this);
       const o = this.opts<{
@@ -707,6 +717,8 @@ export const runCli = async (
         statusChangedBy?: string;
         titleContains?: string;
         githubLinked?: boolean;
+        sortBy?: string;
+        sortDir?: string;
       }>();
       await readTicket(g, o, deps);
     });
@@ -1226,7 +1238,7 @@ const readStory = async (
  * Advanced list flags are ignored when `--id` is set. `--story` and `--epic` cannot be used together.
  *
  * @param g - Global CLI flags (repo, format, worktree, etc.).
- * @param opts - Parsed `ticket read` options (`id`, `story`, list-only filters).
+ * @param opts - Parsed `ticket read` options (`id`, `story`, list-only filters, sort flags).
  * @param deps - Injectable process boundary (log, error, exit).
  */
 const readTicket = async (
@@ -1247,6 +1259,8 @@ const readTicket = async (
     statusChangedBy?: string;
     titleContains?: string;
     githubLinked?: boolean;
+    sortBy?: string;
+    sortDir?: string;
   },
   deps: {
     exit: (code: number) => never;
@@ -1269,7 +1283,14 @@ const readTicket = async (
     try {
       const lines = await readAllEventLines(session.worktreePath);
       const proj = replayEvents(lines);
-      const { id, story: storyIdRaw, epic: epicIdRaw, ...listFlagRest } = opts;
+      const {
+        id,
+        story: storyIdRaw,
+        epic: epicIdRaw,
+        sortBy: sortByOpt,
+        sortDir: sortDirOpt,
+        ...listFlagRest
+      } = opts;
       if (id === undefined || id === "") {
         const storyFilter =
           storyIdRaw !== undefined && storyIdRaw !== ""
@@ -1277,7 +1298,23 @@ const readTicket = async (
             : undefined;
         const epicFilter =
           epicIdRaw !== undefined && epicIdRaw !== "" ? epicIdRaw : undefined;
-        if (storyFilter !== undefined && epicFilter !== undefined) {
+        const sortBy = tryParseTicketListSortField(sortByOpt);
+        const sortDir = tryParseTicketListSortDir(sortDirOpt);
+        if (sortBy === undefined) {
+          deps.error(
+            `Invalid --sort-by ${JSON.stringify(
+              sortByOpt ?? "",
+            )} (expected one of: ${TICKET_LIST_SORT_FIELDS.join(", ")})`,
+          );
+          exitCode = ExitCode.UserError;
+        } else if (sortDir === undefined) {
+          deps.error(
+            `Invalid --sort-dir ${JSON.stringify(
+              sortDirOpt ?? "",
+            )} (expected asc|desc)`,
+          );
+          exitCode = ExitCode.UserError;
+        } else if (storyFilter !== undefined && epicFilter !== undefined) {
           deps.error(
             "Cannot use --story and --epic together when listing tickets",
           );
@@ -1296,6 +1333,8 @@ const readTicket = async (
               formatOutput(g.format, {
                 items: listActiveTicketSummaries(proj, {
                   query: listQuery,
+                  sortBy,
+                  sortDir,
                 }),
               }),
             );
@@ -1315,6 +1354,8 @@ const readTicket = async (
                 items: listActiveTicketSummaries(proj, {
                   storyId: storyFilter,
                   query: listQuery,
+                  sortBy,
+                  sortDir,
                 }),
               }),
             );
@@ -1326,7 +1367,11 @@ const readTicket = async (
           );
           deps.log(
             formatOutput(g.format, {
-              items: listActiveTicketSummaries(proj, { query: listQuery }),
+              items: listActiveTicketSummaries(proj, {
+                query: listQuery,
+                sortBy,
+                sortDir,
+              }),
             }),
           );
         }

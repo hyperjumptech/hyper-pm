@@ -9,6 +9,8 @@ import {
   resolveTicketInboundStatus,
   resolveTicketStatusFromUpdatePayload,
   statusToGithubIssueState,
+  WORK_ITEM_STATUS_ORDER,
+  workItemStatusRank,
   workItemStatusSchema,
 } from "./work-item-status";
 
@@ -30,6 +32,31 @@ describe("workItemStatusSchema", () => {
 
     // Assert
     expect(parsed.success).toBe(false);
+  });
+});
+
+describe("WORK_ITEM_STATUS_ORDER", () => {
+  it("lists every workflow status exactly once", () => {
+    // Act
+    const set = new Set(WORK_ITEM_STATUS_ORDER);
+
+    // Assert
+    expect(WORK_ITEM_STATUS_ORDER).toHaveLength(5);
+    expect(set.size).toBe(5);
+  });
+});
+
+describe("workItemStatusRank", () => {
+  it("assigns increasing ranks along the board order", () => {
+    // Act
+    const backlog = workItemStatusRank("backlog");
+    const todo = workItemStatusRank("todo");
+    const cancelled = workItemStatusRank("cancelled");
+
+    // Assert
+    expect(backlog).toBe(0);
+    expect(todo).toBeGreaterThan(backlog);
+    expect(cancelled).toBe(4);
   });
 });
 

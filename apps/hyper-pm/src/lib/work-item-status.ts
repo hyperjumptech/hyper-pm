@@ -25,6 +25,22 @@ export const workItemStatusSchema = z.enum(statuses);
 export type WorkItemStatus = z.infer<typeof workItemStatusSchema>;
 
 /**
+ * Workflow statuses in board order (earlier entries sort before later ones when sorting by status ascending).
+ */
+export const WORK_ITEM_STATUS_ORDER: readonly WorkItemStatus[] = statuses;
+
+/**
+ * Returns the rank of a workflow status for ordering (0 = first in {@link WORK_ITEM_STATUS_ORDER}).
+ *
+ * @param status - Workflow status.
+ * @returns A non-negative index, or `WORK_ITEM_STATUS_ORDER.length` if `status` is not a known member.
+ */
+export const workItemStatusRank = (status: WorkItemStatus): number => {
+  const idx = statuses.indexOf(status);
+  return idx === -1 ? statuses.length : idx;
+};
+
+/**
  * Parses a payload value into a workflow status when it is a valid enum member.
  *
  * @param value - Unknown JSON payload fragment.

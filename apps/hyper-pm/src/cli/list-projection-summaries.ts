@@ -1,10 +1,17 @@
 import type { GithubPrActivityKind } from "../lib/github-pr-activity";
 import type { WorkItemStatus } from "../lib/work-item-status";
-import type { Projection } from "../storage/projection";
+import type { Projection, TicketRecord } from "../storage/projection";
 import {
   ticketMatchesTicketListQuery,
   type TicketListQuery,
 } from "./ticket-list-query";
+import {
+  DEFAULT_TICKET_LIST_SORT_DIR,
+  DEFAULT_TICKET_LIST_SORT_FIELD,
+  sortTicketRecordsForList,
+  type TicketListSortDir,
+  type TicketListSortField,
+} from "./ticket-list-sort";
 
 type AuditSummaryFields = {
   createdAt: string;
@@ -79,6 +86,10 @@ export type ListActiveTicketSummariesOptions = {
   storyId?: string;
   /** When set, additional AND filters (status, dates, epic, etc.). */
   query?: TicketListQuery;
+  /** Sort field for list rows; defaults to {@link DEFAULT_TICKET_LIST_SORT_FIELD}. */
+  sortBy?: TicketListSortField;
+  /** Sort direction; defaults to {@link DEFAULT_TICKET_LIST_SORT_DIR}. */
+  sortDir?: TicketListSortDir;
 };
 
 /**
@@ -111,19 +122,24 @@ export const listActiveStorySummaries = (
     .sort((a, b) => a.id.localeCompare(b.id));
 
 /**
- * Returns non-deleted tickets as compact rows, sorted by id.
+ * Returns non-deleted tickets as compact rows, ordered by `sortBy` / `sortDir` (default id ascending).
  *
  * @param projection - Replayed event projection.
  * @param options - When `storyId` is set, restricts to tickets under that story; omit for all active tickets.
  * @param options.query - Optional advanced filters applied after `storyId` / deleted checks.
+ * @param options.sortBy - List sort field; defaults to id.
+ * @param options.sortDir - List sort direction; defaults to ascending.
  * @returns Sorted list summaries.
  */
 export const listActiveTicketSummaries = (
   projection: Projection,
   options?: ListActiveTicketSummariesOptions,
-): TicketListSummary[] =>
-  [...projection.tickets.values()]
-    .filter((t) => {
+): TicketListSummary[] => {
+  const sortBy = options?.sortBy ?? DEFAULT_TICKET_LIST_SORT_FIELD;
+  const sortDir = options?.sortDir ?? DEFAULT_TICKET_LIST_SORT_DIR;
+
+  const filtered: TicketRecord[] = [...projection.tickets.values()].filter(
+    (t) => {
       if (t.deleted) {
         return false;
       }
@@ -135,32 +151,36 @@ export const listActiveTicketSummaries = (
         return false;
       }
       return true;
-    })
-    .map((t) => {
-      const recent = t.prActivityRecent;
-      const last =
-        recent !== undefined && recent.length > 0
-          ? recent[recent.length - 1]
-          : undefined;
-      return {
-        id: t.id,
-        title: t.title,
-        status: t.status,
-        storyId: t.storyId,
-        ...(t.assignee !== undefined ? { assignee: t.assignee } : {}),
-        ...(last !== undefined
-          ? {
-              lastPrActivity: {
-                prNumber: last.prNumber,
-                kind: last.kind,
-                occurredAt: last.occurredAt,
-              },
-            }
-          : {}),
-        createdAt: t.createdAt,
-        createdBy: t.createdBy,
-        updatedAt: t.updatedAt,
-        updatedBy: t.updatedBy,
-      };
-    })
-    .sort((a, b) => a.id.localeCompare(b.id));
+    },
+  );
+
+  const sorted = sortTicketRecordsForList(filtered, sortBy, sortDir);
+
+  return sorted.map((t) => {
+    const recent = t.prActivityRecent;
+    const last =
+      recent !== undefined && recent.length > 0
+        ? recent[recent.length - 1]
+        : undefined;
+    return {
+      id: t.id,
+      title: t.title,
+      status: t.status,
+      storyId: t.storyId,
+      ...(t.assignee !== undefined ? { assignee: t.assignee } : {}),
+      ...(last !== undefined
+        ? {
+            lastPrActivity: {
+              prNumber: last.prNumber,
+              kind: last.kind,
+              occurredAt: last.occurredAt,
+            },
+          }
+        : {}),
+      createdAt: t.createdAt,
+      createdBy: t.createdBy,
+      updatedAt: t.updatedAt,
+      updatedBy: t.updatedBy,
+    };
+  });
+};

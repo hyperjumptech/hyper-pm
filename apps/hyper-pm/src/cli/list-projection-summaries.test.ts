@@ -462,4 +462,53 @@ describe("listActiveTicketSummaries", () => {
       },
     ]);
   });
+
+  it("sorts by updatedAt descending when sort options are set", () => {
+    // Setup
+    const projection = projectionWith({
+      tickets: new Map([
+        [
+          "t-early",
+          {
+            id: "t-early",
+            storyId: "s1",
+            title: "Early",
+            body: "",
+            status: "todo",
+            linkedPrs: [],
+            createdAt: "2026-01-01T00:00:00.000Z",
+            createdBy: "a",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+            updatedBy: "a",
+            ...statusAudit,
+          },
+        ],
+        [
+          "t-late",
+          {
+            id: "t-late",
+            storyId: "s1",
+            title: "Late",
+            body: "",
+            status: "todo",
+            linkedPrs: [],
+            createdAt: "2026-01-01T00:00:00.000Z",
+            createdBy: "a",
+            updatedAt: "2026-06-01T00:00:00.000Z",
+            updatedBy: "a",
+            ...statusAudit,
+          },
+        ],
+      ]),
+    });
+
+    // Act
+    const rows = listActiveTicketSummaries(projection, {
+      sortBy: "updatedAt",
+      sortDir: "desc",
+    });
+
+    // Assert
+    expect(rows.map((r) => r.id)).toEqual(["t-late", "t-early"]);
+  });
 });
