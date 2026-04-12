@@ -9,7 +9,6 @@ import { ExitCode } from "../cli/exit-codes";
 import {
   createGitRepoWithInitialCommit,
   git,
-  sleep,
 } from "./hyper-pm-e2e-git-fixtures";
 
 /** Thrown by {@link invokeHyperPmCli} when the CLI calls injected `deps.exit`. */
@@ -358,7 +357,7 @@ describe("hyper-pm CLI (e2e)", () => {
     expect(badStatus.code).toBe(ExitCode.UserError);
   }, 120_000);
 
-  it("merges divergent hyper-pm-data clones without conflicts when events use separate shard files", async () => {
+  it("merges divergent hyper-pm-data clones without conflicts", async () => {
     // Setup — bare remote + worker1
     const base = await mkdtemp(join(tmpdir(), "hyper-pm-e2e-merge-"));
     bases.push(base);
@@ -406,8 +405,6 @@ describe("hyper-pm CLI (e2e)", () => {
     const temp2 = join(base, "tmp2");
     const clock2 = { now: () => new Date("2026-06-01T11:00:00.000Z") };
 
-    // Act — ensure distinct event shard filenames (wall-clock based)
-    await sleep(5);
     const epicW2 = await invokeHyperPmCli(
       ["epic", "create", "--id", "ep-merge-b", "--title", "From W2"],
       { repoRoot: w2, tempDir: temp2, clock: clock2, actor: "w2" },

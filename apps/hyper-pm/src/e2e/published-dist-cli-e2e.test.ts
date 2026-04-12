@@ -5,11 +5,7 @@ import { join } from "node:path";
 import { env } from "@workspace/env";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { ExitCode } from "../cli/exit-codes";
-import {
-  createGitRepoWithInitialCommit,
-  git,
-  sleep,
-} from "./hyper-pm-e2e-git-fixtures";
+import { createGitRepoWithInitialCommit, git } from "./hyper-pm-e2e-git-fixtures";
 import {
   assertDistMainExists,
   getDistMainPath,
@@ -290,7 +286,7 @@ describe("dist/main.cjs subprocess (JSON workflow parity)", () => {
     expect(badStatus.code).toBe(ExitCode.UserError);
   }, 120_000);
 
-  it("merges divergent hyper-pm-data clones without conflicts when events use separate shard files", async () => {
+  it("merges divergent hyper-pm-data clones without conflicts", async () => {
     // Setup — bare remote + worker1
     const base = await mkdtemp(join(tmpdir(), "hyper-pm-dist-e2e-merge-"));
     bases.push(base);
@@ -335,8 +331,6 @@ describe("dist/main.cjs subprocess (JSON workflow parity)", () => {
 
     const temp2 = join(base, "tmp2");
 
-    // Act — ensure distinct event shard filenames (wall-clock based)
-    await sleep(5);
     const epicW2 = invokeBundled(
       ["epic", "create", "--id", "ep-dist-merge-b", "--title", "From W2"],
       { repoRoot: w2, tempDir: temp2, actor: "w2" },

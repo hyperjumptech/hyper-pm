@@ -36,7 +36,7 @@ export const createGitRepoWithInitialCommit = async (
 };
 
 /**
- * Sleeps for merge tests so `events/.../part-<Date.now()>.jsonl` shards differ between mutations.
+ * Sleeps for the given duration (used by timer-focused tests).
  *
  * @param ms - Milliseconds to wait.
  * @returns A promise that resolves after `ms`.
