@@ -2,6 +2,10 @@
   "name": "hyper-pm",
   "version": "0.1.0",
   "description": "Git-backed work-item CLI with optional GitHub sync",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hyperjumptech/hyper-pm"
+  },
   "type": "module",
   "engines": {
     "node": ">=20"

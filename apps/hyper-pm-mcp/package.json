@@ -2,6 +2,10 @@
   "name": "hyper-pm-mcp",
   "version": "0.1.0",
   "description": "stdio MCP server that runs the hyper-pm CLI",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hyperjumptech/hyper-pm"
+  },
   "type": "module",
   "engines": {
     "node": ">=20"

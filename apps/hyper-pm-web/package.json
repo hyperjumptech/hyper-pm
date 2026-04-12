@@ -2,6 +2,10 @@
   "name": "hyper-pm-web",
   "version": "0.1.0",
   "description": "Local web UI and HTTP API around the hyper-pm CLI",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hyperjumptech/hyper-pm"
+  },
   "type": "module",
   "engines": {
     "node": ">=20"
