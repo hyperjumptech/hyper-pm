@@ -48,6 +48,15 @@ export type StoryRecord = {
 } & EntityAudit &
   StatusTransitionAudit;
 
+/** One durable comment on a ticket (from `TicketCommentAdded` replay). */
+export type TicketCommentRecord = {
+  /** Same as the enclosing event line `id` (ULID). */
+  id: string;
+  body: string;
+  createdAt: string;
+  createdBy: string;
+};
+
 export type TicketRecord = {
   id: string;
   /** Present when the ticket belongs to a story; `null` when unlinked / never assigned. */
@@ -65,6 +74,8 @@ export type TicketRecord = {
   prActivityRecent?: TicketPrActivitySummary[];
   /** GitHub login (normalized), when the ticket has an assignee. */
   assignee?: string;
+  /** Chronological thread from `TicketCommentAdded` events (replay order). */
+  comments?: TicketCommentRecord[];
   deleted?: boolean;
 } & EntityAudit &
   StatusTransitionAudit;
@@ -245,6 +256,26 @@ const applyStatusIfChanged = (
  * @param payload - Inbound sync payload.
  * @returns The status to apply, or `undefined` when the payload carries no workflow signal.
  */
+/**
+ * Appends a `TicketCommentAdded` comment onto a live ticket and bumps `updatedAt` / `updatedBy`.
+ *
+ * @param ticket - Non-deleted ticket row (caller must ensure the ticket exists and is active).
+ * @param evt - Parsed `TicketCommentAdded` line; `evt.id` becomes the comment id.
+ */
+const appendTicketCommentFromEvent = (
+  ticket: TicketRecord,
+  evt: EventLine,
+): void => {
+  const list = ticket.comments ?? (ticket.comments = []);
+  list.push({
+    id: evt.id,
+    body: String(evt.payload["body"] ?? ""),
+    createdAt: evt.ts,
+    createdBy: evt.actor,
+  });
+  applyLastUpdate(ticket, evt);
+};
+
 const resolveInboundTicketStatusFromPayload = (
   ticket: TicketRecord,
   payload: Record<string, unknown>,
@@ -413,6 +444,13 @@ export const applyEvent = (projection: Projection, evt: EventLine): void => {
         cur.deleted = true;
         applyLastUpdate(cur, evt);
       }
+      break;
+    }
+    case "TicketCommentAdded": {
+      const ticketId = String(evt.payload["ticketId"] ?? "");
+      const ticket = projection.tickets.get(ticketId);
+      if (!ticket || ticket.deleted) break;
+      appendTicketCommentFromEvent(ticket, evt);
       break;
     }
     case "SyncCursor": {

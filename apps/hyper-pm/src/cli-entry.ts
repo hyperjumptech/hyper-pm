@@ -942,6 +942,36 @@ export const runCli = async (
       });
     });
   ticket
+    .command("comment")
+    .description("Append a durable comment on a ticket")
+    .requiredOption("--id <id>", "ticket id")
+    .requiredOption("--body <text>", "comment body")
+    .action(async function (this: Command) {
+      const g = readGlobals(this);
+      const o = this.opts<{ id: string; body: string }>();
+      const trimmed = o.body.trim();
+      if (trimmed === "") {
+        deps.error("--body must be non-empty (after trim)");
+        deps.exit(ExitCode.UserError);
+      }
+      await mutateDataBranch(g, deps, async (root, { actor }) => {
+        const lines = await readAllEventLines(root);
+        const proj = replayEvents(lines);
+        const row = proj.tickets.get(o.id);
+        if (!row || row.deleted) {
+          throw new Error(`Ticket not found: ${o.id}`);
+        }
+        const evt = makeEvent(
+          "TicketCommentAdded",
+          { ticketId: o.id, body: trimmed },
+          deps.clock,
+          actor,
+        );
+        await appendEventLine(root, evt, deps.clock);
+        return { commentId: evt.id, ticketId: o.id, body: trimmed };
+      });
+    });
+  ticket
     .command("delete")
     .requiredOption("--id <id>")
     .action(async function (this: Command) {

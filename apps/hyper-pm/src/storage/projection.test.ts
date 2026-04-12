@@ -674,4 +674,101 @@ describe("replayEvents", () => {
       "keep",
     ]);
   });
+
+  it("appends TicketCommentAdded in replay order and bumps updated*", () => {
+    const lines = [
+      JSON.stringify({
+        schema: 1,
+        type: "TicketCreated",
+        id: "e1",
+        ts: "2026-01-02T00:00:00.000Z",
+        actor: "a1",
+        payload: {
+          id: "t1",
+          title: "T",
+          body: "",
+          status: "todo",
+        },
+      }),
+      JSON.stringify({
+        schema: 1,
+        type: "TicketCommentAdded",
+        id: "c1",
+        ts: "2026-01-03T00:00:00.000Z",
+        actor: "bob",
+        payload: { ticketId: "t1", body: "first" },
+      }),
+      JSON.stringify({
+        schema: 1,
+        type: "TicketCommentAdded",
+        id: "c2",
+        ts: "2026-01-04T00:00:00.000Z",
+        actor: "carol",
+        payload: { ticketId: "t1", body: "second" },
+      }),
+    ];
+    const p = replayEvents(lines);
+    const ticket = p.tickets.get("t1");
+    expect(ticket?.comments).toEqual([
+      {
+        id: "c1",
+        body: "first",
+        createdAt: "2026-01-03T00:00:00.000Z",
+        createdBy: "bob",
+      },
+      {
+        id: "c2",
+        body: "second",
+        createdAt: "2026-01-04T00:00:00.000Z",
+        createdBy: "carol",
+      },
+    ]);
+    expect(ticket?.updatedAt).toBe("2026-01-04T00:00:00.000Z");
+    expect(ticket?.updatedBy).toBe("carol");
+    expect(ticket?.statusChangedAt).toBe("2026-01-02T00:00:00.000Z");
+  });
+
+  it("ignores TicketCommentAdded when ticket is missing or deleted", () => {
+    const unknownOnly = [
+      JSON.stringify({
+        schema: 1,
+        type: "TicketCommentAdded",
+        id: "c0",
+        ts: "2026-01-01T00:00:00.000Z",
+        actor: "x",
+        payload: { ticketId: "missing", body: "orphan" },
+      }),
+    ];
+    expect(replayEvents(unknownOnly).tickets.size).toBe(0);
+
+    const afterDelete = [
+      JSON.stringify({
+        schema: 1,
+        type: "TicketCreated",
+        id: "e1",
+        ts: "2026-01-02T00:00:00.000Z",
+        actor: "a",
+        payload: { id: "t1", title: "T", body: "", status: "todo" },
+      }),
+      JSON.stringify({
+        schema: 1,
+        type: "TicketDeleted",
+        id: "e2",
+        ts: "2026-01-03T00:00:00.000Z",
+        actor: "a",
+        payload: { id: "t1" },
+      }),
+      JSON.stringify({
+        schema: 1,
+        type: "TicketCommentAdded",
+        id: "c1",
+        ts: "2026-01-04T00:00:00.000Z",
+        actor: "a",
+        payload: { ticketId: "t1", body: "late" },
+      }),
+    ];
+    const p = replayEvents(afterDelete);
+    expect(p.tickets.get("t1")?.deleted).toBe(true);
+    expect(p.tickets.get("t1")?.comments).toBeUndefined();
+  });
 });

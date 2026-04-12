@@ -47,11 +47,19 @@ describe("eventTouchesEntityId", () => {
       }),
       "t3",
     );
+    const d = eventTouchesEntityId(
+      baseEvent({
+        type: "TicketCommentAdded",
+        payload: { ticketId: "t4", body: "hi" },
+      }),
+      "t4",
+    );
 
     // Assert
     expect(a).toBe(true);
     expect(b).toBe(true);
     expect(c).toBe(true);
+    expect(d).toBe(true);
   });
 
   it("returns false when no key matches", () => {

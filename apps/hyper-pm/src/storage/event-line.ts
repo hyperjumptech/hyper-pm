@@ -11,6 +11,7 @@ export const eventTypeSchema = z.enum([
   "TicketCreated",
   "TicketUpdated",
   "TicketDeleted",
+  "TicketCommentAdded",
   "SyncCursor",
   "GithubInboundUpdate",
   "GithubIssueLinked",

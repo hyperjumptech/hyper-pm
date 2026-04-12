@@ -280,6 +280,45 @@ describe("hyper-pm CLI (e2e)", () => {
       expect.objectContaining({ id: "ticket-e2e-1", title: "Ticket A" }),
     );
 
+    const ticketComment = await invokeHyperPmCli(
+      [
+        "ticket",
+        "comment",
+        "--id",
+        "ticket-e2e-1",
+        "--body",
+        "  thread note  ",
+      ],
+      { repoRoot, tempDir, clock, actor: "commenter" },
+    );
+    expect(ticketComment.code).toBe(ExitCode.Success);
+    expect(ticketComment.json).toEqual(
+      expect.objectContaining({
+        ticketId: "ticket-e2e-1",
+        body: "thread note",
+      }),
+    );
+    expect(ticketComment.json).toMatchObject({
+      commentId: expect.any(String),
+    });
+
+    const ticketReadAfterComment = await invokeHyperPmCli(
+      ["ticket", "read", "--id", "ticket-e2e-1"],
+      { repoRoot, tempDir, clock },
+    );
+    expect(ticketReadAfterComment.code).toBe(ExitCode.Success);
+    expect(ticketReadAfterComment.json).toEqual(
+      expect.objectContaining({
+        id: "ticket-e2e-1",
+        comments: [
+          expect.objectContaining({
+            body: "thread note",
+            createdBy: "commenter",
+          }),
+        ],
+      }),
+    );
+
     const ticketListByStory = await invokeHyperPmCli(
       ["ticket", "read", "--story", "story-e2e-1"],
       { repoRoot, tempDir, clock },
