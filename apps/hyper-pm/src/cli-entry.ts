@@ -82,6 +82,7 @@ import {
   commitDataWorktreeIfNeeded,
   formatDataBranchCommitMessage,
 } from "./run/commit-data";
+import { tryPushDataBranchToRemote } from "./run/push-data-branch";
 import { appendEventLine } from "./storage/append-event";
 import type { EventLine, EventType } from "./storage/event-line";
 import { eventTypeSchema } from "./storage/event-line";
@@ -1791,9 +1792,14 @@ export const runCli = async (
     .command("sync")
     .description("GitHub Issues sync")
     .option("--no-github", "skip network sync", false)
+    .option(
+      "--skip-push",
+      "after a successful sync, do not push the data branch to the remote",
+      false,
+    )
     .action(async function (this: Command) {
       const g = readGlobals(this);
-      const o = this.opts<{ noGithub?: boolean }>();
+      const o = this.opts<{ noGithub?: boolean; skipPush?: boolean }>();
       const repoRoot = await resolveRepoRoot(g.repo);
       const cfg = await loadMergedConfig(repoRoot, g);
       if (cfg.sync === "off" || o.noGithub) {
@@ -1873,7 +1879,35 @@ export const runCli = async (
           formatDataBranchCommitMessage("hyper-pm: sync", outboundActor),
           runGit,
         );
-        deps.log(formatOutput(g.format, { ok: true }));
+        let dataBranchPush: string;
+        let dataBranchPushDetail: string | undefined;
+        if (o.skipPush) {
+          dataBranchPush = "skipped_cli";
+          dataBranchPushDetail = "skip-push";
+        } else {
+          const pushResult = await tryPushDataBranchToRemote(
+            session.worktreePath,
+            cfg.remote,
+            cfg.dataBranch,
+            runGit,
+          );
+          dataBranchPush = pushResult.status;
+          dataBranchPushDetail = pushResult.detail;
+          if (pushResult.status === "failed" && pushResult.detail) {
+            deps.error(
+              `hyper-pm: data branch not pushed (${cfg.remote}/${cfg.dataBranch}): ${pushResult.detail}`,
+            );
+          }
+        }
+        deps.log(
+          formatOutput(g.format, {
+            ok: true,
+            dataBranchPush,
+            ...(dataBranchPushDetail !== undefined
+              ? { dataBranchPushDetail }
+              : {}),
+          }),
+        );
       } catch (e) {
         deps.error(e instanceof Error ? e.message : String(e));
         deps.exit(ExitCode.ExternalApi);

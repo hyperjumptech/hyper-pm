@@ -93,11 +93,16 @@ GitHub Issues sync (outbound + inbound). **Outbound** sets issue `labels` to `hy
 
 Skips network work if `sync` is `off` in config, or if you pass `--no-github`.
 
-| Option        | Description          | Default                          |
-| ------------- | -------------------- | -------------------------------- |
-| `--no-github` | Skip GitHub API sync | sync runs when enabled in config |
+When sync runs, after GitHub API work, **`hyper-pm` commits on the data branch** using `git -c user.name=… -c user.email=… commit` so a missing global `user.name` / `user.email` does not block you. Identity is taken from existing git config in the repo, then optional **`HYPER_PM_GIT_USER_NAME`** / **`HYPER_PM_GIT_USER_EMAIL`** (or standard **`GIT_AUTHOR_NAME`** / **`GIT_AUTHOR_EMAIL`**), then built-in defaults.
 
-When sync is not skipped, requires `GITHUB_TOKEN` **or** a local `gh` session (`gh auth token` must succeed).
+It then **attempts** `git push -u` to the configured `remote` (default `origin`). A missing remote or a push error **does not fail the command**: JSON output still has `"ok":true` with **`dataBranchPush`** set to `pushed`, `skipped_no_remote`, `failed`, or (with **`--skip-push`**) `skipped_cli`, and optional **`dataBranchPushDetail`**. Push failures are also written to stderr as a single-line hint. Pass **`--skip-push`** to skip the push attempt entirely.
+
+| Option        | Description                                   | Default                          |
+| ------------- | --------------------------------------------- | -------------------------------- |
+| `--no-github` | Skip GitHub API sync                          | sync runs when enabled in config |
+| `--skip-push` | Skip `git push` of the data branch after sync | `false` (push is attempted)      |
+
+When sync is not skipped, requires `GITHUB_TOKEN` **or** a local `gh` session (`gh auth token` must succeed). For a successful push you still need a configured remote and credentials that allow `git push` to that remote.
 
 ### `audit`
 

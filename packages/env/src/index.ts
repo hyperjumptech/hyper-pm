@@ -18,6 +18,20 @@ const envSchema = z.object({
   /** Optional override for hyper-pm JSONL event `actor` on CLI mutations. */
   HYPER_PM_ACTOR: z.string().optional(),
   /**
+   * Optional `git user.name` for hyper-pm data-branch commits when repo git
+   * identity is unset (falls back after `GIT_AUTHOR_*`, then a built-in default).
+   */
+  HYPER_PM_GIT_USER_NAME: z.string().optional(),
+  /**
+   * Optional `git user.email` for hyper-pm data-branch commits when repo git
+   * identity is unset (falls back after `GIT_AUTHOR_*`, then a built-in default).
+   */
+  HYPER_PM_GIT_USER_EMAIL: z.string().optional(),
+  /** Standard Git override for commit author name (optional). */
+  GIT_AUTHOR_NAME: z.string().optional(),
+  /** Standard Git override for commit author email (optional). */
+  GIT_AUTHOR_EMAIL: z.string().optional(),
+  /**
    * Absolute path to the hyper-pm CLI bundle (`main.cjs`) for hyper-pm-mcp and
    * other integrations when auto-resolution from the `hyper-pm` package is insufficient.
    */
