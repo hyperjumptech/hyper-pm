@@ -71,6 +71,56 @@ function trimU(v) {
 }
 
 /**
+ * Opens an epic in read mode (detail view).
+ * @param {string} epicId
+ */
+function navigateToEpic(epicId) {
+  state.epicId = epicId;
+  state.epicDetailForm = false;
+  void renderEpicEdit();
+}
+
+/**
+ * Opens a story in read mode (detail view).
+ * @param {string} storyId
+ */
+function navigateToStory(storyId) {
+  state.storyId = storyId;
+  state.storyDetailForm = false;
+  void renderStoryEdit();
+}
+
+/**
+ * Opens a ticket in read mode (detail view).
+ * @param {string} ticketId
+ */
+function navigateToTicket(ticketId) {
+  state.ticketId = ticketId;
+  state.ticketDetailForm = false;
+  void renderTicketEdit();
+}
+
+/**
+ * Goes to the stories list filtered to one epic.
+ * @param {string} epicId
+ */
+function navigateToStoriesForEpic(epicId) {
+  state.storyFilterEpic = epicId;
+  state.view = "stories";
+  void renderStoriesList();
+}
+
+/**
+ * Goes to the tickets list filtered to one story.
+ * @param {string} storyId
+ */
+function navigateToTicketsForStory(storyId) {
+  state.ticketFilterStory = storyId;
+  state.view = "tickets";
+  void renderTicketsList();
+}
+
+/**
  * @param {Record<string, unknown>} data
  */
 async function runApi(data) {
@@ -199,7 +249,7 @@ function setPageTitle(title) {
 function epicRowHtml(row) {
   const id = String(row.id);
   return `<tr>
-    <td class="cell-title">${escapeHtml(String(row.title))}</td>
+    <td class="cell-title"><button type="button" class="link-title btn-open-epic" data-epic-id="${escapeHtml(id)}">${escapeHtml(String(row.title))}</button></td>
     <td>${badgeHtml(String(row.status))}</td>
     <td>${idChip(id)}</td>
     <td><button type="button" class="ghost btn-open-epic" data-epic-id="${escapeHtml(id)}">Open</button></td>
@@ -208,13 +258,19 @@ function epicRowHtml(row) {
 
 /**
  * @param {Record<string, unknown>} row
+ * @param {Record<string, string>} epicTitles epic id → title
  */
-function storyRowHtml(row) {
+function storyRowHtml(row, epicTitles) {
   const id = String(row.id);
+  const eid = String(row.epicId);
+  const epicTitle = epicTitles[eid];
+  const epicCell = epicTitle
+    ? `<button type="button" class="link-title btn-nav-epic" data-epic-id="${escapeHtml(eid)}">${escapeHtml(epicTitle)}</button>`
+    : idChip(eid);
   return `<tr>
-    <td class="cell-title">${escapeHtml(String(row.title))}</td>
+    <td class="cell-title"><button type="button" class="link-title btn-open-story" data-story-id="${escapeHtml(id)}">${escapeHtml(String(row.title))}</button></td>
     <td>${badgeHtml(String(row.status))}</td>
-    <td>${idChip(String(row.epicId))}</td>
+    <td>${epicCell}</td>
     <td>${idChip(id)}</td>
     <td><button type="button" class="ghost btn-open-story" data-story-id="${escapeHtml(id)}">Open</button></td>
   </tr>`;
@@ -222,15 +278,23 @@ function storyRowHtml(row) {
 
 /**
  * @param {Record<string, unknown>} row
+ * @param {Record<string, string>} storyTitles story id → title
  */
-function ticketRowHtml(row) {
+function ticketRowHtml(row, storyTitles) {
   const id = String(row.id);
-  const sidCell =
+  const sid =
     row.storyId === null || row.storyId === undefined
+      ? ""
+      : String(row.storyId);
+  const stitle = sid ? storyTitles[sid] : "";
+  const sidCell =
+    sid === ""
       ? '<span class="muted">—</span>'
-      : idChip(String(row.storyId));
+      : stitle
+        ? `<button type="button" class="link-title btn-nav-story" data-story-id="${escapeHtml(sid)}">${escapeHtml(stitle)}</button>`
+        : idChip(sid);
   return `<tr>
-    <td class="cell-title">${escapeHtml(String(row.title))}</td>
+    <td class="cell-title"><button type="button" class="link-title btn-open-ticket" data-ticket-id="${escapeHtml(id)}">${escapeHtml(String(row.title))}</button></td>
     <td>${badgeHtml(String(row.status))}</td>
     <td>${sidCell}</td>
     <td>${idChip(id)}</td>
@@ -276,7 +340,30 @@ async function renderDashboard() {
           <div class="stat-card"><div class="label">Stories</div><strong>${stories.length}</strong></div>
           <div class="stat-card"><div class="label">Tickets</div><strong>${tickets.length}</strong></div>
         </div>
+        <div class="nav-related row" style="margin-top:1.25rem">
+          <button type="button" class="primary" id="dashOpenEpics">Browse epics</button>
+          <button type="button" class="ghost" id="dashOpenStories">Browse stories</button>
+          <button type="button" class="ghost" id="dashOpenTickets">Browse tickets</button>
+        </div>
       </div>`;
+    document.getElementById("dashOpenEpics")?.addEventListener("click", () => {
+      state.view = "epics";
+      void renderEpicsList();
+    });
+    document
+      .getElementById("dashOpenStories")
+      ?.addEventListener("click", () => {
+        state.storyFilterEpic = "";
+        state.view = "stories";
+        void renderStoriesList();
+      });
+    document
+      .getElementById("dashOpenTickets")
+      ?.addEventListener("click", () => {
+        state.ticketFilterStory = "";
+        state.view = "tickets";
+        void renderTicketsList();
+      });
   } catch (e) {
     main.innerHTML = `<div class="panel"><p class="muted">${escapeHtml(String(e))}</p></div>`;
   }
@@ -308,12 +395,8 @@ async function renderEpicsList() {
     });
     main.querySelectorAll(".btn-open-epic").forEach((btn) => {
       btn.addEventListener("click", () => {
-        const id = /** @type {HTMLButtonElement} */ (btn).dataset.epicId;
-        if (id) {
-          state.epicId = id;
-          state.epicDetailForm = false;
-          void renderEpicEdit();
-        }
+        const eid = /** @type {HTMLButtonElement} */ (btn).dataset.epicId;
+        if (eid) navigateToEpic(eid);
       });
     });
   } catch (e) {
@@ -425,16 +508,34 @@ async function renderEpicEdit() {
           <button type="button" class="ghost" id="btnEpicCancelEdit">Cancel</button>
           <button type="button" class="danger" id="btnDeleteEpic">Delete epic</button>
         </div>`;
+    const epicTrail = `
+        <nav class="crumbs" aria-label="Breadcrumb">
+          <button type="button" class="ghost crumb-btn" id="bcEpicEpics">Epics</button>
+          <span class="crumb-sep" aria-hidden="true">/</span>
+          <span class="crumb-current">${escapeHtml(String(row.title))}</span>
+        </nav>
+        <div class="nav-related row">
+          <button type="button" class="ghost" id="btnEpicSeeStories">Stories in this epic</button>
+        </div>`;
     main.innerHTML = `
       <div class="panel">
         <div class="back-link">
           <button type="button" class="ghost" id="btnBackEpics2">← Epics</button>
         </div>
+        ${epicTrail}
         ${showForm ? formBlock : readBlock}
       </div>`;
     document.getElementById("btnBackEpics2")?.addEventListener("click", () => {
       void renderEpicsList();
     });
+    document.getElementById("bcEpicEpics")?.addEventListener("click", () => {
+      void renderEpicsList();
+    });
+    document
+      .getElementById("btnEpicSeeStories")
+      ?.addEventListener("click", () => {
+        navigateToStoriesForEpic(id);
+      });
     if (!showForm) {
       document
         .getElementById("btnEpicEnterEdit")
@@ -523,6 +624,13 @@ async function renderStoriesList() {
     }
     const json = await runCli(argv);
     const items = listFromJson(json);
+    /** @type {Record<string, string>} */
+    const epicTitles = {};
+    for (const e of epics) {
+      epicTitles[String(/** @type {{id:string}} */ (e).id)] = String(
+        /** @type {{title:string}} */ (e).title,
+      );
+    }
     const epicOpts = [
       `<option value="">All epics</option>`,
       ...epics.map(
@@ -530,14 +638,28 @@ async function renderStoriesList() {
           `<option value="${escapeHtml(String(/** @type {{id:string}} */ (e).id))}"${String(/** @type {{id:string}} */ (e).id) === fe ? " selected" : ""}>${escapeHtml(String(/** @type {{title:string}} */ (e).title))}</option>`,
       ),
     ].join("");
+    const filteredEpicRow = fe
+      ? epics.find((e) => String(/** @type {{id:string}} */ (e).id) === fe)
+      : undefined;
+    const storyFilterBanner = fe
+      ? `<div class="filter-context-bar"><span>Showing stories in <strong>${filteredEpicRow ? escapeHtml(String(/** @type {{title:string}} */ (filteredEpicRow).title)) : escapeHtml(fe)}</strong></span><div class="filter-actions"><button type="button" class="ghost" id="btnStoriesCtxEpic">View epic</button><button type="button" class="ghost" id="btnStoriesClearEpic">All stories</button></div></div>`
+      : "";
     const storyTable =
       items.length === 0
         ? '<div class="empty-state">No stories match this filter.</div>'
         : `<div class="table-wrap"><table class="data-table"><thead><tr><th>Title</th><th>Status</th><th>Epic</th><th>Id</th><th></th></tr></thead><tbody>
-          ${items.map((row) => storyRowHtml(/** @type {Record<string, unknown>} */ (row))).join("")}
+          ${items
+            .map((row) =>
+              storyRowHtml(
+                /** @type {Record<string, unknown>} */ (row),
+                epicTitles,
+              ),
+            )
+            .join("")}
         </tbody></table></div>`;
     main.innerHTML = `
       <div class="panel">
+        ${storyFilterBanner}
         <div class="filter-bar">
           <label for="filterStoryEpic">Filter by epic</label>
           <select id="filterStoryEpic">${epicOpts}</select>
@@ -560,14 +682,30 @@ async function renderStoriesList() {
       state.view = "storyNew";
       void renderStoryNew();
     });
+    if (fe) {
+      document
+        .getElementById("btnStoriesCtxEpic")
+        ?.addEventListener("click", () => {
+          navigateToEpic(fe);
+        });
+      document
+        .getElementById("btnStoriesClearEpic")
+        ?.addEventListener("click", () => {
+          state.storyFilterEpic = "";
+          void renderStoriesList();
+        });
+    }
     main.querySelectorAll(".btn-open-story").forEach((btn) => {
       btn.addEventListener("click", () => {
         const sid = /** @type {HTMLButtonElement} */ (btn).dataset.storyId;
-        if (sid) {
-          state.storyId = sid;
-          state.storyDetailForm = false;
-          void renderStoryEdit();
-        }
+        if (sid) navigateToStory(sid);
+      });
+    });
+    main.querySelectorAll(".btn-nav-epic").forEach((btn) => {
+      btn.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        const eid = /** @type {HTMLButtonElement} */ (btn).dataset.epicId;
+        if (eid) navigateToEpic(eid);
       });
     });
   } catch (e) {
@@ -663,6 +801,7 @@ async function renderStoryEdit() {
       await runCli(["story", "read", "--id", id])
     );
     const epicId = String(row.epicId);
+    let epicCrumbEscaped = escapeHtml(epicId);
     let epicReadInner = idChip(epicId);
     let epicFormLine = `Epic id <code>${escapeHtml(epicId)}</code>`;
     try {
@@ -670,11 +809,24 @@ async function renderStoryEdit() {
         await runCli(["epic", "read", "--id", epicId])
       );
       const t = escapeHtml(String(epicRow.title));
+      epicCrumbEscaped = t;
       epicReadInner = `<span>${t}</span> · ${idChip(epicId)}`;
       epicFormLine = `Epic: ${t} (<code>${escapeHtml(epicId)}</code>)`;
     } catch {
       /* keep defaults */
     }
+    const storyTrail = `
+        <nav class="crumbs" aria-label="Breadcrumb">
+          <button type="button" class="ghost crumb-btn" id="bcStoryStories">Stories</button>
+          <span class="crumb-sep" aria-hidden="true">/</span>
+          <button type="button" class="ghost crumb-btn" id="bcStoryEpic">${epicCrumbEscaped}</button>
+          <span class="crumb-sep" aria-hidden="true">/</span>
+          <span class="crumb-current">${escapeHtml(String(row.title))}</span>
+        </nav>
+        <div class="nav-related row">
+          <button type="button" class="ghost" id="btnStoryOpenEpic">Open epic</button>
+          <button type="button" class="ghost" id="btnStorySeeTickets">Tickets for this story</button>
+        </div>`;
     const showForm = Boolean(state.storyDetailForm);
     setPageTitle(showForm ? "Edit story" : String(row.title));
     const readBlock = `
@@ -713,12 +865,30 @@ async function renderStoryEdit() {
         <div class="back-link">
           <button type="button" class="ghost" id="btnBackStories2">← Stories</button>
         </div>
+        ${storyTrail}
         ${showForm ? formBlock : readBlock}
       </div>`;
     document
       .getElementById("btnBackStories2")
       ?.addEventListener("click", () => {
         void renderStoriesList();
+      });
+    document.getElementById("bcStoryStories")?.addEventListener("click", () => {
+      state.storyFilterEpic = "";
+      void renderStoriesList();
+    });
+    document.getElementById("bcStoryEpic")?.addEventListener("click", () => {
+      navigateToEpic(epicId);
+    });
+    document
+      .getElementById("btnStoryOpenEpic")
+      ?.addEventListener("click", () => {
+        navigateToEpic(epicId);
+      });
+    document
+      .getElementById("btnStorySeeTickets")
+      ?.addEventListener("click", () => {
+        navigateToTicketsForStory(id);
       });
     if (!showForm) {
       document
@@ -807,6 +977,13 @@ async function renderTicketsList() {
     if (fs) argv.push("--story", fs);
     const json = await runCli(argv);
     const items = listFromJson(json);
+    /** @type {Record<string, string>} */
+    const storyTitles = {};
+    for (const s of stories) {
+      storyTitles[String(/** @type {{id:string}} */ (s).id)] = String(
+        /** @type {{title:string}} */ (s).title,
+      );
+    }
     const storyOpts = [
       `<option value="">All tickets</option>`,
       ...stories.map(
@@ -814,14 +991,28 @@ async function renderTicketsList() {
           `<option value="${escapeHtml(String(/** @type {{id:string}} */ (s).id))}"${String(/** @type {{id:string}} */ (s).id) === fs ? " selected" : ""}>${escapeHtml(String(/** @type {{title:string}} */ (s).title))}</option>`,
       ),
     ].join("");
+    const filteredStoryRow = fs
+      ? stories.find((s) => String(/** @type {{id:string}} */ (s).id) === fs)
+      : undefined;
+    const ticketFilterBanner = fs
+      ? `<div class="filter-context-bar"><span>Showing tickets for <strong>${filteredStoryRow ? escapeHtml(String(/** @type {{title:string}} */ (filteredStoryRow).title)) : escapeHtml(fs)}</strong></span><div class="filter-actions"><button type="button" class="ghost" id="btnTicketsCtxStory">View story</button><button type="button" class="ghost" id="btnTicketsClearStory">All tickets</button></div></div>`
+      : "";
     const ticketTable =
       items.length === 0
         ? '<div class="empty-state">No tickets match this filter.</div>'
         : `<div class="table-wrap"><table class="data-table"><thead><tr><th>Title</th><th>Status</th><th>Story</th><th>Id</th><th></th></tr></thead><tbody>
-          ${items.map((row) => ticketRowHtml(/** @type {Record<string, unknown>} */ (row))).join("")}
+          ${items
+            .map((row) =>
+              ticketRowHtml(
+                /** @type {Record<string, unknown>} */ (row),
+                storyTitles,
+              ),
+            )
+            .join("")}
         </tbody></table></div>`;
     main.innerHTML = `
       <div class="panel">
+        ${ticketFilterBanner}
         <div class="filter-bar">
           <label for="filterTicketStory">Filter by story</label>
           <select id="filterTicketStory">${storyOpts}</select>
@@ -844,14 +1035,30 @@ async function renderTicketsList() {
       state.view = "ticketNew";
       void renderTicketNew();
     });
+    if (fs) {
+      document
+        .getElementById("btnTicketsCtxStory")
+        ?.addEventListener("click", () => {
+          navigateToStory(fs);
+        });
+      document
+        .getElementById("btnTicketsClearStory")
+        ?.addEventListener("click", () => {
+          state.ticketFilterStory = "";
+          void renderTicketsList();
+        });
+    }
     main.querySelectorAll(".btn-open-ticket").forEach((btn) => {
       btn.addEventListener("click", () => {
         const tid = /** @type {HTMLButtonElement} */ (btn).dataset.ticketId;
-        if (tid) {
-          state.ticketId = tid;
-          state.ticketDetailForm = false;
-          void renderTicketEdit();
-        }
+        if (tid) navigateToTicket(tid);
+      });
+    });
+    main.querySelectorAll(".btn-nav-story").forEach((btn) => {
+      btn.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        const sid = /** @type {HTMLButtonElement} */ (btn).dataset.storyId;
+        if (sid) navigateToStory(sid);
       });
     });
   } catch (e) {
@@ -972,17 +1179,38 @@ async function renderTicketEdit() {
     const sj = await runCli(["story", "read"]);
     const stories = listFromJson(sj);
     const curStory = row.storyId == null ? "" : String(row.storyId);
+    let storyCrumbEscaped = "";
     let storyReadInner = '<span class="muted">No linked story</span>';
     if (curStory) {
       const st = stories.find(
         (s) => String(/** @type {{id:string}} */ (s).id) === curStory,
       );
       if (st) {
-        storyReadInner = `<span>${escapeHtml(String(/** @type {{title:string}} */ (st).title))}</span> · ${idChip(curStory)}`;
+        const stit = String(/** @type {{title:string}} */ (st).title);
+        storyCrumbEscaped = escapeHtml(stit);
+        storyReadInner = `<span>${storyCrumbEscaped}</span> · ${idChip(curStory)}`;
       } else {
+        storyCrumbEscaped = escapeHtml(curStory);
         storyReadInner = idChip(curStory);
       }
     }
+    const ticketTrail = curStory
+      ? `<nav class="crumbs" aria-label="Breadcrumb">
+          <button type="button" class="ghost crumb-btn" id="bcTixTickets">Tickets</button>
+          <span class="crumb-sep" aria-hidden="true">/</span>
+          <button type="button" class="ghost crumb-btn" id="bcTixStory">${storyCrumbEscaped}</button>
+          <span class="crumb-sep" aria-hidden="true">/</span>
+          <span class="crumb-current">${escapeHtml(String(row.title))}</span>
+        </nav>
+        <div class="nav-related row">
+          <button type="button" class="ghost" id="btnTixOpenStory">Open story</button>
+          <button type="button" class="ghost" id="btnTixTicketsThisStory">Tickets in this story</button>
+        </div>`
+      : `<nav class="crumbs" aria-label="Breadcrumb">
+          <button type="button" class="ghost crumb-btn" id="bcTixTickets">Tickets</button>
+          <span class="crumb-sep" aria-hidden="true">/</span>
+          <span class="crumb-current">${escapeHtml(String(row.title))}</span>
+        </nav>`;
     const storyOpts = [
       `<option value="">No story</option>`,
       ...stories.map((s) => {
@@ -1031,6 +1259,7 @@ async function renderTicketEdit() {
         <div class="back-link">
           <button type="button" class="ghost" id="btnBackTickets2">← Tickets</button>
         </div>
+        ${ticketTrail}
         ${showForm ? formBlock : readBlock}
       </div>
       <div class="panel">
@@ -1049,6 +1278,25 @@ async function renderTicketEdit() {
       ?.addEventListener("click", () => {
         void renderTicketsList();
       });
+    document.getElementById("bcTixTickets")?.addEventListener("click", () => {
+      state.ticketFilterStory = "";
+      void renderTicketsList();
+    });
+    if (curStory) {
+      document.getElementById("bcTixStory")?.addEventListener("click", () => {
+        navigateToStory(curStory);
+      });
+      document
+        .getElementById("btnTixOpenStory")
+        ?.addEventListener("click", () => {
+          navigateToStory(curStory);
+        });
+      document
+        .getElementById("btnTixTicketsThisStory")
+        ?.addEventListener("click", () => {
+          navigateToTicketsForStory(curStory);
+        });
+    }
     if (!showForm) {
       document
         .getElementById("btnTicketEnterEdit")
@@ -1303,9 +1551,13 @@ function wireNav() {
       state.view = v;
       if (v === "dashboard") void renderDashboard();
       else if (v === "epics") void renderEpicsList();
-      else if (v === "stories") void renderStoriesList();
-      else if (v === "tickets") void renderTicketsList();
-      else if (v === "tools") renderTools();
+      else if (v === "stories") {
+        state.storyFilterEpic = "";
+        void renderStoriesList();
+      } else if (v === "tickets") {
+        state.ticketFilterStory = "";
+        void renderTicketsList();
+      } else if (v === "tools") renderTools();
       else if (v === "advanced") renderAdvanced();
     });
   });

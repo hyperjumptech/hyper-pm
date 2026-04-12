@@ -683,6 +683,100 @@
         margin: 0;
         font-style: italic;
       }
+
+      .nav-workflow {
+        display: flex;
+        flex-direction: column;
+        gap: 0.125rem;
+        margin: 0 0.5rem 0.5rem;
+        padding: 0.5rem 0 0.5rem 0.75rem;
+        border-left: 2px solid rgba(255, 255, 255, 0.12);
+      }
+
+      .nav-workflow .nav-btn {
+        width: calc(100% - 0.25rem);
+        margin-left: 0.125rem;
+      }
+
+      .crumbs {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.35rem 0.5rem;
+        font-size: 0.8125rem;
+        color: var(--text-secondary);
+        margin: 0 0 0.75rem;
+        padding: 0.5rem 0;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .crumbs .crumb-btn {
+        font-size: inherit;
+        padding: 0.2rem 0.45rem;
+        margin: 0;
+      }
+
+      .crumb-sep {
+        color: var(--text-tertiary);
+        user-select: none;
+      }
+
+      .crumb-current {
+        font-weight: 500;
+        color: var(--text);
+        max-width: min(28rem, 100%);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .nav-related {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        align-items: center;
+        margin: 0 0 1rem;
+      }
+
+      .filter-context-bar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        padding: 0.75rem 1rem;
+        margin-bottom: 1rem;
+        background: var(--accent-subtle);
+        border: 1px solid #c7d2fe;
+        border-radius: var(--radius);
+        font-size: 0.875rem;
+      }
+
+      .filter-context-bar .filter-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+      }
+
+      button.link-title {
+        background: none;
+        border: none;
+        padding: 0;
+        margin: 0;
+        font: inherit;
+        font-weight: 500;
+        color: var(--accent);
+        text-align: left;
+        cursor: pointer;
+        text-decoration: underline;
+        text-decoration-thickness: 1px;
+        text-underline-offset: 2px;
+        max-width: 100%;
+      }
+
+      button.link-title:hover {
+        color: var(--accent-hover);
+      }
     </style>
   </head>
   <body>
@@ -693,17 +787,25 @@
           hyper-pm
         </div>
         <nav aria-label="Main navigation">
-          <div class="nav-section">Work items</div>
+          <div class="nav-section">Plan &amp; track</div>
           <button type="button" class="nav-btn" data-nav="dashboard">
             Overview
           </button>
-          <button type="button" class="nav-btn" data-nav="epics">Epics</button>
-          <button type="button" class="nav-btn" data-nav="stories">
-            Stories
-          </button>
-          <button type="button" class="nav-btn" data-nav="tickets">
-            Tickets
-          </button>
+          <div
+            class="nav-workflow"
+            role="group"
+            aria-label="Epics, stories, and tickets"
+          >
+            <button type="button" class="nav-btn" data-nav="epics">
+              Epics
+            </button>
+            <button type="button" class="nav-btn" data-nav="stories">
+              Stories
+            </button>
+            <button type="button" class="nav-btn" data-nav="tickets">
+              Tickets
+            </button>
+          </div>
           <div class="nav-section">Repository</div>
           <button type="button" class="nav-btn" data-nav="tools">Tools</button>
           <button type="button" class="nav-btn" data-nav="advanced">
