@@ -69,6 +69,7 @@ import {
   resolveIntegrationStartPoint,
 } from "./git/resolve-integration-start-point";
 import { runGit } from "./git/run-git";
+import { tryReadGithubOwnerRepoSlugFromGit } from "./git/try-read-github-owner-repo-slug-from-git";
 import {
   commitDataWorktreeIfNeeded,
   formatDataBranchCommitMessage,
@@ -1635,7 +1636,16 @@ export const runCli = async (
         const projection = await loadProjectionFromDataRoot(
           session.worktreePath,
         );
-        const { owner, repo } = resolveGithubRepo(cfg, env.GITHUB_REPO);
+        const gitDerivedSlug = await tryReadGithubOwnerRepoSlugFromGit({
+          repoRoot,
+          remote: cfg.remote,
+          runGit,
+        });
+        const { owner, repo } = resolveGithubRepo(
+          cfg,
+          env.GITHUB_REPO,
+          gitDerivedSlug,
+        );
         const octokit = new Octokit({ auth: githubToken });
         const outboundActor = await resolveGithubTokenActor(octokit);
         const depsGh = {
@@ -1772,7 +1782,17 @@ export const runCli = async (
               let githubRepo: { owner: string; repo: string } | undefined;
               if (textStyle === "plain-links") {
                 try {
-                  githubRepo = resolveGithubRepo(cfg, env.GITHUB_REPO);
+                  const gitDerivedSlug =
+                    await tryReadGithubOwnerRepoSlugFromGit({
+                      repoRoot,
+                      remote: cfg.remote,
+                      runGit,
+                    });
+                  githubRepo = resolveGithubRepo(
+                    cfg,
+                    env.GITHUB_REPO,
+                    gitDerivedSlug,
+                  );
                 } catch {
                   githubRepo = undefined;
                 }

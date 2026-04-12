@@ -47,9 +47,7 @@ var HyperPmAuditSummary = (() => {
       return [];
     }
     if (payload["status"] !== void 0) {
-      aspects.push(
-        `Status set to ${quoteStatus(String(payload["status"]))}.`
-      );
+      aspects.push(`Status set to ${quoteStatus(String(payload["status"]))}.`);
     }
     if (kind === "ticket" && payload["assignee"] !== void 0) {
       const a = payload["assignee"];

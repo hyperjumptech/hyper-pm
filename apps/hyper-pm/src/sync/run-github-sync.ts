@@ -269,18 +269,22 @@ export const runGithubInboundSync = async (params: {
 };
 
 /**
- * Resolves `owner/repo` from config first, falling back to typed `env.GITHUB_REPO`.
+ * Resolves `owner/repo` from config, then `GITHUB_REPO`, then an optional git-derived slug.
  *
  * @param config - Persisted CLI configuration.
  * @param envRepo - Optional `GITHUB_REPO` value.
+ * @param gitDerivedSlug - Optional `owner/repo` parsed from `git remote get-url` (github.com only).
  */
 export const resolveGithubRepo = (
   config: HyperPmConfig,
   envRepo: string | undefined,
+  gitDerivedSlug?: string,
 ): { owner: string; repo: string } => {
-  const raw = config.githubRepo ?? envRepo;
+  const raw = config.githubRepo ?? envRepo ?? gitDerivedSlug;
   if (!raw) {
-    throw new Error("githubRepo missing (config or GITHUB_REPO).");
+    throw new Error(
+      "githubRepo missing (config, GITHUB_REPO, or a github.com URL on the configured git remote).",
+    );
   }
   return parseRepo(raw);
 };
