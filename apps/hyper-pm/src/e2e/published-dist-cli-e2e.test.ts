@@ -234,6 +234,24 @@ describe("dist/main.cjs subprocess (JSON workflow parity)", () => {
       }),
     );
 
+    const ticketWork = invokeBundled(
+      ["ticket", "work", "--id", "ticket-dist-e2e-1"],
+      { repoRoot, tempDir, actor: "e2e" },
+    );
+    expect(ticketWork.code).toBe(ExitCode.Success);
+    expect(ticketWork.json).toEqual(
+      expect.objectContaining({
+        ok: true,
+        id: "ticket-dist-e2e-1",
+        status: "in_progress",
+        branch: "hyper-pm/ticket-dist-e2e-1",
+        branches: ["hyper-pm/ticket-dist-e2e-1"],
+      }),
+    );
+    expect(await git(repoRoot, ["branch", "--show-current"])).toBe(
+      "hyper-pm/ticket-dist-e2e-1",
+    );
+
     const ticketCreateOrphan = invokeBundled(
       [
         "ticket",
@@ -309,7 +327,7 @@ describe("dist/main.cjs subprocess (JSON workflow parity)", () => {
           expect.objectContaining({
             id: "ticket-dist-e2e-1",
             storyId: "story-dist-e2e-1",
-            status: "todo",
+            status: "in_progress",
           }),
         ],
       }),

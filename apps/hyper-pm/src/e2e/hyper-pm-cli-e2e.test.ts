@@ -412,6 +412,70 @@ describe("hyper-pm CLI (e2e)", () => {
       }),
     );
 
+    const ticketWork = await invokeHyperPmCli(
+      ["ticket", "work", "--id", "ticket-e2e-1"],
+      { repoRoot, tempDir, clock, actor: "e2e" },
+    );
+    expect(ticketWork.code).toBe(ExitCode.Success);
+    expect(ticketWork.json).toEqual(
+      expect.objectContaining({
+        ok: true,
+        id: "ticket-e2e-1",
+        status: "in_progress",
+        branch: "hyper-pm/ticket-e2e-1",
+        branches: ["hyper-pm/ticket-e2e-1"],
+      }),
+    );
+    expect(await git(repoRoot, ["branch", "--show-current"])).toBe(
+      "hyper-pm/ticket-e2e-1",
+    );
+    const ticketReadAfterWork = await invokeHyperPmCli(
+      ["ticket", "read", "--id", "ticket-e2e-1"],
+      { repoRoot, tempDir, clock },
+    );
+    expect(ticketReadAfterWork.json).toEqual(
+      expect.objectContaining({
+        id: "ticket-e2e-1",
+        status: "in_progress",
+        linkedBranches: ["hyper-pm/ticket-e2e-1"],
+      }),
+    );
+
+    const ticketCreateCollision = await invokeHyperPmCli(
+      [
+        "ticket",
+        "create",
+        "--id",
+        "ticket-e2e-2",
+        "--story",
+        "story-e2e-1",
+        "--title",
+        "Collision ticket",
+        "--body",
+        "b",
+      ],
+      { repoRoot, tempDir, clock, actor: "e2e" },
+    );
+    expect(ticketCreateCollision.code).toBe(ExitCode.Success);
+    await git(repoRoot, ["branch", "hyper-pm/ticket-e2e-2", "HEAD"]);
+    const ticketWorkCollision = await invokeHyperPmCli(
+      ["ticket", "work", "--id", "ticket-e2e-2"],
+      { repoRoot, tempDir, clock, actor: "e2e" },
+    );
+    expect(ticketWorkCollision.code).toBe(ExitCode.Success);
+    expect(ticketWorkCollision.json).toEqual(
+      expect.objectContaining({
+        ok: true,
+        id: "ticket-e2e-2",
+        branch: "hyper-pm/ticket-e2e-2-2",
+        branchPreferred: "hyper-pm/ticket-e2e-2",
+        branches: ["hyper-pm/ticket-e2e-2-2"],
+      }),
+    );
+    expect(await git(repoRoot, ["branch", "--show-current"])).toBe(
+      "hyper-pm/ticket-e2e-2-2",
+    );
+
     const ticketCreateOrphan = await invokeHyperPmCli(
       [
         "ticket",
@@ -506,12 +570,16 @@ describe("hyper-pm CLI (e2e)", () => {
     expect(ticketListSortSmoke.code).toBe(ExitCode.Success);
     expect(ticketListSortSmoke.json).toEqual(
       expect.objectContaining({
-        items: [
+        items: expect.arrayContaining([
           expect.objectContaining({
             id: "ticket-e2e-1",
             storyId: "story-e2e-1",
           }),
-        ],
+          expect.objectContaining({
+            id: "ticket-e2e-2",
+            storyId: "story-e2e-1",
+          }),
+        ]),
       }),
     );
 
@@ -537,13 +605,18 @@ describe("hyper-pm CLI (e2e)", () => {
     expect(ticketListByEpicAndStatus.code).toBe(ExitCode.Success);
     expect(ticketListByEpicAndStatus.json).toEqual(
       expect.objectContaining({
-        items: [
+        items: expect.arrayContaining([
           expect.objectContaining({
             id: "ticket-e2e-1",
             storyId: "story-e2e-1",
-            status: "todo",
+            status: "in_progress",
           }),
-        ],
+          expect.objectContaining({
+            id: "ticket-e2e-2",
+            storyId: "story-e2e-1",
+            status: "in_progress",
+          }),
+        ]),
       }),
     );
 
@@ -614,6 +687,12 @@ describe("hyper-pm CLI (e2e)", () => {
       expect(aiDraft.code).toBe(ExitCode.EnvironmentAuth);
       expect(aiDraft.stderr).toMatch(/HYPER_PM_AI_API_KEY/);
     }
+
+    const ticketDelete2 = await invokeHyperPmCli(
+      ["ticket", "delete", "--id", "ticket-e2e-2"],
+      { repoRoot, tempDir, clock, actor: "e2e" },
+    );
+    expect(ticketDelete2.code).toBe(ExitCode.Success);
 
     const ticketDelete = await invokeHyperPmCli(
       ["ticket", "delete", "--id", "ticket-e2e-1"],

@@ -54,9 +54,15 @@ import {
 import { loadHyperPmConfig } from "./config/load-config";
 import { saveHyperPmConfig } from "./config/save-config";
 import { runDoctorOnLines } from "./doctor/run-doctor";
+import { createAndCheckoutBranch } from "./git/create-and-checkout-branch";
 import { openDataBranchWorktree } from "./git/data-worktree-session";
 import { findGitRoot } from "./git/find-git-root";
 import { initOrphanDataBranchInWorktree } from "./git/init-orphan-data-branch";
+import { pickUniqueLocalBranchName } from "./git/pick-unique-local-branch-name";
+import {
+  assertGitRefResolvable,
+  resolveIntegrationStartPoint,
+} from "./git/resolve-integration-start-point";
 import { runGit } from "./git/run-git";
 import {
   commitDataWorktreeIfNeeded,
@@ -1426,6 +1432,96 @@ export const runCli = async (
         const evt = makeEvent("TicketUpdated", payload, deps.clock, actor);
         await appendEventLine(root, evt, deps.clock);
         return payload;
+      });
+    });
+  ticket
+    .command("work")
+    .description(
+      "Create a local branch from the integration branch, check it out, move ticket to in progress, and link the branch",
+    )
+    .requiredOption("--id <id>", "ticket id")
+    .option(
+      "--branch <name>",
+      "preferred local branch name (default hyper-pm/<id>); if taken, uses -2, -3, …",
+    )
+    .option(
+      "--from <ref>",
+      "start point for the new branch (default: auto-resolved integration branch)",
+    )
+    .action(async function (this: Command) {
+      const g = readGlobals(this);
+      const o = this.opts<{ id: string; branch?: string; from?: string }>();
+      const repoRoot = await resolveRepoRoot(g.repo);
+      const cfg = await loadMergedConfig(repoRoot, g);
+      const fromTrimmed = o.from?.trim() ?? "";
+      let startPoint: string;
+      if (fromTrimmed !== "") {
+        await assertGitRefResolvable(repoRoot, fromTrimmed, runGit);
+        startPoint = fromTrimmed;
+      } else {
+        startPoint = await resolveIntegrationStartPoint(
+          repoRoot,
+          cfg.remote,
+          runGit,
+        );
+      }
+      const preferred = normalizeTicketBranchName(
+        o.branch ?? `hyper-pm/${o.id}`,
+      );
+      if (preferred === undefined) {
+        deps.error(
+          "Invalid --branch or default branch name for this ticket id",
+        );
+        deps.exit(ExitCode.UserError);
+      }
+      await mutateDataBranch(g, deps, async (root, { actor }) => {
+        const lines = await readAllEventLines(root);
+        const proj = replayEvents(lines);
+        const curRow = proj.tickets.get(o.id);
+        if (curRow === undefined || curRow.deleted) {
+          throw new Error(`Ticket not found: ${o.id}`);
+        }
+        if (curRow.status === "done" || curRow.status === "cancelled") {
+          throw new Error(
+            `Ticket ${o.id} is ${curRow.status}; change status before starting work`,
+          );
+        }
+        const { branch: chosenBranch } = await pickUniqueLocalBranchName({
+          repoRoot,
+          preferredBase: preferred,
+          runGit,
+        });
+        await createAndCheckoutBranch({
+          repoRoot,
+          branchName: chosenBranch,
+          startPoint,
+          runGit,
+        });
+        let next = [...curRow.linkedBranches];
+        const nb = normalizeTicketBranchName(chosenBranch);
+        if (nb !== undefined && !next.includes(nb)) {
+          next.push(nb);
+        }
+        next = normalizeTicketBranchListFromStrings(next);
+        const payload: Record<string, unknown> = {
+          id: o.id,
+          status: "in_progress",
+        };
+        if (!ticketBranchListsEqual(next, curRow.linkedBranches)) {
+          payload["branches"] = next;
+        }
+        const evt = makeEvent("TicketUpdated", payload, deps.clock, actor);
+        await appendEventLine(root, evt, deps.clock);
+        const result: Record<string, unknown> = {
+          id: o.id,
+          status: "in_progress",
+          branch: chosenBranch,
+          branches: next,
+        };
+        if (chosenBranch !== preferred) {
+          result["branchPreferred"] = preferred;
+        }
+        return result;
       });
     });
   ticket
