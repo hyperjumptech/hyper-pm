@@ -1079,18 +1079,21 @@ async function renderEpicEdit() {
             return;
           }
           try {
-            await runCli([
-              "epic",
-              "update",
-              "--id",
-              id,
-              "--title",
-              title,
-              "--body",
-              body,
-              "--status",
-              status,
-            ]);
+            const prevTitle = trimU(String(row.title));
+            const prevBody = String(row.body ?? "");
+            const prevStatus = String(row.status);
+            /** @type {string[]} */
+            const argv = ["epic", "update", "--id", id];
+            if (title !== prevTitle) {
+              argv.push("--title", title);
+            }
+            if (body !== prevBody) {
+              argv.push("--body", body);
+            }
+            if (status !== prevStatus) {
+              argv.push("--status", status);
+            }
+            await runCli(argv);
             toast("Epic saved", false);
             replaceAppRoute({ kind: "epicEdit", epicId: id, epicForm: false });
           } catch (e) {
@@ -1445,18 +1448,21 @@ async function renderStoryEdit() {
             return;
           }
           try {
-            await runCli([
-              "story",
-              "update",
-              "--id",
-              id,
-              "--title",
-              title,
-              "--body",
-              body,
-              "--status",
-              status,
-            ]);
+            const prevTitle = trimU(String(row.title));
+            const prevBody = String(row.body ?? "");
+            const prevStatus = String(row.status);
+            /** @type {string[]} */
+            const argv = ["story", "update", "--id", id];
+            if (title !== prevTitle) {
+              argv.push("--title", title);
+            }
+            if (body !== prevBody) {
+              argv.push("--body", body);
+            }
+            if (status !== prevStatus) {
+              argv.push("--status", status);
+            }
+            await runCli(argv);
             toast("Story saved", false);
             replaceAppRoute({
               kind: "storyEdit",
@@ -1913,22 +1919,26 @@ async function renderTicketEdit() {
             toast("Title is required", true);
             return;
           }
-          const argv = [
-            "ticket",
-            "update",
-            "--id",
-            id,
-            "--title",
-            title,
-            "--body",
-            body,
-            "--status",
-            status,
-          ];
-          if (storySel) {
-            argv.push("--story", storySel);
-          } else {
-            argv.push("--unlink-story");
+          const prevTitle = trimU(String(row.title));
+          const prevBody = String(row.body ?? "");
+          const prevStatus = String(row.status);
+          /** @type {string[]} */
+          const argv = ["ticket", "update", "--id", id];
+          if (title !== prevTitle) {
+            argv.push("--title", title);
+          }
+          if (body !== prevBody) {
+            argv.push("--body", body);
+          }
+          if (status !== prevStatus) {
+            argv.push("--status", status);
+          }
+          if (storySel !== curStory) {
+            if (storySel) {
+              argv.push("--story", storySel);
+            } else {
+              argv.push("--unlink-story");
+            }
           }
           try {
             await runCli(argv);

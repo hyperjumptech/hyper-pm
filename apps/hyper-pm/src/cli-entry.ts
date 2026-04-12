@@ -27,6 +27,11 @@ import {
   type WorkItemStatus,
 } from "./lib/work-item-status";
 import { formatOutput } from "./cli/format-output";
+import {
+  isNoOpUpdatePayload,
+  pruneEpicOrStoryUpdatePayloadAgainstRow,
+  pruneTicketUpdatePayloadAgainstRow,
+} from "./cli/prune-unchanged-work-item-update-payload";
 import { resolveCliActor } from "./cli/resolve-cli-actor";
 import {
   formatAuditPlainLines,
@@ -673,11 +678,21 @@ export const runCli = async (
         status?: string;
       }>();
       await mutateDataBranch(g, deps, async (root, { actor }) => {
+        const lines = await readAllEventLines(root);
+        const proj = replayEvents(lines);
+        const cur = proj.epics.get(o.id);
+        if (!cur || cur.deleted) {
+          throw new Error(`Epic not found: ${o.id}`);
+        }
         const status = parseCliWorkItemStatus(o.status, deps);
-        const payload: Record<string, unknown> = { id: o.id };
-        if (o.title !== undefined) payload["title"] = o.title;
-        if (o.body !== undefined) payload["body"] = o.body;
-        if (status !== undefined) payload["status"] = status;
+        const draft: Record<string, unknown> = { id: o.id };
+        if (o.title !== undefined) draft["title"] = o.title;
+        if (o.body !== undefined) draft["body"] = o.body;
+        if (status !== undefined) draft["status"] = status;
+        const payload = pruneEpicOrStoryUpdatePayloadAgainstRow(cur, draft);
+        if (isNoOpUpdatePayload(payload)) {
+          return { id: o.id, noChanges: true };
+        }
         const evt = makeEvent("EpicUpdated", payload, deps.clock, actor);
         await appendEventLine(root, evt, deps.clock);
         return payload;
@@ -769,11 +784,21 @@ export const runCli = async (
         status?: string;
       }>();
       await mutateDataBranch(g, deps, async (root, { actor }) => {
+        const lines = await readAllEventLines(root);
+        const proj = replayEvents(lines);
+        const cur = proj.stories.get(o.id);
+        if (!cur || cur.deleted) {
+          throw new Error(`Story not found: ${o.id}`);
+        }
         const status = parseCliWorkItemStatus(o.status, deps);
-        const payload: Record<string, unknown> = { id: o.id };
-        if (o.title !== undefined) payload["title"] = o.title;
-        if (o.body !== undefined) payload["body"] = o.body;
-        if (status !== undefined) payload["status"] = status;
+        const draft: Record<string, unknown> = { id: o.id };
+        if (o.title !== undefined) draft["title"] = o.title;
+        if (o.body !== undefined) draft["body"] = o.body;
+        if (status !== undefined) draft["status"] = status;
+        const payload = pruneEpicOrStoryUpdatePayloadAgainstRow(cur, draft);
+        if (isNoOpUpdatePayload(payload)) {
+          return { id: o.id, noChanges: true };
+        }
         const evt = makeEvent("StoryUpdated", payload, deps.clock, actor);
         await appendEventLine(root, evt, deps.clock);
         return payload;
@@ -1340,6 +1365,10 @@ export const runCli = async (
             throw new Error(`Story not found: ${storyTrimmed}`);
           }
         }
+        const curTicket = proj.tickets.get(o.id);
+        if (curTicket === undefined || curTicket.deleted) {
+          throw new Error(`Ticket not found: ${o.id}`);
+        }
         const status = parseCliWorkItemStatus(o.status, deps);
         const payload: Record<string, unknown> = { id: o.id };
         if (o.title !== undefined) payload["title"] = o.title;
@@ -1360,10 +1389,6 @@ export const runCli = async (
           addBranchTokens.length > 0 ||
           removeBranchTokens.length > 0;
         if (wantsBranchChange) {
-          const curRow = proj.tickets.get(o.id);
-          if (curRow === undefined || curRow.deleted) {
-            throw new Error(`Ticket not found: ${o.id}`);
-          }
           let next: string[];
           if (o.clearBranches === true) {
             next = [];
@@ -1373,7 +1398,7 @@ export const runCli = async (
                 .map((x) => normalizeTicketBranchName(x))
                 .filter((x): x is string => x !== undefined),
             );
-            next = curRow.linkedBranches.filter((b) => !removeSet.has(b));
+            next = curTicket.linkedBranches.filter((b) => !removeSet.has(b));
             for (const raw of addBranchTokens) {
               const nb = normalizeTicketBranchName(raw);
               if (nb !== undefined && !next.includes(nb)) {
@@ -1382,7 +1407,7 @@ export const runCli = async (
             }
             next = normalizeTicketBranchListFromStrings(next);
           }
-          if (!ticketBranchListsEqual(next, curRow.linkedBranches)) {
+          if (!ticketBranchListsEqual(next, curTicket.linkedBranches)) {
             payload["branches"] = next;
           }
         }
@@ -1391,10 +1416,6 @@ export const runCli = async (
           addLabelTokens.length > 0 ||
           removeLabelTokens.length > 0;
         if (wantsLabelChange) {
-          const curRow = proj.tickets.get(o.id);
-          if (curRow === undefined || curRow.deleted) {
-            throw new Error(`Ticket not found: ${o.id}`);
-          }
           let nextLabels: string[];
           if (o.clearLabels === true) {
             nextLabels = [];
@@ -1403,14 +1424,14 @@ export const runCli = async (
               normalizeTicketLabelList(removeLabelTokens),
             );
             nextLabels = normalizeTicketLabelList(
-              (curRow.labels ?? []).filter((lb) => !removeSet.has(lb)),
+              (curTicket.labels ?? []).filter((lb) => !removeSet.has(lb)),
             );
             nextLabels = normalizeTicketLabelList([
               ...nextLabels,
               ...addLabelTokens,
             ]);
           }
-          if (!ticketLabelListsEqual(curRow.labels, nextLabels)) {
+          if (!ticketLabelListsEqual(curTicket.labels, nextLabels)) {
             payload["labels"] = nextLabels;
           }
         }
@@ -1429,9 +1450,21 @@ export const runCli = async (
         if (targetFinishUpdate !== undefined) {
           payload["targetFinishAt"] = targetFinishUpdate;
         }
-        const evt = makeEvent("TicketUpdated", payload, deps.clock, actor);
+        const prunedPayload = pruneTicketUpdatePayloadAgainstRow(
+          curTicket,
+          payload,
+        );
+        if (isNoOpUpdatePayload(prunedPayload)) {
+          return { id: o.id, noChanges: true };
+        }
+        const evt = makeEvent(
+          "TicketUpdated",
+          prunedPayload,
+          deps.clock,
+          actor,
+        );
         await appendEventLine(root, evt, deps.clock);
-        return payload;
+        return prunedPayload;
       });
     });
   ticket
