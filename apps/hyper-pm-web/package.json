@@ -1,11 +1,24 @@
 {
   "name": "hyper-pm-web",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
+  "description": "Local web UI and HTTP API around the hyper-pm CLI",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "hyper-pm-web": "dist/server.mjs"
+  },
+  "files": [
+    "dist/server.mjs",
+    "public",
+    "README.md",
+    "env.example"
+  ],
   "scripts": {
     "build:browser-audit": "esbuild src/audit-event-summary.ts --bundle --platform=browser --format=iife --global-name=HyperPmAuditSummary --outfile=public/audit-event-summary.js",
     "build": "pnpm run build:browser-audit && rm -rf dist && esbuild src/main.ts --bundle --platform=node --format=esm --outfile=dist/server.mjs",
+    "prepublishOnly": "npm run build",
     "check-types": "tsc --noEmit -p tsconfig.json",
     "dev": "pnpm run build:browser-audit && tsx watch src/main.ts",
     "lint": "eslint \"src/**/*.ts\"",
@@ -14,13 +27,13 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@workspace/env": "workspace:*",
-    "@workspace/hyper-pm-cli-runner": "workspace:*",
     "hyper-pm": "workspace:^"
   },
   "devDependencies": {
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
+    "@workspace/env": "workspace:*",
+    "@workspace/hyper-pm-cli-runner": "workspace:*",
     "@workspace/eslint-config": "workspace:*",
     "@workspace/typescript-config": "workspace:*",
     "esbuild": "^0.27.0",

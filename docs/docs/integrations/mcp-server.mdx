@@ -1,0 +1,59 @@
+---
+title: MCP server (hyper-pm-mcp)
+description: Model Context Protocol stdio server wrapping the hyper-pm CLI.
+icon: Bot
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+The **`hyper-pm-mcp`** app exposes **`hyper-pm`** over [MCP](https://modelcontextprotocol.io) using a **stdio** transport.
+
+<Callout type="warn">
+
+**`hyper_pm_run`** executes the same hyper-pm process you would run in a shell. Only enable this MCP server in **trusted** editor configurations.
+
+</Callout>
+
+## Build order
+
+From the monorepo root:
+
+```bash
+pnpm --filter hyper-pm build
+pnpm --filter hyper-pm-mcp build
+```
+
+Register the server with **`node`** and the absolute path to **`apps/hyper-pm-mcp/dist/main.mjs`**.
+
+## Tool: `hyper_pm_run`
+
+- **`argv`** (required): tokens after global options, e.g. `["epic", "read"]` or `["doctor"]`.
+- Optional fields mirror CLI globals (`cwd`, `repo`, `tempDir`, `actor`, `githubRepo`, `dataBranch`, `remote`, `sync`, `keepWorktree`).
+
+**`--format json`** is always injected. The response is JSON text with **`exitCode`**, streams, and **`parsedStdout`** when stdout is valid JSON.
+
+## Environment
+
+See **`apps/hyper-pm-mcp/env.example`** and **`@workspace/env`**. Notable:
+
+- **`HYPER_PM_CLI_PATH`** — absolute path to **`main.cjs`** when package resolution is insufficient.
+
+## Publishing
+
+When publishing to npm, publish **`hyper-pm` first**, then **`hyper-pm-mcp`**, using **`pnpm publish`** from each app so `workspace:` ranges rewrite correctly. Details in **`apps/hyper-pm-mcp/README.md`**.
+
+## Cursor example
+
+```json
+{
+  "mcpServers": {
+    "hyper-pm": {
+      "command": "node",
+      "args": ["/absolute/path/to/hyper-pm/apps/hyper-pm-mcp/dist/main.mjs"],
+      "env": {}
+    }
+  }
+}
+```
+
+Replace the path with the real location on your machine.

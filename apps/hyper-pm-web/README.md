@@ -1,6 +1,10 @@
 # hyper-pm-web
 
-Small **local** web UI around the `hyper-pm` CLI. The server spawns the same bundled CLI as the terminal (`hyper-pm/dist/main.cjs`), so behavior matches the CLI. The browser UI uses a **sidebar** (Overview, Epics, Stories, Tickets, Tools) to list work items, open them for edit, create new ones, delete, and **comment on tickets**; **Advanced CLI** still accepts raw argv.
+Small **local** web UI around the `hyper-pm` CLI.
+
+## Publishing to npm
+
+Publish **`hyper-pm` first**, then this package. Prefer **`pnpm publish`** from this app directory (or `pnpm publish --filter hyper-pm-web`) so pnpm rewrites the `workspace:^` range on `hyper-pm` to a concrete semver in the published manifest. Plain `npm publish` can leave `workspace:` specifiers intact and produce an uninstallable tarball. The server spawns the same bundled CLI as the terminal (`hyper-pm/dist/main.cjs`), so behavior matches the CLI. The browser UI uses a **sidebar** (Overview, Epics, Stories, Tickets, Tools) to list work items, open them for edit, create new ones, delete, and **comment on tickets**; **Advanced CLI** still accepts raw argv.
 
 ## Security
 

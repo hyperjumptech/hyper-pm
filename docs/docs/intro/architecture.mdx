@@ -1,0 +1,46 @@
+---
+title: Architecture
+description: How the data branch, JSONL log, worktrees, and projections fit together.
+icon: Layers
+---
+
+import { File, Folder, Files } from "fumadocs-ui/components/files";
+
+## High-level flow
+
+1. **`init`** creates or adopts an **orphan** branch (no parent commit) that holds hyper-pm data, and writes **`.hyper-pm/config.json`** in your working tree.
+2. Most mutating commands run against a **temporary Git worktree** checked out at the data branch, append one or more lines to the **event log**, commit, and optionally push — your primary branch is untouched.
+3. **Reads** replay the log (with schema versioning) into an in-memory **projection** of epics, stories, tickets, and sync cursors.
+
+## Repository layout (conceptual)
+
+<Files>
+  <Folder name="your-repo" defaultOpen>
+    <Folder name=".hyper-pm">
+      <File name="config.json" />
+    </Folder>
+    <Folder name="(data branch)" defaultOpen>
+      <File name="events.jsonl (append-only)" />
+      <File name="… other durable files as the tool evolves" />
+    </Folder>
+    <File name="main application tree (unchanged by PM data writes)" />
+  </Folder>
+</Files>
+
+Exact filenames on the data branch are owned by the CLI implementation; treat them as **opaque** except through supported commands.
+
+## Event sourcing mindset
+
+Think of the JSONL file as an **append-only journal**:
+
+- Each line is a typed **event** (for example `TicketCreated`, `GithubInboundUpdate`).
+- **Deleting** entities is modeled as **soft deletes** via events, not `rm` on rows.
+- **`doctor`** validates that the log can be read and replayed; use it in CI or before releases if you rely on automation.
+
+## Sync as a side channel
+
+GitHub is a **projection target**, not the source of truth for hyper-pm’s core model. Outbound sync updates issues; inbound sync (full mode) translates issue changes back into events when they differ from what hyper-pm last wrote.
+
+## Wrappers share one binary
+
+`hyper-pm-web` and `hyper-pm-mcp` spawn the **same bundled CLI** (`dist/main.cjs`) that you would run in a shell. That keeps UI, agents, and scripts aligned — there is no second implementation of business rules in the web layer.

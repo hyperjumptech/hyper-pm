@@ -1,0 +1,25 @@
+---
+title: Epics & stories
+description: Create, read, update, and soft-delete epics and stories.
+icon: ListTree
+---
+
+## `epic`
+
+| Subcommand | Purpose          | Notable flags                                          |
+| ---------- | ---------------- | ------------------------------------------------------ |
+| `create`   | Create an epic   | **`--title`** (required); `--body`, `--id`, `--status` |
+| `read`     | One epic or list | `--id` omit for all                                    |
+| `update`   | Patch fields     | **`--id`** (required); `--title`, `--body`, `--status` |
+| `delete`   | Soft-delete      | **`--id`** (required)                                  |
+
+## `story`
+
+| Subcommand | Purpose              | Notable flags                                                        |
+| ---------- | -------------------- | -------------------------------------------------------------------- |
+| `create`   | Create under an epic | **`--title`**, **`--epic`** (required); `--body`, `--id`, `--status` |
+| `read`     | One or list          | `--id`; when listing, optional **`--epic`** filter                   |
+| `update`   | Patch                | **`--id`**; `--title`, `--body`, `--status`                          |
+| `delete`   | Soft-delete          | **`--id`**                                                           |
+
+Status values align with the [data model](/concepts/data-model) page.

@@ -1,0 +1,25 @@
+---
+title: Global options
+description: Flags that appear before the subcommand for every hyper-pm invocation.
+icon: Settings
+---
+
+These options apply **before** any subcommand, for example:
+
+```bash
+hyper-pm --format text --repo /path/to/repo epic read
+```
+
+| Option                       | Description                               | Default                     |
+| ---------------------------- | ----------------------------------------- | --------------------------- |
+| `--format <fmt>`             | `json` or `text`                          | `json`                      |
+| `--temp-dir <dir>`           | Parent for disposable worktrees           | `TMPDIR` / system temp      |
+| `--keep-worktree`            | Keep worktree after command               | off                         |
+| `--repo <path>`              | Git repository root                       | current working directory   |
+| `--data-branch <name>`       | Data branch name                          | from config / `init`        |
+| `--remote <name>`            | Remote for data branch                    | `origin`                    |
+| `--sync <mode>`              | Persisted sync: `off`, `outbound`, `full` | from config                 |
+| `--github-repo <owner/repo>` | GitHub slug                               | env / config                |
+| `--actor <label>`            | JSONL actor for mutations                 | git user / `HYPER_PM_ACTOR` |
+
+Discover subcommands with **`hyper-pm --help`** and nested help, for example **`hyper-pm ticket read --help`**.

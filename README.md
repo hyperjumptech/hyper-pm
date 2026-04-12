@@ -1,6 +1,6 @@
-# Hyperjump Web Framework (WIP)
+# hyper-pm monorepo
 
-This is the monorepo for the Hyperjump Web Framework.
+Git-native project management: **`hyper-pm`** CLI, optional **`hyper-pm-web`** UI, and **`hyper-pm-mcp`** for editors. Product documentation lives in **`docs/`** (Speed Docs / MDX).
 
 ## Usage
 
@@ -8,44 +8,35 @@ This is the monorepo for the Hyperjump Web Framework.
 pnpm install
 ```
 
-## Running the docs
+## Documentation site
+
+Preview locally:
 
 ```bash
 pnpm docs:dev
 ```
 
-## Running the database
-
-From the root of the monorepo, run the following command to start the database locally:
+Static build (output directory follows your installed **speed-docs** version, often **`docs-output/`** at the repo root):
 
 ```bash
-docker-compose up
+pnpm docs:build
 ```
 
-## Running the demo web app
+## Packages
 
-Prepare the `.env.local` files by running the following command:
+| Area                | Path                                           |
+| ------------------- | ---------------------------------------------- |
+| CLI                 | `apps/hyper-pm`                                |
+| Web UI              | `apps/hyper-pm-web`                            |
+| MCP server          | `apps/hyper-pm-mcp`                            |
+| Shared env / runner | `packages/env`, `packages/hyper-pm-cli-runner` |
+
+See each app’s **`README.md`** for commands and environment variables.
+
+## Code quality
+
+From the repo root:
 
 ```bash
-./dev-bootstrap.sh
+pnpm code-quality
 ```
-
-Then run the following command to build the web app:
-
-```bash
-pnpm build --filter=web
-```
-
-Or to run the development server:
-
-```bash
-pnpm dev --filter=web
-```
-
-## Publishing the route-action-gen package
-
-1. Go to the release page in GitHub and create a new release.
-2. The release name should be in the format of `v<version>`.
-3. The release description should be the changelog.
-4. Publish the release.
-5. The package will be published to npm automatically.

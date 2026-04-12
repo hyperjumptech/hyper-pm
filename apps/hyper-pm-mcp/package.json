@@ -23,13 +23,15 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@workspace/hyper-pm-cli-runner": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
     "hyper-pm": "workspace:^"
   },
   "devDependencies": {
-    "@modelcontextprotocol/sdk": "catalog:",
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
+    "@workspace/hyper-pm-cli-runner": "workspace:*",
     "@workspace/env": "workspace:*",
     "@workspace/eslint-config": "workspace:*",
     "@workspace/typescript-config": "workspace:*",

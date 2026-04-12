@@ -1,0 +1,60 @@
+---
+title: Quickstart
+description: Initialize hyper-pm in a Git repo and create your first epic and ticket.
+icon: Zap
+---
+
+import { Step, Steps } from "fumadocs-ui/components/steps";
+
+<Steps>
+  <Step>
+
+### Open a Git repository
+
+`cd` into a repo you want to manage. hyper-pm uses **`git`** for all storage; bare repos are not the typical target — use a normal clone.
+
+  </Step>
+  <Step>
+
+### Initialize
+
+```bash
+hyper-pm init
+```
+
+This sets up the **data branch** and writes **`.hyper-pm/config.json`**. You can override branch name and remote later; see [Configuration](/getting-started/configuration).
+
+  </Step>
+  <Step>
+
+### Create work items
+
+```bash
+hyper-pm epic create --title "Launch hyper-pm docs"
+hyper-pm story create --title "Write Speed Docs pages" --epic <epic-id>
+hyper-pm ticket create --title "Add overview diagram" --story <story-id>
+```
+
+Use **`--format text`** (a global option **before** the subcommand) for human-readable tables during exploration:
+
+```bash
+hyper-pm --format text epic read
+```
+
+  </Step>
+  <Step>
+
+### Inspect and validate
+
+```bash
+hyper-pm --format text ticket read --id <ticket-id>
+hyper-pm doctor
+```
+
+  </Step>
+</Steps>
+
+## Next steps
+
+- Turn on **GitHub sync** and set `GITHUB_REPO` — see [GitHub sync](/integrations/github-sync).
+- Start coding from a ticket with **`hyper-pm ticket work --id …`** — see [Tickets](/cli/tickets).

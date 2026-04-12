@@ -1,0 +1,32 @@
+---
+title: repo, sync & audit
+description: Repository helpers, GitHub sync, and the audit log command.
+icon: RefreshCw
+---
+
+## `repo` (read-only)
+
+Helpers run against the **checked-out repository**, not the hyper-pm data worktree.
+
+| Subcommand               | Output                                                               |
+| ------------------------ | -------------------------------------------------------------------- |
+| `commit-authors`         | Unique authors by email (recent first), optional GitHub login guess. |
+| `suggest-assignee-login` | Guess login from **`--email`** (optional **`--name`**).              |
+
+## `sync`
+
+Runs **GitHub Issues** sync when enabled in config and not skipped.
+
+| Flag          | Meaning                              |
+| ------------- | ------------------------------------ |
+| `--no-github` | Skip network work even if sync is on |
+
+Requires **`GITHUB_TOKEN`** or a working **`gh auth token`**.
+
+Detailed outbound/inbound behavior: [GitHub sync](/integrations/github-sync).
+
+## `audit`
+
+Lists durable events with optional filters — see [Event log](/concepts/event-log).
+
+Use **`--format text`** with **`--text-style`** for human-readable output styles.

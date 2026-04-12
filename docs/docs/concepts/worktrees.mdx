@@ -1,0 +1,21 @@
+---
+title: Worktrees
+description: Why hyper-pm uses disposable Git worktrees and how temp-dir works.
+icon: GitBranch
+---
+
+## Why worktrees
+
+Mutations need a checkout of the **data branch** to stage commits. hyper-pm uses a **disposable worktree** under a temp parent so:
+
+- Your **current branch** and working tree stay as they were.
+- Concurrent terminal sessions are less likely to stomp the same index.
+- Failed runs can leave the worktree behind only when you opt in with **`--keep-worktree`** for debugging.
+
+## `TMPDIR` and `--temp-dir`
+
+By default the CLI picks a temp parent from the OS temp directory (see **`TMPDIR`** on Unix). Override with **`--temp-dir`** when corporate policy or disk layout requires a dedicated volume.
+
+## `hyper-pm-web` temp behavior
+
+The web server may create its own temp parent for worktrees and delete it on shutdown unless you pin **`HYPER_PM_WEB_TEMP_DIR`**. See [Web UI](/integrations/web-ui).

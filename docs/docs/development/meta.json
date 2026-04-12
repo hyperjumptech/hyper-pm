@@ -1,0 +1,6 @@
+{
+  "title": "Development",
+  "icon": "Hammer",
+  "pages": ["monorepo", "documentation-site"],
+  "defaultOpen": false
+}

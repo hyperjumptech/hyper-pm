@@ -1,0 +1,42 @@
+---
+title: GitHub sync
+description: Outbound and full inbound sync, labels, planning JSON, and PR activity.
+icon: Github
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+## Modes
+
+Configuration (and global `--sync`) selects how much network integration runs:
+
+- **`off`** — no GitHub API work.
+- **`outbound`** — push hyper-pm changes to issues.
+- **`full`** — outbound plus **inbound** comparison and optional **PR timeline** ingestion for eligible tickets.
+
+## Outbound behavior
+
+- Issue **labels** include `hyper-pm`, `ticket`, plus each ticket label (GitHub’s label length limits apply).
+- Ticket **planning** (`priority`, `size`, `estimate`, schedule) is embedded in a **fenced JSON block** after the issue body so **`full`** inbound can round-trip fields conservatively (only keys present in the fence participate — older issues without keys are not mass-cleared).
+
+## Inbound (`full`)
+
+Compares non-reserved labels and the planning JSON fence to the local projection and appends **`GithubInboundUpdate`** when something differs.
+
+After inbound, for tickets **`in_progress`** with linked issues, hyper-pm may load **linked PR timelines** when bodies reference issues with `Refs` / `Closes` / `Fixes` — appending **`GithubPrActivity`** events. This issues **extra GitHub API** calls per linked PR.
+
+## Issue creation vs update
+
+- **Creates** on GitHub only happen for tickets with a valid **epic + story** chain.
+- Tickets **without** a story are **skipped** for creation until you attach `--story`.
+- Tickets that **already** have a **`githubIssueNumber`** are still **updated** when unlinked (the issue body drops parent ids until you link again).
+
+## Assignees
+
+Tickets store **at most one** assignee (GitHub login). Outbound sync sets that user as the issue’s assignee (additional assignees on the issue may be removed). Inbound reads the **first** assignee when GitHub returns several.
+
+<Callout type="warn">
+
+Sync skips entirely when you pass **`sync run --no-github`**, when sync is **`off`** in config, or when GitHub credentials are missing.
+
+</Callout>

@@ -1,0 +1,40 @@
+---
+title: Configuration
+description: .hyper-pm/config.json, environment variables, and global CLI flags.
+icon: SlidersHorizontal
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+## `.hyper-pm/config.json`
+
+Created by **`init`**. It records choices such as:
+
+- **Data branch** name (default commonly `hyper-pm-data` when not overridden).
+- **Remote** to push the data branch (`origin` by default).
+- **Sync mode**: `off`, `outbound`, or `full` (see [GitHub sync](/integrations/github-sync)).
+- **GitHub repository** slug when not passed only via environment or flags.
+
+Prefer editing through **`hyper-pm init`** and documented flags rather than hand-editing, so invariants stay consistent.
+
+## Environment variables
+
+Documented in **`apps/hyper-pm/env.example`**. Commonly used:
+
+| Variable              | Purpose                                                               |
+| --------------------- | --------------------------------------------------------------------- |
+| `GITHUB_REPO`         | Default `owner/repo` for sync and URL hints.                          |
+| `GITHUB_TOKEN`        | PAT for GitHub API; optional if `gh auth login` provides a token.     |
+| `HYPER_PM_AI_API_KEY` | Enables AI ticket body helpers.                                       |
+| `HYPER_PM_ACTOR`      | Default audit label for mutations (override with `--actor`).          |
+| `TMPDIR`              | Default parent for disposable worktrees (override with `--temp-dir`). |
+
+<Callout type="warn">
+
+Never commit real tokens. Use your shell profile, a secrets manager, or CI secret stores.
+
+</Callout>
+
+## Global CLI options
+
+These appear **before** the subcommand, for example `hyper-pm --format text epic read`. Full tables live on [Global options](/cli/global-options).
