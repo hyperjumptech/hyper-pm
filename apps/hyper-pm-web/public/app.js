@@ -81,11 +81,88 @@ const TOKEN_KEY = "hyperPmWebBearer";
 
 const STATUSES = ["backlog", "todo", "in_progress", "done", "cancelled"];
 
-/** @type {{ view: string; epicId?: string; storyId?: string; ticketId?: string; storyFilterEpic?: string; ticketFilterStory?: string; epicDetailForm?: boolean; storyDetailForm?: boolean; ticketDetailForm?: boolean }} */
+/**
+ * Allowed `--sort-by` values for `ticket read` list mode (keep in sync with
+ * `apps/hyper-pm/src/cli/ticket-list-sort.ts` `TICKET_LIST_SORT_FIELDS`).
+ * @readonly
+ */
+const TICKET_LIST_SORT_FIELDS = Object.freeze([
+  "id",
+  "title",
+  "status",
+  "storyId",
+  "createdAt",
+  "updatedAt",
+  "statusChangedAt",
+  "assignee",
+  "githubIssueNumber",
+  "lastPrActivityAt",
+  "priority",
+  "size",
+  "estimate",
+  "startWorkAt",
+  "targetFinishAt",
+]);
+
+/** @type {Record<string, string>} */
+const TICKET_SORT_LABEL_BY_FIELD = Object.freeze({
+  id: "Id",
+  title: "Title",
+  status: "Status",
+  storyId: "Story",
+  createdAt: "Created",
+  updatedAt: "Updated",
+  statusChangedAt: "Status changed",
+  assignee: "Assignee",
+  githubIssueNumber: "GitHub issue",
+  lastPrActivityAt: "Last PR activity",
+  priority: "Priority",
+  size: "Size",
+  estimate: "Estimate",
+  startWorkAt: "Start work",
+  targetFinishAt: "Target finish",
+});
+
+/** @type {string} */
+const DEFAULT_TICKET_SORT_BY = "id";
+
+/** @type {"asc" | "desc"} */
+const DEFAULT_TICKET_SORT_DIR = "asc";
+
+/**
+ * Normalizes a ticket list sort field for the CLI.
+ * @param {string | undefined} raw
+ * @returns {string}
+ */
+function normalizeTicketSortField(raw) {
+  const t = String(raw ?? "").trim();
+  if (TICKET_LIST_SORT_FIELDS.includes(t)) {
+    return t;
+  }
+  return DEFAULT_TICKET_SORT_BY;
+}
+
+/**
+ * Normalizes ascending or descending sort direction.
+ * @param {string | undefined} raw
+ * @returns {"asc" | "desc"}
+ */
+function normalizeTicketSortDir(raw) {
+  const t = String(raw ?? "")
+    .trim()
+    .toLowerCase();
+  if (t === "desc") return "desc";
+  if (t === "asc") return "asc";
+  return DEFAULT_TICKET_SORT_DIR;
+}
+
+/** @type {{ view: string; epicId?: string; storyId?: string; ticketId?: string; storyFilterEpic?: string; ticketFilterStory?: string; ticketSortBy?: string; ticketSortDir?: "asc" | "desc"; epicDetailForm?: boolean; storyDetailForm?: boolean; ticketDetailForm?: boolean }} */
 const state = {
   view: "dashboard",
   storyFilterEpic: "",
   ticketFilterStory: "",
+  ticketSortBy: DEFAULT_TICKET_SORT_BY,
+  ticketSortDir: DEFAULT_TICKET_SORT_DIR,
 };
 
 /**
@@ -159,8 +236,35 @@ function trimU(v) {
  *   epicId?: string; storyId?: string; ticketId?: string;
  *   epicForm?: boolean; storyForm?: boolean; ticketForm?: boolean;
  *   storyFilterEpic?: string; ticketFilterStory?: string;
+ *   ticketSortBy?: string; ticketSortDir?: string;
  * }} AppRoute
  */
+
+/**
+ * Builds a tickets list route, merging optional overrides with current navigation state.
+ * @param {{ ticketFilterStory?: string; ticketSortBy?: string; ticketSortDir?: string }} [overrides]
+ * @returns {AppRoute}
+ */
+function ticketsListRoute(overrides = {}) {
+  const storySrc =
+    overrides.ticketFilterStory !== undefined
+      ? overrides.ticketFilterStory
+      : state.ticketFilterStory;
+  const sortBySrc =
+    overrides.ticketSortBy !== undefined
+      ? overrides.ticketSortBy
+      : state.ticketSortBy;
+  const sortDirSrc =
+    overrides.ticketSortDir !== undefined
+      ? overrides.ticketSortDir
+      : state.ticketSortDir;
+  return {
+    kind: "tickets",
+    ticketFilterStory: storySrc ?? "",
+    ticketSortBy: normalizeTicketSortField(sortBySrc),
+    ticketSortDir: normalizeTicketSortDir(sortDirSrc),
+  };
+}
 
 /**
  * Parses `location.hash` into a structured route.
@@ -201,7 +305,17 @@ function parseHash() {
     }
     if (parts[0] === "tickets" && parts.length === 1) {
       const st = params.get("story") || "";
-      return { kind: "tickets", ticketFilterStory: st };
+      const sortRaw = trimU(params.get("sort") ?? "");
+      const dirRaw = trimU(params.get("dir") ?? "");
+      /** @type {AppRoute} */
+      const route = { kind: "tickets", ticketFilterStory: st };
+      if (sortRaw !== undefined) {
+        route.ticketSortBy = sortRaw;
+      }
+      if (dirRaw !== undefined) {
+        route.ticketSortDir = dirRaw;
+      }
+      return route;
     }
     if (parts[0] === "ticket" && parts[1] === "new")
       return { kind: "ticketNew" };
@@ -249,7 +363,14 @@ function routeToHashPath(r) {
     }
     case "tickets": {
       const fs = trimU(r.ticketFilterStory);
-      return fs ? `/tickets?story=${encodeURIComponent(fs)}` : "/tickets";
+      const sortBy = normalizeTicketSortField(r.ticketSortBy);
+      const sortDir = normalizeTicketSortDir(r.ticketSortDir);
+      const q = new URLSearchParams();
+      if (fs) q.set("story", fs);
+      if (sortBy !== DEFAULT_TICKET_SORT_BY) q.set("sort", sortBy);
+      if (sortDir !== DEFAULT_TICKET_SORT_DIR) q.set("dir", sortDir);
+      const qs = q.toString();
+      return qs ? `/tickets?${qs}` : "/tickets";
     }
     case "ticketNew":
       return "/ticket/new";
@@ -335,6 +456,8 @@ function syncStateFromRoute(r) {
     case "tickets":
       state.view = "tickets";
       state.ticketFilterStory = r.ticketFilterStory || "";
+      state.ticketSortBy = normalizeTicketSortField(r.ticketSortBy);
+      state.ticketSortDir = normalizeTicketSortDir(r.ticketSortDir);
       state.storyFilterEpic = "";
       delete state.ticketId;
       delete state.ticketDetailForm;
@@ -482,7 +605,7 @@ function navigateToStoriesForEpic(epicId) {
  * @param {string} storyId
  */
 function navigateToTicketsForStory(storyId) {
-  void pushAppRoute({ kind: "tickets", ticketFilterStory: storyId });
+  void pushAppRoute(ticketsListRoute({ ticketFilterStory: storyId }));
 }
 
 /**
@@ -1034,7 +1157,7 @@ async function renderDashboard() {
     document
       .getElementById("dashOpenTickets")
       ?.addEventListener("click", () => {
-        void pushAppRoute({ kind: "tickets", ticketFilterStory: "" });
+        void pushAppRoute(ticketsListRoute({ ticketFilterStory: "" }));
       });
   } catch (e) {
     main.innerHTML = `<div class="panel"><p class="muted">${escapeHtml(String(e))}</p></div>`;
@@ -1686,6 +1809,12 @@ async function renderTicketsList() {
     const argv = ["ticket", "read"];
     const fs = trimU(state.ticketFilterStory);
     if (fs) argv.push("--story", fs);
+    argv.push(
+      "--sort-by",
+      state.ticketSortBy ?? DEFAULT_TICKET_SORT_BY,
+      "--sort-dir",
+      state.ticketSortDir ?? DEFAULT_TICKET_SORT_DIR,
+    );
     const json = await runCli(argv);
     const items = listFromJson(json);
     /** @type {Record<string, string>} */
@@ -1701,6 +1830,17 @@ async function renderTicketsList() {
         (s) =>
           `<option value="${escapeHtml(String(/** @type {{id:string}} */ (s).id))}"${String(/** @type {{id:string}} */ (s).id) === fs ? " selected" : ""}>${escapeHtml(String(/** @type {{title:string}} */ (s).title))}</option>`,
       ),
+    ].join("");
+    const sortBy = normalizeTicketSortField(state.ticketSortBy);
+    const sortDir = normalizeTicketSortDir(state.ticketSortDir);
+    const sortFieldOpts = TICKET_LIST_SORT_FIELDS.map((f) => {
+      const label = TICKET_SORT_LABEL_BY_FIELD[f] ?? f;
+      const sel = f === sortBy ? " selected" : "";
+      return `<option value="${escapeHtml(f)}"${sel}>${escapeHtml(label)}</option>`;
+    }).join("");
+    const sortDirOpts = [
+      `<option value="asc"${sortDir === "asc" ? " selected" : ""}>Ascending</option>`,
+      `<option value="desc"${sortDir === "desc" ? " selected" : ""}>Descending</option>`,
     ].join("");
     const filteredStoryRow = fs
       ? stories.find((s) => String(/** @type {{id:string}} */ (s).id) === fs)
@@ -1728,6 +1868,12 @@ async function renderTicketsList() {
           <label for="filterTicketStory">Filter by story</label>
           <select id="filterTicketStory">${storyOpts}</select>
         </div>
+        <div class="filter-bar">
+          <label for="filterTicketSortBy">Sort by</label>
+          <select id="filterTicketSortBy">${sortFieldOpts}</select>
+          <label for="filterTicketSortDir">Direction</label>
+          <select id="filterTicketSortDir">${sortDirOpts}</select>
+        </div>
         <div class="panel-head">
           <h2>Tickets</h2>
           <button type="button" class="primary" id="btnNewTicket">New ticket</button>
@@ -1738,7 +1884,19 @@ async function renderTicketsList() {
       .getElementById("filterTicketStory")
       ?.addEventListener("change", (ev) => {
         const val = /** @type {HTMLSelectElement} */ (ev.target).value;
-        replaceAppRoute({ kind: "tickets", ticketFilterStory: val });
+        replaceAppRoute(ticketsListRoute({ ticketFilterStory: val }));
+      });
+    document
+      .getElementById("filterTicketSortBy")
+      ?.addEventListener("change", (ev) => {
+        const val = /** @type {HTMLSelectElement} */ (ev.target).value;
+        replaceAppRoute(ticketsListRoute({ ticketSortBy: val }));
+      });
+    document
+      .getElementById("filterTicketSortDir")
+      ?.addEventListener("change", (ev) => {
+        const val = /** @type {HTMLSelectElement} */ (ev.target).value;
+        replaceAppRoute(ticketsListRoute({ ticketSortDir: val }));
       });
     document.getElementById("btnNewTicket")?.addEventListener("click", () => {
       void pushAppRoute({ kind: "ticketNew" });
@@ -1752,7 +1910,7 @@ async function renderTicketsList() {
       document
         .getElementById("btnTicketsClearStory")
         ?.addEventListener("click", () => {
-          void pushAppRoute({ kind: "tickets", ticketFilterStory: "" });
+          void pushAppRoute(ticketsListRoute({ ticketFilterStory: "" }));
         });
     }
     main.querySelectorAll(".btn-open-ticket").forEach((btn) => {
@@ -1892,10 +2050,7 @@ async function renderTicketNew() {
           await runCli(depArgv);
         }
         toast("Ticket created", false);
-        void pushAppRoute({
-          kind: "tickets",
-          ticketFilterStory: story || "",
-        });
+        void pushAppRoute(ticketsListRoute({ ticketFilterStory: story || "" }));
       } catch (e) {
         toast(String(e), true);
       }
@@ -1925,7 +2080,7 @@ function commentsHtml(comments) {
 async function renderTicketEdit() {
   const id = state.ticketId;
   if (!id) {
-    void pushAppRoute({ kind: "tickets", ticketFilterStory: "" });
+    void pushAppRoute(ticketsListRoute({ ticketFilterStory: "" }));
     return;
   }
   state.view = "ticketEdit";
@@ -2159,10 +2314,9 @@ async function renderTicketEdit() {
     document
       .getElementById("btnBackTickets2")
       ?.addEventListener("click", () => {
-        void pushAppRoute({
-          kind: "tickets",
-          ticketFilterStory: curStory || "",
-        });
+        void pushAppRoute(
+          ticketsListRoute({ ticketFilterStory: curStory || "" }),
+        );
       });
     document
       .getElementById("ticketSidebarStoryLink")
@@ -2270,7 +2424,7 @@ async function renderTicketEdit() {
           try {
             await runCli(["ticket", "delete", "--id", id]);
             toast("Ticket deleted", false);
-            void pushAppRoute({ kind: "tickets", ticketFilterStory: "" });
+            void pushAppRoute(ticketsListRoute({ ticketFilterStory: "" }));
           } catch (e) {
             toast(String(e), true);
           }
@@ -2298,7 +2452,7 @@ async function renderTicketEdit() {
     document
       .getElementById("btnTicketErrBack")
       ?.addEventListener("click", () => {
-        void pushAppRoute({ kind: "tickets", ticketFilterStory: "" });
+        void pushAppRoute(ticketsListRoute({ ticketFilterStory: "" }));
       });
   }
 }
@@ -2442,7 +2596,7 @@ function wireNav() {
       else if (v === "stories") {
         void pushAppRoute({ kind: "stories", storyFilterEpic: "" });
       } else if (v === "tickets") {
-        void pushAppRoute({ kind: "tickets", ticketFilterStory: "" });
+        void pushAppRoute(ticketsListRoute({ ticketFilterStory: "" }));
       } else if (v === "tools") void pushAppRoute({ kind: "tools" });
       else if (v === "advanced") void pushAppRoute({ kind: "advanced" });
     });
