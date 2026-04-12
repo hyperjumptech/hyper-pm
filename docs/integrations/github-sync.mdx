@@ -8,11 +8,17 @@ import { Callout } from "fumadocs-ui/components/callout";
 
 ## Modes
 
-Configuration (and global `--sync`) selects how much network integration runs:
+Configuration (and global `--sync`) selects how **GitHub Issues** sync behaves when you pass **`sync --with-github`**:
 
-- **`off`** — no GitHub API work.
+- **`off`** — `sync --with-github` is rejected; use plain **`sync`** to reconcile the data branch over git only.
 - **`outbound`** — push hyper-pm changes to issues.
 - **`full`** — outbound plus **inbound** comparison and optional **PR timeline** ingestion for eligible tickets.
+
+## Default `sync` (data branch over git)
+
+Plain **`sync`** (no flags) **only** runs `git fetch` / `git merge` / `git push` for the configured data branch (no Octokit, no `GITHUB_TOKEN`). It runs even when **`sync` is `off`** in config. Use **`sync --with-github`** when you also want GitHub Issues mirroring (see modes above).
+
+The legacy **`--git-data`** flag is a no-op; default behavior is already git-only.
 
 ## Outbound behavior
 
@@ -37,6 +43,6 @@ Tickets store **at most one** assignee (GitHub login). Outbound sync sets that u
 
 <Callout type="warn">
 
-Sync skips entirely when you pass **`sync run --no-github`**, when sync is **`off`** in config, or when GitHub credentials are missing.
+**`sync --skip-network`** (legacy: **`--no-github`**) skips **all** sync network work (git and GitHub). **`sync --with-github`** requires **`GITHUB_TOKEN`** or **`gh`** and needs **`sync`** not **`off`** in config.
 
 </Callout>
