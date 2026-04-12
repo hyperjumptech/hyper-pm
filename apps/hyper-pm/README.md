@@ -77,6 +77,15 @@ Uses global options only (no subcommand-specific flags).
 
 Tickets store at most one assignee (GitHub login). With GitHub sync, outbound updates set that user as the issue’s only assignee (extra assignees on the issue may be removed), and inbound reads the first assignee from the API when the issue has several. Outbound **creates** GitHub issues only for tickets that have a valid epic+story chain; unlinked tickets are skipped until you set `--story`. Tickets that **already** have a linked GitHub issue are still **updated** when unlinked (issue body drops parent ids until you link again).
 
+### `repo`
+
+Read-only helpers against the **checked-out repository** (not the hyper-pm data worktree).
+
+| Subcommand               | Description                                                                                                                               |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `commit-authors`         | JSON `{ "items": [{ "name", "email", "loginGuess?" }] }` — unique authors by email (most recent first), with optional GitHub login guess. |
+| `suggest-assignee-login` | JSON `{ "loginGuess": string \| null }`. **Required:** `--email <e>`. **Optional:** `--name <n>` when the email alone is not enough.      |
+
 ### `sync`
 
 GitHub Issues sync (outbound + inbound). **Outbound** sets issue `labels` to `hyper-pm`, `ticket`, plus each ticket label (GitHub’s 50-character label limit applies), and embeds ticket planning (`priority`, `size`, `estimate`, `start_work_at`, `target_finish_at`) in the fenced JSON after the description. **Inbound** (`sync: full`) compares the issue’s non-reserved labels and that JSON fence to the projection and appends `GithubInboundUpdate` when anything differs (only keys present in the fence affect planning fields, so older issues without those keys are not cleared). With `sync: full` in config, after inbound it also loads linked PR timelines for tickets in **`in_progress`** that have `Refs` / `Closes` / `Fixes #<n>` in the body, appending durable `GithubPrActivity` events (opened seed via `pulls.get`, plus timeline rows such as comments, reviews, pushes, merge/close). That issues extra GitHub API calls per linked PR.

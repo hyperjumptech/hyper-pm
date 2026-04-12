@@ -10,6 +10,7 @@ import { ulid } from "ulid";
 import { runAiDraft } from "./ai/run-ai-draft";
 import { ExitCode, type ExitCodeValue } from "./cli/exit-codes";
 import { normalizeGithubLogin } from "./lib/github-assignee";
+import { guessGithubLoginFromContact } from "./lib/guess-assignee-login-from-contact";
 import {
   normalizeTicketBranchListFromStrings,
   normalizeTicketBranchName,
@@ -68,6 +69,7 @@ import {
   assertGitRefResolvable,
   resolveIntegrationStartPoint,
 } from "./git/resolve-integration-start-point";
+import { listRepoCommitAuthors } from "./git/list-repo-commit-authors";
 import { runGit } from "./git/run-git";
 import { tryReadGithubOwnerRepoSlugFromGit } from "./git/try-read-github-owner-repo-slug-from-git";
 import {
@@ -1812,6 +1814,52 @@ export const runCli = async (
         deps.error(e instanceof Error ? e.message : String(e));
         deps.exit(ExitCode.UserError);
       }
+      deps.exit(ExitCode.Success);
+    });
+
+  const repo = program
+    .command("repo")
+    .description(
+      "Read-only repository helpers (runs in the repo, not the data worktree)",
+    );
+
+  repo
+    .command("commit-authors")
+    .description(
+      "List unique git commit authors as JSON (name, email, optional loginGuess for GitHub assignment)",
+    )
+    .action(async function (this: Command) {
+      const g = readGlobals(this);
+      try {
+        const repoRoot = await resolveRepoRoot(g.repo);
+        const items = await listRepoCommitAuthors(repoRoot, runGit);
+        deps.log(formatOutput(g.format, { items }));
+        deps.exit(ExitCode.Success);
+      } catch (e) {
+        deps.error(e instanceof Error ? e.message : String(e));
+        deps.exit(ExitCode.UserError);
+      }
+    });
+
+  repo
+    .command("suggest-assignee-login")
+    .description(
+      "Suggest a normalized GitHub login from an email (and optional display name) as JSON",
+    )
+    .requiredOption("--email <e>", "email address (e.g. from git commits)")
+    .option(
+      "--name <n>",
+      "optional display name used when the email alone yields no guess",
+    )
+    .action(async function (this: Command) {
+      const g = readGlobals(this);
+      const o = this.opts<{ email: string; name?: string }>();
+      const guess = guessGithubLoginFromContact(o.name ?? "", o.email);
+      deps.log(
+        formatOutput(g.format, {
+          loginGuess: guess === undefined ? null : guess,
+        }),
+      );
       deps.exit(ExitCode.Success);
     });
 

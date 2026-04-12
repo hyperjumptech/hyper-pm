@@ -682,6 +682,83 @@ function listFromJson(json) {
 }
 
 /**
+ * Parses `repo commit-authors` JSON rows for the assignee picker.
+ * @param {unknown} json
+ * @returns {{ name: string; email: string; loginGuess?: string }[]}
+ */
+function commitAuthorsFromJson(json) {
+  const items = listFromJson(json);
+  /** @type {{ name: string; email: string; loginGuess?: string }[]} */
+  const out = [];
+  for (const it of items) {
+    const r = /** @type {Record<string, unknown>} */ (it);
+    const email = trimU(String(r.email ?? ""));
+    if (!email) continue;
+    const name = String(r.name ?? "");
+    /** @type {{ name: string; email: string; loginGuess?: string }} */
+    const row = { name, email };
+    if (typeof r.loginGuess === "string") {
+      const g = trimU(r.loginGuess);
+      if (g) row.loginGuess = g.toLowerCase();
+    }
+    out.push(row);
+  }
+  return out;
+}
+
+/**
+ * Wires commit-author select and “suggest login” for ticket assignee fields.
+ * @param {string} prefix `edit` or `new` (element id prefix).
+ * @param {{ name: string; email: string; loginGuess?: string }[]} authors
+ */
+function wireTicketAssigneeControls(prefix, authors) {
+  const sel = document.getElementById(`${prefix}TicketCommitAuthor`);
+  const loginEl = document.getElementById(`${prefix}TicketAssigneeLogin`);
+  const nameEl = document.getElementById(`${prefix}TicketAssigneeName`);
+  const emailEl = document.getElementById(`${prefix}TicketAssigneeEmail`);
+  const btn = document.getElementById(
+    `btn${prefix === "edit" ? "Edit" : "New"}TicketSuggestAssignee`,
+  );
+  sel?.addEventListener("change", () => {
+    if (!sel || !loginEl) return;
+    const v = /** @type {HTMLSelectElement} */ (sel).value;
+    if (!v) return;
+    const idx = Number(v);
+    if (!Number.isFinite(idx) || !authors[idx]) return;
+    const a = authors[idx];
+    if (nameEl) nameEl.value = a.name;
+    if (emailEl) emailEl.value = a.email;
+    if (a.loginGuess) loginEl.value = a.loginGuess;
+    /** @type {HTMLSelectElement} */ (sel).value = "";
+  });
+  btn?.addEventListener("click", async () => {
+    const email = trimU(emailEl?.value ?? "");
+    if (!email) {
+      toast("Enter an email to suggest a GitHub login.", true);
+      return;
+    }
+    const name = nameEl?.value ?? "";
+    try {
+      /** @type {string[]} */
+      const argv = ["repo", "suggest-assignee-login", "--email", email];
+      if (trimU(name)) argv.push("--name", name.trim());
+      const j = /** @type {{ loginGuess?: string | null }} */ (
+        await runCli(argv)
+      );
+      const g =
+        j && typeof j.loginGuess === "string" ? trimU(j.loginGuess) : undefined;
+      if (!g) {
+        toast("No login guess; enter the GitHub username manually.", true);
+        return;
+      }
+      if (loginEl) loginEl.value = g.toLowerCase();
+    } catch (e) {
+      toast(String(e), true);
+    }
+  });
+}
+
+/**
  * @param {string} message
  * @param {boolean} isError
  */
@@ -1604,8 +1681,19 @@ async function renderTicketNew() {
   setNavCurrent();
   const main = document.getElementById("main");
   if (!main) return;
-  const sj = await runCli(["story", "read"]).catch(() => ({ items: [] }));
+  const [sj, authorJson] = await Promise.all([
+    runCli(["story", "read"]).catch(() => ({ items: [] })),
+    runCli(["repo", "commit-authors"]).catch(() => ({ items: [] })),
+  ]);
   const stories = listFromJson(sj);
+  const commitAuthors = commitAuthorsFromJson(authorJson);
+  const authorOptsHtml = [
+    `<option value="">Select commit author…</option>`,
+    ...commitAuthors.map((a, i) => {
+      const label = `${a.name || "(no name)"} <${a.email}>`;
+      return `<option value="${String(i)}">${escapeHtml(label)}</option>`;
+    }),
+  ].join("");
   const storyOpts = [
     `<option value="">No story (unlinked)</option>`,
     ...stories.map(
@@ -1629,10 +1717,23 @@ async function renderTicketNew() {
       <textarea id="newTicketBody" rows="5"></textarea>
       <label for="newTicketStatus">Status</label>
       ${statusOptionsHtml("newTicketStatus", "todo")}
+      <h3 style="margin-top:1.25rem">Assignee (optional)</h3>
+      <label for="newTicketAssigneeLogin">GitHub login</label>
+      <input type="text" id="newTicketAssigneeLogin" autocomplete="off" placeholder="e.g. octocat" />
+      <label for="newTicketCommitAuthor">Pick from commit authors</label>
+      <select id="newTicketCommitAuthor">${authorOptsHtml}</select>
+      <label for="newTicketAssigneeName">Or enter name</label>
+      <input type="text" id="newTicketAssigneeName" autocomplete="name" placeholder="Display name" />
+      <label for="newTicketAssigneeEmail">And email</label>
+      <input type="email" id="newTicketAssigneeEmail" autocomplete="email" placeholder="name@example.com" />
+      <div class="row">
+        <button type="button" class="ghost" id="btnNewTicketSuggestAssignee">Suggest login from name and email</button>
+      </div>
       <div class="row">
         <button type="button" class="primary" id="btnCreateTicket">Create</button>
       </div>
     </div>`;
+  wireTicketAssigneeControls("new", commitAuthors);
   document.getElementById("btnBackTickets")?.addEventListener("click", () => {
     window.history.back();
   });
@@ -1663,6 +1764,10 @@ async function renderTicketNew() {
         status,
       ];
       if (story) argv.push("--story", story);
+      const assigneeLogin = trimU(
+        document.getElementById("newTicketAssigneeLogin")?.value ?? "",
+      );
+      if (assigneeLogin) argv.push("--assignee", assigneeLogin.toLowerCase());
       try {
         await runCli(argv);
         toast("Ticket created", false);
@@ -1708,10 +1813,13 @@ async function renderTicketEdit() {
   if (!main) return;
   main.innerHTML = '<p class="muted">Loading…</p>';
   try {
-    const row = /** @type {Record<string, unknown>} */ (
-      await runCli(["ticket", "read", "--id", id])
-    );
-    const sj = await runCli(["story", "read"]);
+    const [rowRaw, sj, authorJson] = await Promise.all([
+      runCli(["ticket", "read", "--id", id]),
+      runCli(["story", "read"]),
+      runCli(["repo", "commit-authors"]).catch(() => ({ items: [] })),
+    ]);
+    const row = /** @type {Record<string, unknown>} */ (rowRaw);
+    const commitAuthors = commitAuthorsFromJson(authorJson);
     const stories = listFromJson(sj);
     const curStory = row.storyId == null ? "" : String(row.storyId);
     let storyReadInner = '<span class="muted">No linked story</span>';
@@ -1775,6 +1883,17 @@ async function renderTicketEdit() {
     ].join("");
     const comments = Array.isArray(row.comments) ? row.comments : [];
     const showForm = Boolean(state.ticketDetailForm);
+    const curAssigneeRaw =
+      row.assignee !== undefined && row.assignee !== null
+        ? String(row.assignee).trim().toLowerCase()
+        : "";
+    const authorOptsHtml = [
+      `<option value="">Select commit author…</option>`,
+      ...commitAuthors.map((a, i) => {
+        const label = `${a.name || "(no name)"} <${a.email}>`;
+        return `<option value="${String(i)}">${escapeHtml(label)}</option>`;
+      }),
+    ].join("");
     setPageTitle(
       showForm ? "Edit ticket" : markdownToPlainTextForUiChrome(row.title),
     );
@@ -1801,6 +1920,12 @@ async function renderTicketEdit() {
               ${readRowHtml("Story", storyReadInner)}
               ${readRowHtml("Epic", epicReadInner)}
               ${readRowHtml("Status", badgeHtml(String(row.status)))}
+              ${readRowHtml(
+                "Assignee",
+                curAssigneeRaw
+                  ? `<code>@${escapeHtml(curAssigneeRaw)}</code>`
+                  : '<span class="muted">Unassigned</span>',
+              )}
               ${readRowHtml("Labels", labelsInner)}
             </div>
           </aside>
@@ -1840,6 +1965,23 @@ async function renderTicketEdit() {
                 <div class="read-label">Status</div>
                 <div class="read-value">${statusOptionsHtml("editTicketStatus", String(row.status))}</div>
               </div>
+              <div class="read-row">
+                <div class="read-label">Assignee</div>
+                <div class="read-value">
+                  <label for="editTicketAssigneeLogin" class="muted" style="margin-top:0;font-size:0.75rem">GitHub login (synced to the issue assignee)</label>
+                  <input type="text" id="editTicketAssigneeLogin" autocomplete="off" placeholder="e.g. octocat" value="${escapeHtml(curAssigneeRaw)}" />
+                  <label for="editTicketCommitAuthor" style="margin-top:0.75rem">Pick from commit authors</label>
+                  <select id="editTicketCommitAuthor">${authorOptsHtml}</select>
+                  <label for="editTicketAssigneeName" style="margin-top:0.75rem">Or enter name</label>
+                  <input type="text" id="editTicketAssigneeName" autocomplete="name" placeholder="Display name" />
+                  <label for="editTicketAssigneeEmail">And email</label>
+                  <input type="email" id="editTicketAssigneeEmail" autocomplete="email" placeholder="name@example.com" />
+                  <div class="row" style="margin-top:0.5rem">
+                    <button type="button" class="ghost" id="btnEditTicketSuggestAssignee">Suggest login from name and email</button>
+                  </div>
+                  <p class="muted" style="font-size:0.8125rem;margin:0.5rem 0 0;line-height:1.45">Leave login empty and save to remove the assignee.</p>
+                </div>
+              </div>
               ${readRowHtml("Labels", labelsInner)}
               <p class="muted" style="font-size:0.8125rem;margin:0;line-height:1.45">Change labels with <code>hyper-pm ticket update</code> in the CLI.</p>
             </div>
@@ -1865,6 +2007,9 @@ async function renderTicketEdit() {
           <button type="button" class="primary" id="btnAddComment">Post comment</button>
         </div>
       </div>`;
+    if (showForm) {
+      wireTicketAssigneeControls("edit", commitAuthors);
+    }
     document
       .getElementById("btnBackTickets2")
       ?.addEventListener("click", () => {
@@ -1938,6 +2083,17 @@ async function renderTicketEdit() {
               argv.push("--story", storySel);
             } else {
               argv.push("--unlink-story");
+            }
+          }
+          const loginRaw = trimU(
+            document.getElementById("editTicketAssigneeLogin")?.value ?? "",
+          );
+          const loginNorm = loginRaw ? loginRaw.toLowerCase() : "";
+          if (loginNorm !== curAssigneeRaw) {
+            if (loginNorm === "" && curAssigneeRaw !== "") {
+              argv.push("--unassign");
+            } else if (loginNorm !== "") {
+              argv.push("--assignee", loginNorm);
             }
           }
           try {
