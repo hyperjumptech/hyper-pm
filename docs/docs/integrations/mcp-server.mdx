@@ -1,48 +1,129 @@
 ---
 title: MCP server (hyper-pm-mcp)
-description: Model Context Protocol stdio server wrapping the hyper-pm CLI.
+description: Model Context Protocol stdio server — install, Cursor and Claude Desktop setup, tool shape, and security.
 icon: Bot
 ---
 
 import { Callout } from "fumadocs-ui/components/callout";
+import { Step, Steps } from "fumadocs-ui/components/steps";
 
-The **`hyper-pm-mcp`** app exposes **`hyper-pm`** over [MCP](https://modelcontextprotocol.io) using a **stdio** transport.
+**`hyper-pm-mcp`** is a **stdio** [Model Context Protocol](https://modelcontextprotocol.io) server. MCP-capable editors and apps (for example **Cursor**, **Claude Desktop**) can call a single tool, **`hyper_pm_run`**, which spawns the same **`hyper-pm`** CLI you would run locally.
+
+Use it when you want an **AI assistant** to read epics, list tickets, run **`doctor`**, or drive **`sync`**, without hand-copying JSON between chat and the terminal.
+
+## Security
 
 <Callout type="warn">
 
-**`hyper_pm_run`** executes the same hyper-pm process you would run in a shell. Only enable this MCP server in **trusted** editor configurations.
+**`hyper_pm_run`** executes **real** `hyper-pm` processes with the arguments the model supplies (within the JSON schema). Only enable this server in **trusted** MCP configurations, and keep tokens out of shared project files.
 
 </Callout>
 
-## Build order
+## Install and build order
 
-From the monorepo root:
+### From npm (published packages)
+
+The npm package name is **`hyper-pm-mcp`**. It lists **`hyper-pm`** as a dependency so the CLI is installed next to the server.
+
+```bash
+npm install -g hyper-pm-mcp
+```
+
+Point your MCP host at the **`hyper-pm-mcp`** binary from the global install (see **`which hyper-pm-mcp`** on Unix), or at the resolved path to **`dist/main.mjs`** inside the package directory.
+
+### From this monorepo (development)
+
+<Steps>
+  <Step>
+
+### Build the CLI
 
 ```bash
 pnpm --filter hyper-pm build
+```
+
+  </Step>
+  <Step>
+
+### Build the MCP server
+
+```bash
 pnpm --filter hyper-pm-mcp build
 ```
 
-Register the server with **`node`** and the absolute path to **`apps/hyper-pm-mcp/dist/main.mjs`**.
+  </Step>
+  <Step>
 
-## Tool: `hyper_pm_run`
+### Register the server in your editor
 
-- **`argv`** (required): tokens after global options, e.g. `["epic", "read"]` or `["doctor"]`.
-- Optional fields mirror CLI globals (`cwd`, `repo`, `tempDir`, `actor`, `githubRepo`, `dataBranch`, `remote`, `sync`, `keepWorktree`).
+Use **`node`** with the **absolute path** to **`apps/hyper-pm-mcp/dist/main.mjs`** (see examples below).
 
-**`--format json`** is always injected. The response is JSON text with **`exitCode`**, streams, and **`parsedStdout`** when stdout is valid JSON.
+  </Step>
+</Steps>
 
 ## Environment
 
-See **`apps/hyper-pm-mcp/env.example`** and **`@workspace/env`**. Notable:
+Optional variables are in **`apps/hyper-pm-mcp/env.example`** and parsed through **`@workspace/env`**.
 
-- **`HYPER_PM_CLI_PATH`** — absolute path to **`main.cjs`** when package resolution is insufficient.
+| Variable                | Purpose                                                                                                                             |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| **`HYPER_PM_CLI_PATH`** | Absolute path to **`hyper-pm/dist/main.cjs`** when `require.resolve("hyper-pm")` is not sufficient (unusual for published installs) |
 
-## Publishing
+The **child CLI** inherits the host process environment: set **`GITHUB_TOKEN`**, **`GITHUB_REPO`**, **`HYPER_PM_AI_API_KEY`**, etc. in the MCP **`env`** object (or system environment) so **`sync`** and AI flags work the same as in a terminal.
 
-When publishing to npm, publish **`hyper-pm` first**, then **`hyper-pm-mcp`**, using **`pnpm publish`** from each app so `workspace:` ranges rewrite correctly. Details in **`apps/hyper-pm-mcp/README.md`**.
+## Tool: `hyper_pm_run`
 
-## Cursor example
+**Description (for models):** runs `hyper-pm` with JSON output; **`--format json`** is always injected by the runner.
+
+### Input (JSON)
+
+Aligned with **`@workspace/hyper-pm-cli-runner`** (`hyperPmRunInputSchema`):
+
+| Field              | Required | Description                                                                                                                                      |
+| ------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **`argv`**         | yes      | Tokens **after** global CLI flags, e.g. `["epic", "read"]`, `["ticket", "read", "--id", "01ARZ3NDEKTSV4RRFFQ69G5FAV"]`, `["doctor"]`, `["sync"]` |
+| **`cwd`**          | no       | Working directory for the child process (defaults per runner)                                                                                    |
+| **`repo`**         | no       | Passed as **`--repo`**                                                                                                                           |
+| **`tempDir`**      | no       | Passed as **`--temp-dir`**                                                                                                                       |
+| **`actor`**        | no       | **`--actor`**                                                                                                                                    |
+| **`githubRepo`**   | no       | **`--github-repo`**                                                                                                                              |
+| **`dataBranch`**   | no       | **`--data-branch`**                                                                                                                              |
+| **`remote`**       | no       | **`--remote`**                                                                                                                                   |
+| **`sync`**         | no       | **`off`**, **`outbound`**, or **`full`** — **`--sync`**                                                                                          |
+| **`keepWorktree`** | no       | When **`true`**, appends **`--keep-worktree`**                                                                                                   |
+
+Do **not** put **`--format`** inside **`argv`**; it is injected automatically before your subcommand.
+
+### Example tool inputs
+
+List epics (JSON to stdout, parsed by the host from the tool response text):
+
+```json
+{ "argv": ["epic", "read"] }
+```
+
+List tickets in progress with a repo override:
+
+```json
+{
+  "argv": ["ticket", "read", "--status", "in_progress"],
+  "repo": "/Users/me/projects/my-app"
+}
+```
+
+Run validation only:
+
+```json
+{ "argv": ["doctor"] }
+```
+
+### Output
+
+The tool returns **text** content: a single JSON document (pretty-printed) with **`exitCode`**, **`signal`**, **`stderr`**, **`stdout`**, and **`parsedStdout`** (parsed CLI JSON when **`stdout`** is valid JSON, otherwise **`null`**). The [Web UI](/integrations/web-ui) **`POST /api/run`** response uses the same parsing for its **`json`** field.
+
+## Cursor
+
+**Settings → MCP** (or your version’s equivalent): add a server entry:
 
 ```json
 {
@@ -50,10 +131,26 @@ When publishing to npm, publish **`hyper-pm` first**, then **`hyper-pm-mcp`**, u
     "hyper-pm": {
       "command": "node",
       "args": ["/absolute/path/to/hyper-pm/apps/hyper-pm-mcp/dist/main.mjs"],
-      "env": {}
+      "env": {
+        "GITHUB_REPO": "owner/repo"
+      }
     }
   }
 }
 ```
 
-Replace the path with the real location on your machine.
+Replace the **`args`** path with your machine’s path (global install: path to **`main.mjs`** inside **`node_modules/hyper-pm-mcp`** if you prefer). Put secrets in **`env`** only where your editor stores them safely.
+
+## Claude Desktop
+
+Add a similar block under **`mcpServers`** in Claude’s config file (location varies by OS; see Anthropic’s MCP docs). Use the same **`command` / `args` / `env`** pattern as Cursor.
+
+## Publishing (maintainers)
+
+Publish **`hyper-pm` first**, then **`hyper-pm-mcp`**, with **`pnpm publish`** from each app so `workspace:` ranges rewrite. Details in **`apps/hyper-pm-mcp/README.md`**.
+
+<Callout type="info">
+
+The [Web UI](/integrations/web-ui) uses the same runner schema for **`POST /api/run`** (without `repo` / `tempDir` in the body). For human-driven CLI usage, see [Examples](/getting-started/examples).
+
+</Callout>

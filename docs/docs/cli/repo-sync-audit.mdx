@@ -1,32 +1,81 @@
 ---
 title: repo, sync & audit
-description: Repository helpers, GitHub sync, and the audit log command.
+description: Repository helpers, GitHub sync, and the audit log — full CLI reference.
 icon: RefreshCw
 ---
+
+import { Callout } from "fumadocs-ui/components/callout";
 
 ## `repo` (read-only)
 
 Helpers run against the **checked-out repository**, not the hyper-pm data worktree.
 
-| Subcommand               | Output                                                               |
-| ------------------------ | -------------------------------------------------------------------- |
-| `commit-authors`         | Unique authors by email (recent first), optional GitHub login guess. |
-| `suggest-assignee-login` | Guess login from **`--email`** (optional **`--name`**).              |
+### `repo commit-authors`
+
+JSON `{ "items": [{ "name", "email", "loginGuess?" }] }` — unique authors by email (most recent first), with optional GitHub login guess.
+
+No required flags.
+
+### `repo suggest-assignee-login`
+
+JSON `{ "loginGuess": string | null }`.
+
+| Flag          | Required | Description                              |
+| ------------- | -------- | ---------------------------------------- |
+| `--email <e>` | yes      | Email to match                           |
+| `--name <n>`  | no       | Extra hint when email alone is ambiguous |
 
 ## `sync`
 
 Runs **GitHub Issues** sync when enabled in config and not skipped.
 
-| Flag          | Meaning                              |
-| ------------- | ------------------------------------ |
-| `--no-github` | Skip network work even if sync is on |
+| Flag          | Default | Description                             |
+| ------------- | ------- | --------------------------------------- |
+| `--no-github` | off     | Skip GitHub API work even if sync is on |
 
-Requires **`GITHUB_TOKEN`** or a working **`gh auth token`**.
+When sync runs, requires **`GITHUB_TOKEN`** **or** a local **`gh`** session (`gh auth token` must succeed).
 
-Detailed outbound/inbound behavior: [GitHub sync](/integrations/github-sync).
+**Outbound** sets issue labels (`hyper-pm`, `ticket`, plus ticket labels — GitHub’s 50-character label limit applies) and embeds planning fields in a fenced JSON block after the description.
+
+**Inbound** (`sync: full`) compares issue labels and that fence to the projection and records inbound updates. With **`full`**, PR timeline activity for **`in_progress`** tickets with `Refs` / `Closes` / `Fixes` references may append `GithubPrActivity` events (extra API calls per linked PR).
+
+Skips network work if sync is **`off`** in config or if **`--no-github`** is passed.
+
+Detailed behavior: [GitHub sync](/integrations/github-sync).
+
+<Callout type="warn">
+
+`sync` honors persisted config; global **`--sync`** can override the effective mode for the invocation — see [Global options](/cli/global-options).
+
+</Callout>
 
 ## `audit`
 
-Lists durable events with optional filters — see [Event log](/concepts/event-log).
+Lists durable events from the JSONL log with optional filters.
 
-Use **`--format text`** with **`--text-style`** for human-readable output styles.
+| Flag               | Description                                                          |
+| ------------------ | -------------------------------------------------------------------- |
+| `--limit <n>`      | Keep only the **most recent** _n_ matching events                    |
+| `--type <t>`       | Filter by event type (exact string; see table below)                 |
+| `--entity-id <id>` | Rows whose payload `id`, `entityId`, or `ticketId` matches           |
+| `--text-style <s>` | With **`--format text`**: `tsv` (default), `plain`, or `plain-links` |
+
+### Valid `--type` values
+
+`EpicCreated` · `EpicUpdated` · `EpicDeleted` · `StoryCreated` · `StoryUpdated` · `StoryDeleted` · `TicketCreated` · `TicketUpdated` · `TicketDeleted` · `TicketCommentAdded` · `SyncCursor` · `GithubInboundUpdate` · `GithubIssueLinked` · `GithubPrActivity`
+
+`GithubPrActivity` payloads include `ticketId`, `prNumber`, `kind` (`opened` | `updated` | `commented` | `reviewed` | `merged` | `closed` | `ready_for_review`), `sourceId`, `occurredAt`, and optionally `reviewState` / `url`.
+
+### Text output styles
+
+With **`--format text`**, **`--text-style`** selects:
+
+| Style         | Output                                                                                                                                                             |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `tsv`         | Tab-separated: `ts`, `type`, `actor`, `id` (extra columns for `GithubPrActivity`)                                                                                  |
+| `plain`       | One English sentence per event                                                                                                                                     |
+| `plain-links` | Like `plain` plus a tab and compact JSON (ids and URLs; no ticket body/title). When `githubRepo` resolves, includes `issueHtmlUrl` / `pullHtmlUrl` when applicable |
+
+With **`--format json`**, the result includes `events` and any `invalidLines` skipped during parse; **`--text-style`** is ignored.
+
+Background: [Event log](/concepts/event-log).

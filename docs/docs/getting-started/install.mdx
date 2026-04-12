@@ -54,7 +54,19 @@ You can also use **`pnpm exec hyper-pm`** from a workspace package that depends 
 
 ## Published npm package
 
-When **`hyper-pm`** is published to npm, install it like any other CLI tool (exact package name and scope follow `apps/hyper-pm/package.json`). After install, **`hyper-pm --help`** should match the in-repo CLI.
+The package name on the public registry is **`hyper-pm`** (see `apps/hyper-pm/package.json`). Install globally:
+
+```bash
+npm install -g hyper-pm
+```
+
+Verify:
+
+```bash
+hyper-pm --help
+```
+
+After install, **`hyper-pm --help`** should match the in-repo CLI for the same version.
 
 <Callout type="info">
 
@@ -64,5 +76,14 @@ Publishing notes for maintainers live in **`apps/hyper-pm/README.md`** (build be
 
 ## Optional: web UI and MCP
 
-- **Web:** build `hyper-pm` first, then `pnpm --filter hyper-pm-web build` (or `dev`). See [Web UI](/integrations/web-ui).
-- **MCP:** build `hyper-pm` and `hyper-pm-mcp`. See [MCP server](/integrations/mcp-server).
+Published npm packages (install after **`hyper-pm`** or let npm pull the dependency):
+
+```bash
+npm install -g hyper-pm-web
+npm install -g hyper-pm-mcp
+```
+
+- **Web:** run **`hyper-pm-web`** from your repo (or set **`HYPER_PM_WEB_REPO`**). Full setup: [Web UI (`hyper-pm-web`)](/integrations/web-ui).
+- **MCP:** register **`hyper-pm-mcp`** in your editor’s MCP config. Full setup: [MCP server (`hyper-pm-mcp`)](/integrations/mcp-server).
+
+From the monorepo, build **`hyper-pm`** first, then **`pnpm --filter hyper-pm-web dev`** or **`pnpm --filter hyper-pm-mcp build`** as described on those pages.

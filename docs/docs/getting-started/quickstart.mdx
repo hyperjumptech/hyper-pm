@@ -5,8 +5,22 @@ icon: Zap
 ---
 
 import { Step, Steps } from "fumadocs-ui/components/steps";
+import { Callout } from "fumadocs-ui/components/callout";
 
 <Steps>
+  <Step>
+
+### Install the CLI
+
+From npm (package name **`hyper-pm`**):
+
+```bash
+npm install -g hyper-pm
+```
+
+Or use a monorepo build — see [Install](/getting-started/install).
+
+  </Step>
   <Step>
 
 ### Open a Git repository
@@ -28,6 +42,8 @@ This sets up the **data branch** and writes **`.hyper-pm/config.json`**. You can
   <Step>
 
 ### Create work items
+
+Default output is **JSON** (good for scripting). Copy ids from the printed objects, or pipe through **`jq`**:
 
 ```bash
 hyper-pm epic create --title "Launch hyper-pm docs"
@@ -54,7 +70,15 @@ hyper-pm doctor
   </Step>
 </Steps>
 
+<Callout type="info">
+
+More copy-paste flows (filters, `ticket work`, audit, GitHub import) live on [Examples](/getting-started/examples).
+
+</Callout>
+
 ## Next steps
 
+- Read the [User guide](/getting-started/user-guide) for JSON vs text, sync, and troubleshooting.
+- Prefer a **browser** or **editor integration**? See [Web UI (`hyper-pm-web`)](/integrations/web-ui) and [MCP (`hyper-pm-mcp`)](/integrations/mcp-server).
 - Turn on **GitHub sync** and set `GITHUB_REPO` — see [GitHub sync](/integrations/github-sync).
 - Start coding from a ticket with **`hyper-pm ticket work --id …`** — see [Tickets](/cli/tickets).

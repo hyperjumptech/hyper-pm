@@ -4,6 +4,22 @@ description: Create, read, update, and soft-delete epics and stories.
 icon: ListTree
 ---
 
+import { Callout } from "fumadocs-ui/components/callout";
+
+## Status values
+
+For **`--status`** on create/update, allowed values are:
+
+`backlog` · `todo` · `in_progress` · `done` · `cancelled`
+
+Epics default to **`backlog`** on create when omitted; stories default to **`backlog`**; tickets default to **`todo`** (see [Tickets](/cli/tickets)).
+
+<Callout type="info">
+
+How these entities relate and how deletes work is described under [Data model](/concepts/data-model).
+
+</Callout>
+
 ## `epic`
 
 | Subcommand | Purpose          | Notable flags                                          |

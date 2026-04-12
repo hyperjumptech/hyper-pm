@@ -1,0 +1,93 @@
+---
+title: User guide
+description: How hyper-pm fits in your day — output formats, planning hierarchy, branches, sync, and troubleshooting.
+icon: BookMarked
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+## What runs where
+
+- **Your repo (primary clone):** normal `git` work — branches you create with [`ticket work`](/cli/tickets), commits, pushes.
+- **Data branch:** an orphan branch that holds **`.hyper-pm/config.json`** and the **append-only JSONL** event log. The CLI opens a **disposable worktree** to read and append events (see [Worktrees](/concepts/worktrees)).
+- **GitHub (optional):** [`sync`](/cli/repo-sync-audit) and [`ticket import-github`](/cli/tickets) when sync is enabled and credentials are available.
+
+## Beyond the terminal
+
+The same CLI powers optional front-ends:
+
+- **[Web UI (`hyper-pm-web`)](/integrations/web-ui)** — local browser app plus **`POST /api/run`** for scripts; the server pins **`--repo`**, **`--temp-dir`**, and **`--format json`**.
+- **[MCP server (`hyper-pm-mcp`)](/integrations/mcp-server)** — stdio MCP for editors; tool **`hyper_pm_run`** takes **`argv`** plus optional global fields.
+
+Pick **CLI** for scripts and CI, **Web** for exploratory UI and simple HTTP automation, **MCP** when an assistant should drive **`hyper-pm`** from chat.
+
+## JSON vs text output
+
+The default is **`--format json`**, which is ideal for scripting and tools like **`jq`**.
+
+```bash
+hyper-pm epic read | jq '.items[].id'
+```
+
+For interactive use, put **`--format text`** (and any other [global options](/cli/global-options)) **before** the subcommand:
+
+```bash
+hyper-pm --format text epic read
+hyper-pm --format text ticket read --status todo --status in_progress
+```
+
+## Planning model
+
+- **Epic** → **Story** → **Ticket** is the usual hierarchy. Tickets can also exist **without** a story (`ticket create` without `--story`).
+- **Statuses** for epics, stories, and tickets use the same set: `backlog`, `todo`, `in_progress`, `done`, `cancelled` (see [Data model](/concepts/data-model)).
+- **Soft deletes** remove items from normal reads but stay in the event log for auditability.
+
+## Typical workflows
+
+### Start a new initiative
+
+1. `hyper-pm init` (once per repo).
+2. Create an epic, then stories under it, then tickets under a story (or standalone tickets).
+3. Run `hyper-pm doctor` after upgrades or if anything feels off.
+
+### Pick up a ticket
+
+1. `hyper-pm --format text ticket read --status todo` (or filter by epic/story — see [Tickets](/cli/tickets)).
+2. `hyper-pm ticket work --id <id>` creates a branch, checks it out, sets status to `in_progress`, and links the branch on the ticket.
+3. When finished: commit in your normal flow, then `hyper-pm ticket update --id <id> --status done` (or your team’s convention).
+
+### Leave breadcrumbs
+
+- **`ticket comment`** appends a durable comment (stored as an event). It shows up on **`ticket read --id`** in the `comments` list.
+- **`audit`** lists raw events for compliance or debugging — see [repo, sync & audit](/cli/repo-sync-audit).
+
+### Work with GitHub
+
+Configure sync mode and repo slug (see [Configuration](/getting-started/configuration) and [GitHub sync](/integrations/github-sync)). Then:
+
+```bash
+hyper-pm sync
+```
+
+<Callout type="warn">
+
+Outbound issue **creation** on GitHub requires a valid epic → story → ticket chain for that ticket. Unlinked tickets are still **updated** if they already have a linked issue.
+
+</Callout>
+
+## Discovering flags
+
+The CLI is the source of truth for every flag:
+
+```bash
+hyper-pm --help
+hyper-pm ticket read --help
+```
+
+The docs site mirrors that behavior in [Command overview](/cli/command-overview) and the per-topic CLI pages.
+
+## If something goes wrong
+
+1. **`hyper-pm doctor`** — validates log replay.
+2. **Wrong repo?** Use **`--repo <path>`** (global, before the subcommand).
+3. **Sync / auth:** ensure `GITHUB_TOKEN` or `gh auth login`, and `GITHUB_REPO` or `--github-repo` / config — see [Configuration](/getting-started/configuration).
