@@ -237,4 +237,37 @@ describe("createHyperPmWebServer", () => {
     expect(runHyperPmCliFn).toHaveBeenCalled();
     server.close();
   });
+
+  it("GET /audit-event-summary.js serves the browser bundle", async () => {
+    // Setup
+    const base = await mkdtemp(join(tmpdir(), "hpw-test-"));
+    dirs.push(base);
+    await writeFile(join(base, "index.html"), "<html></html>");
+    await writeFile(join(base, "app.js"), "");
+    await writeFile(
+      join(base, "audit-event-summary.js"),
+      "window.__hpwAudit=1",
+    );
+    const runHyperPmCliFn = vi.fn();
+    const server = createHyperPmWebServer({
+      repoRoot: "/repo",
+      tempDirParent: "/tmp",
+      publicDir: base,
+      runHyperPmCliFn,
+    });
+    await new Promise<void>((resolve) => {
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    const addr = server.address();
+    const port = typeof addr === "object" && addr ? addr.port : 0;
+
+    // Act
+    const res = await fetch(`http://127.0.0.1:${port}/audit-event-summary.js`);
+
+    // Assert
+    expect(res.ok).toBe(true);
+    expect(res.headers.get("content-type")).toContain("javascript");
+    expect(await res.text()).toBe("window.__hpwAudit=1");
+    server.close();
+  });
 });

@@ -55,6 +55,10 @@
         -moz-osx-font-smoothing: grayscale;
       }
 
+      html.history-modal-open {
+        overflow: hidden;
+      }
+
       body {
         margin: 0;
         font-family: var(--font-sans);
@@ -1052,6 +1056,119 @@
       button.link-title:hover {
         color: var(--accent-hover);
       }
+
+      .history-modal-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 80;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1.25rem;
+        background: rgba(9, 9, 11, 0.45);
+        backdrop-filter: blur(4px);
+      }
+
+      .history-modal {
+        width: min(40rem, 100%);
+        max-height: min(32rem, 88vh);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        background: var(--bg-elevated);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-lg);
+        border: 1px solid var(--border);
+      }
+
+      .history-modal header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        padding: 1rem 1.125rem;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .history-modal header h2 {
+        margin: 0;
+        font-size: 1.0625rem;
+        font-weight: 600;
+      }
+
+      .history-modal-body {
+        padding: 0.75rem 1.125rem 1.125rem;
+        overflow-y: auto;
+      }
+
+      /*
+       * Timeline: line is positioned from the <ol> edge; each <li> starts after
+       * padding-left, so dot `left` must subtract that gutter or markers sit on the text.
+       */
+      .audit-timeline {
+        --timeline-gutter: 1.625rem;
+        --timeline-line-x: 0.5625rem;
+        list-style: none;
+        margin: 0;
+        padding: 0 0 0 var(--timeline-gutter);
+        position: relative;
+      }
+
+      .audit-timeline::before {
+        content: "";
+        position: absolute;
+        left: var(--timeline-line-x);
+        top: calc(0.75rem + 0.25rem - 1px);
+        bottom: calc(0.75rem + 0.25rem - 1px);
+        width: 2px;
+        background: var(--border-strong);
+        border-radius: 1px;
+      }
+
+      .audit-timeline li {
+        position: relative;
+        padding: 0.75rem 0;
+        border: none;
+      }
+
+      .audit-timeline li::before {
+        content: "";
+        position: absolute;
+        left: calc(var(--timeline-line-x) + 1px - var(--timeline-gutter));
+        top: calc(0.75rem + 0.25rem - 0.25rem);
+        width: 0.5rem;
+        height: 0.5rem;
+        border-radius: 999px;
+        background: var(--accent);
+        border: 2px solid var(--bg-elevated);
+        box-sizing: border-box;
+        transform: translateX(-50%);
+      }
+
+      .audit-ts {
+        font-size: 0.75rem;
+        font-family: var(--font-mono);
+        color: var(--text-secondary);
+        margin-bottom: 0.125rem;
+      }
+
+      .audit-actor {
+        font-size: 0.8125rem;
+        color: var(--text-secondary);
+        margin-bottom: 0.25rem;
+      }
+
+      .audit-title {
+        font-weight: 600;
+        font-size: 0.9375rem;
+      }
+
+      .audit-detail {
+        margin: 0.25rem 0 0;
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+        line-height: 1.45;
+      }
     </style>
   </head>
   <body>
@@ -1138,6 +1255,7 @@
       src="https://cdn.jsdelivr.net/npm/dompurify@3.2.4/dist/purify.min.js"
       crossorigin="anonymous"
     ></script>
+    <script src="./audit-event-summary.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>

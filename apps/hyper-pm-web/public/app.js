@@ -1,4 +1,4 @@
-/* global window, document, fetch, localStorage, marked, DOMPurify */
+/* global window, document, fetch, localStorage, marked, DOMPurify, HyperPmAuditSummary */
 
 /** @type {boolean} */
 let markdownLibConfigured = false;
@@ -530,6 +530,143 @@ async function runCli(argv, extra = {}) {
 }
 
 /**
+ * Formats an ISO audit timestamp for the timeline UI.
+ * @param {unknown} iso
+ * @returns {string}
+ */
+function formatAuditInstant(iso) {
+  const s = String(iso ?? "");
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return s;
+  return d.toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
+/**
+ * Removes the audit history modal if present.
+ */
+function closeHistoryModal() {
+  document.getElementById("hpw-history-modal")?.remove();
+  document.documentElement.classList.remove("history-modal-open");
+}
+
+/**
+ * Opens a modal and loads the audit trail for a work item id via `hyper-pm audit`.
+ * @param {string} entityId
+ * @param {string} entityKindLabel
+ * @returns {Promise<void>}
+ */
+async function openHistoryModal(entityId, entityKindLabel) {
+  closeHistoryModal();
+  document.documentElement.classList.add("history-modal-open");
+  const backdrop = document.createElement("div");
+  backdrop.className = "history-modal-backdrop";
+  backdrop.id = "hpw-history-modal";
+  backdrop.setAttribute("role", "dialog");
+  backdrop.setAttribute("aria-modal", "true");
+  backdrop.setAttribute("aria-labelledby", "hpw-history-modal-title");
+  backdrop.innerHTML = `
+    <div class="history-modal" id="hpw-history-modal-panel">
+      <header>
+        <h2 id="hpw-history-modal-title">History · ${escapeHtml(entityKindLabel)} · ${escapeHtml(entityId)}</h2>
+        <button type="button" class="ghost" id="hpw-history-modal-close">Close</button>
+      </header>
+      <div class="history-modal-body" id="hpw-history-modal-body">
+        <p class="muted">Loading audit trail…</p>
+      </div>
+    </div>`;
+  document.body.appendChild(backdrop);
+  /** @param {KeyboardEvent} e */
+  const onKey = (e) => {
+    if (e.key === "Escape") {
+      window.removeEventListener("keydown", onKey);
+      closeHistoryModal();
+    }
+  };
+  window.addEventListener("keydown", onKey);
+  backdrop.addEventListener("click", () => {
+    window.removeEventListener("keydown", onKey);
+    closeHistoryModal();
+  });
+  document
+    .getElementById("hpw-history-modal-close")
+    ?.addEventListener("click", () => {
+      window.removeEventListener("keydown", onKey);
+      closeHistoryModal();
+    });
+  document
+    .getElementById("hpw-history-modal-panel")
+    ?.addEventListener("click", (e) => {
+      e.stopPropagation();
+    });
+  const bodyEl = document.getElementById("hpw-history-modal-body");
+  try {
+    const json = await runCli([
+      "audit",
+      "--entity-id",
+      entityId,
+      "--limit",
+      "500",
+    ]);
+    const raw = /** @type {{ events?: unknown[] }} */ (json);
+    const events = Array.isArray(raw.events) ? raw.events : [];
+    const summarize =
+      typeof HyperPmAuditSummary !== "undefined" &&
+      typeof HyperPmAuditSummary.summarizeAuditEventForWeb === "function"
+        ? HyperPmAuditSummary.summarizeAuditEventForWeb
+        : (evt) => {
+            const t =
+              evt &&
+              typeof evt === "object" &&
+              typeof (/** @type {{ type?: string }} */ (evt).type) === "string"
+                ? String(/** @type {{ type?: string }} */ (evt).type)
+                : "Event";
+            return { title: t, detailLines: [] };
+          };
+    const ordered = [...events].reverse();
+    if (ordered.length === 0) {
+      if (bodyEl) {
+        bodyEl.innerHTML =
+          '<p class="muted">No audit events recorded for this item yet.</p>';
+      }
+      return;
+    }
+    const items = ordered
+      .map((evt) => {
+        const row = /** @type {Record<string, unknown>} */ (evt);
+        const ts = formatAuditInstant(row.ts);
+        const actor = String(row.actor ?? "");
+        const { title, detailLines } = summarize(evt);
+        const details =
+          detailLines.length === 0
+            ? ""
+            : detailLines
+                .map(
+                  (line) =>
+                    `<p class="audit-detail">${escapeHtml(String(line))}</p>`,
+                )
+                .join("");
+        return `<li>
+          <div class="audit-ts">${escapeHtml(ts)}</div>
+          <div class="audit-actor">${escapeHtml(actor)}</div>
+          <div class="audit-title">${escapeHtml(title)}</div>
+          ${details}
+        </li>`;
+      })
+      .join("");
+    if (bodyEl) {
+      bodyEl.innerHTML = `<ol class="audit-timeline" aria-label="Audit events">${items}</ol>`;
+    }
+  } catch (e) {
+    if (bodyEl) {
+      bodyEl.innerHTML = `<p class="muted">${escapeHtml(String(e))}</p>`;
+    }
+  }
+}
+
+/**
  * @param {unknown} json
  * @returns {unknown[]}
  */
@@ -847,6 +984,7 @@ async function renderEpicEdit() {
             <h2 style="margin:0"><span class="md-inline">${markdownInlineHtml(row.title)}</span></h2>
           </div>
           <div class="panel-head-actions">
+            <button type="button" class="btn-subtle" id="btnEpicHistory">History</button>
             <button type="button" class="btn-subtle" id="btnEpicSeeStories">See stories</button>
             <button type="button" class="btn-subtle" id="btnEpicEnterEdit">Edit</button>
           </div>
@@ -891,6 +1029,11 @@ async function renderEpicEdit() {
         navigateToStoriesForEpic(id);
       });
     if (!showForm) {
+      document
+        .getElementById("btnEpicHistory")
+        ?.addEventListener("click", () => {
+          void openHistoryModal(id, "Epic");
+        });
       document
         .getElementById("btnEpicEnterEdit")
         ?.addEventListener("click", () => {
@@ -1171,6 +1314,7 @@ async function renderStoryEdit() {
             <h2 style="margin:0"><span class="md-inline">${markdownInlineHtml(row.title)}</span></h2>
           </div>
           <div class="panel-head-actions">
+            <button type="button" class="btn-subtle" id="btnStoryHistory">History</button>
             <button type="button" class="btn-subtle" id="btnStoryOpenEpic">Open epic</button>
             <button type="button" class="btn-subtle" id="btnStorySeeTickets">See tickets</button>
             <button type="button" class="btn-subtle" id="btnStoryEnterEdit">Edit</button>
@@ -1228,6 +1372,11 @@ async function renderStoryEdit() {
         navigateToTicketsForStory(id);
       });
     if (!showForm) {
+      document
+        .getElementById("btnStoryHistory")
+        ?.addEventListener("click", () => {
+          void openHistoryModal(id, "Story");
+        });
       document
         .getElementById("btnStoryEnterEdit")
         ?.addEventListener("click", () => {
@@ -1593,6 +1742,7 @@ async function renderTicketEdit() {
                 <h2 class="issue-title"><span class="md-inline">${markdownInlineHtml(row.title)}</span></h2>
               </div>
               <div class="panel-head-actions">
+                <button type="button" class="btn-subtle" id="btnTicketHistory">History</button>
                 <button type="button" class="btn-subtle" id="btnTicketEnterEdit">Edit</button>
               </div>
             </div>
@@ -1689,6 +1839,11 @@ async function renderTicketEdit() {
         navigateToEpic(storyEpicId);
       });
     if (!showForm) {
+      document
+        .getElementById("btnTicketHistory")
+        ?.addEventListener("click", () => {
+          void openHistoryModal(id, "Ticket");
+        });
       document
         .getElementById("btnTicketEnterEdit")
         ?.addEventListener("click", () => {

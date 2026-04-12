@@ -28,7 +28,7 @@ export type HyperPmWebServerConfig = {
   repoRoot: string;
   /** Parent directory for disposable worktrees (injected as `--temp-dir`). */
   tempDirParent: string;
-  /** Directory containing `index.html` and `app.js`. */
+  /** Directory containing `index.html`, `app.js`, and `audit-event-summary.js`. */
   publicDir: string;
   /** When set, POST /api/run requires matching `Authorization: Bearer`. */
   webToken?: string;
@@ -194,6 +194,18 @@ export const createHyperPmWebServer = (
 
         if (req.method === "GET" && path === "/app.js") {
           const js = await readFn(join(config.publicDir, "app.js"), "utf8");
+          res.writeHead(200, {
+            "Content-Type": "text/javascript; charset=utf-8",
+          });
+          res.end(js);
+          return;
+        }
+
+        if (req.method === "GET" && path === "/audit-event-summary.js") {
+          const js = await readFn(
+            join(config.publicDir, "audit-event-summary.js"),
+            "utf8",
+          );
           res.writeHead(200, {
             "Content-Type": "text/javascript; charset=utf-8",
           });
