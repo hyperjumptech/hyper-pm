@@ -1,6 +1,10 @@
 import type { GithubPrActivityKind } from "../lib/github-pr-activity";
 import type { WorkItemStatus } from "../lib/work-item-status";
 import type { Projection } from "../storage/projection";
+import {
+  ticketMatchesTicketListQuery,
+  type TicketListQuery,
+} from "./ticket-list-query";
 
 type AuditSummaryFields = {
   createdAt: string;
@@ -73,6 +77,8 @@ export type ListActiveStorySummariesOptions = {
 export type ListActiveTicketSummariesOptions = {
   /** When set, only tickets with this `storyId` are included. */
   storyId?: string;
+  /** When set, additional AND filters (status, dates, epic, etc.). */
+  query?: TicketListQuery;
 };
 
 /**
@@ -109,6 +115,7 @@ export const listActiveStorySummaries = (
  *
  * @param projection - Replayed event projection.
  * @param options - When `storyId` is set, restricts to tickets under that story; omit for all active tickets.
+ * @param options.query - Optional advanced filters applied after `storyId` / deleted checks.
  * @returns Sorted list summaries.
  */
 export const listActiveTicketSummaries = (
@@ -116,11 +123,19 @@ export const listActiveTicketSummaries = (
   options?: ListActiveTicketSummariesOptions,
 ): TicketListSummary[] =>
   [...projection.tickets.values()]
-    .filter(
-      (t) =>
-        !t.deleted &&
-        (options?.storyId === undefined || t.storyId === options.storyId),
-    )
+    .filter((t) => {
+      if (t.deleted) {
+        return false;
+      }
+      if (options?.storyId !== undefined && t.storyId !== options.storyId) {
+        return false;
+      }
+      const q = options?.query;
+      if (q !== undefined && !ticketMatchesTicketListQuery(t, projection, q)) {
+        return false;
+      }
+      return true;
+    })
     .map((t) => {
       const recent = t.prActivityRecent;
       const last =

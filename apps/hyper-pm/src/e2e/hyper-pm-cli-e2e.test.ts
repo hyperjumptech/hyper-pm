@@ -296,6 +296,38 @@ describe("hyper-pm CLI (e2e)", () => {
       }),
     );
 
+    const ticketListByEpicAndStatus = await invokeHyperPmCli(
+      [
+        "ticket",
+        "read",
+        "--epic",
+        "epic-e2e-1",
+        "--status",
+        "todo",
+        "--status",
+        "in_progress",
+      ],
+      { repoRoot, tempDir, clock },
+    );
+    expect(ticketListByEpicAndStatus.code).toBe(ExitCode.Success);
+    expect(ticketListByEpicAndStatus.json).toEqual(
+      expect.objectContaining({
+        items: [
+          expect.objectContaining({
+            id: "ticket-e2e-1",
+            storyId: "story-e2e-1",
+            status: "todo",
+          }),
+        ],
+      }),
+    );
+
+    const storyEpicConflict = await invokeHyperPmCli(
+      ["ticket", "read", "--story", "story-e2e-1", "--epic", "epic-e2e-1"],
+      { repoRoot, tempDir, clock },
+    );
+    expect(storyEpicConflict.code).toBe(ExitCode.UserError);
+
     const ticketUpdate = await invokeHyperPmCli(
       [
         "ticket",

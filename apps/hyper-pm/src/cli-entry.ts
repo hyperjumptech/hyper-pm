@@ -23,6 +23,10 @@ import {
   listActiveTicketSummaries,
 } from "./cli/list-projection-summaries";
 import {
+  tryParseIsoDateMillis,
+  type TicketListQuery,
+} from "./cli/ticket-list-query";
+import {
   hyperPmConfigSchema,
   type HyperPmConfig,
 } from "./config/hyper-pm-config";
@@ -99,6 +103,180 @@ const parseCliWorkItemStatus = (
     deps.exit(ExitCode.UserError);
   }
   return s;
+};
+
+/**
+ * Coerces a Commander option into a string array (repeatable flags may yield `string` or `string[]`).
+ *
+ * @param value - Raw option value from `this.opts()`.
+ * @returns A new array of string tokens (possibly empty).
+ */
+const normalizeCliStringList = (
+  value: string | string[] | undefined,
+): string[] => {
+  if (value === undefined) {
+    return [];
+  }
+  return Array.isArray(value) ? value : [value];
+};
+
+/**
+ * Parses an optional ISO-8601 instant for ticket list filters; exits when non-empty input is invalid.
+ *
+ * @param raw - Flag value (omit or empty to skip the bound).
+ * @param flagName - Flag label for error messages (e.g. `--created-after`).
+ * @param deps - Process boundary for user-facing errors.
+ * @returns Epoch milliseconds, or `undefined` when `raw` is absent or empty.
+ */
+const parseCliOptionalIsoMillis = (
+  raw: string | undefined,
+  flagName: string,
+  deps: {
+    exit: (code: number) => never;
+    error: typeof console.error;
+  },
+): number | undefined => {
+  if (raw === undefined || raw === "") {
+    return undefined;
+  }
+  const ms = tryParseIsoDateMillis(raw);
+  if (ms === null) {
+    deps.error(
+      `Invalid ${flagName} ${JSON.stringify(raw)} (expected a parseable ISO-8601 date/time)`,
+    );
+    deps.exit(ExitCode.UserError);
+  }
+  return ms;
+};
+
+/**
+ * Parses repeated `--status` tokens into workflow statuses, exiting on the first invalid token.
+ *
+ * @param raws - Non-empty list of raw status strings.
+ * @param deps - Process boundary for user-facing errors.
+ * @returns Parsed statuses in input order.
+ */
+const parseCliWorkItemStatusList = (
+  raws: readonly string[],
+  deps: {
+    exit: (code: number) => never;
+    error: typeof console.error;
+  },
+): WorkItemStatus[] => {
+  const out: WorkItemStatus[] = [];
+  for (const raw of raws) {
+    const s = parseWorkItemStatus(raw);
+    if (s === undefined) {
+      deps.error(
+        `Invalid --status ${JSON.stringify(raw)} (expected backlog|todo|in_progress|done|cancelled)`,
+      );
+      deps.exit(ExitCode.UserError);
+    }
+    out.push(s);
+  }
+  return out;
+};
+
+/**
+ * Builds a {@link TicketListQuery} from raw `ticket read` list flags, or `undefined` when no filters apply.
+ *
+ * @param o - Parsed CLI options for listing-only flags.
+ * @param deps - Process boundary for user-facing errors (invalid dates or statuses).
+ * @returns Query object, or `undefined` when every advanced dimension is unset.
+ */
+const buildTicketListQueryFromReadListOpts = (
+  o: {
+    status?: string | string[];
+    epic?: string;
+    createdAfter?: string;
+    createdBefore?: string;
+    updatedAfter?: string;
+    updatedBefore?: string;
+    statusChangedAfter?: string;
+    statusChangedBefore?: string;
+    createdBy?: string;
+    updatedBy?: string;
+    statusChangedBy?: string;
+    titleContains?: string;
+    githubLinked?: boolean;
+  },
+  deps: {
+    exit: (code: number) => never;
+    error: typeof console.error;
+  },
+): TicketListQuery | undefined => {
+  const query: TicketListQuery = {};
+  const statusTokens = normalizeCliStringList(o.status);
+  if (statusTokens.length > 0) {
+    query.statuses = parseCliWorkItemStatusList(statusTokens, deps);
+  }
+  if (o.epic !== undefined && o.epic !== "") {
+    query.epicId = o.epic;
+  }
+  const createdAfterMs = parseCliOptionalIsoMillis(
+    o.createdAfter,
+    "--created-after",
+    deps,
+  );
+  if (createdAfterMs !== undefined) {
+    query.createdAfterMs = createdAfterMs;
+  }
+  const createdBeforeMs = parseCliOptionalIsoMillis(
+    o.createdBefore,
+    "--created-before",
+    deps,
+  );
+  if (createdBeforeMs !== undefined) {
+    query.createdBeforeMs = createdBeforeMs;
+  }
+  const updatedAfterMs = parseCliOptionalIsoMillis(
+    o.updatedAfter,
+    "--updated-after",
+    deps,
+  );
+  if (updatedAfterMs !== undefined) {
+    query.updatedAfterMs = updatedAfterMs;
+  }
+  const updatedBeforeMs = parseCliOptionalIsoMillis(
+    o.updatedBefore,
+    "--updated-before",
+    deps,
+  );
+  if (updatedBeforeMs !== undefined) {
+    query.updatedBeforeMs = updatedBeforeMs;
+  }
+  const statusChangedAfterMs = parseCliOptionalIsoMillis(
+    o.statusChangedAfter,
+    "--status-changed-after",
+    deps,
+  );
+  if (statusChangedAfterMs !== undefined) {
+    query.statusChangedAfterMs = statusChangedAfterMs;
+  }
+  const statusChangedBeforeMs = parseCliOptionalIsoMillis(
+    o.statusChangedBefore,
+    "--status-changed-before",
+    deps,
+  );
+  if (statusChangedBeforeMs !== undefined) {
+    query.statusChangedBeforeMs = statusChangedBeforeMs;
+  }
+  if (o.createdBy !== undefined && o.createdBy !== "") {
+    query.createdByContains = o.createdBy;
+  }
+  if (o.updatedBy !== undefined && o.updatedBy !== "") {
+    query.updatedByContains = o.updatedBy;
+  }
+  if (o.statusChangedBy !== undefined && o.statusChangedBy !== "") {
+    query.statusChangedByContains = o.statusChangedBy;
+  }
+  if (o.titleContains !== undefined && o.titleContains !== "") {
+    query.titleContainsLower = o.titleContains.toLowerCase();
+  }
+  if (o.githubLinked === true) {
+    query.githubLinkedOnly = true;
+  }
+  return Object.keys(query).length > 0 ? query : undefined;
 };
 
 /**
@@ -456,10 +634,81 @@ export const runCli = async (
       "--story <id>",
       "when listing (no --id), only tickets under this story",
     )
+    .option(
+      "--epic <id>",
+      "when listing (no --id), only tickets whose story belongs to this epic (cannot combine with --story)",
+    )
+    .option(
+      "--status <s>",
+      "when listing (no --id): OR-set of statuses (repeat flag); backlog|todo|in_progress|done|cancelled",
+      (value: string, previous: string[]) => [...previous, value],
+      [],
+    )
+    .option(
+      "--created-after <iso>",
+      "when listing (no --id): inclusive lower bound on createdAt (ISO-8601)",
+    )
+    .option(
+      "--created-before <iso>",
+      "when listing (no --id): inclusive upper bound on createdAt (ISO-8601)",
+    )
+    .option(
+      "--updated-after <iso>",
+      "when listing (no --id): inclusive lower bound on updatedAt (ISO-8601)",
+    )
+    .option(
+      "--updated-before <iso>",
+      "when listing (no --id): inclusive upper bound on updatedAt (ISO-8601)",
+    )
+    .option(
+      "--status-changed-after <iso>",
+      "when listing (no --id): inclusive lower bound on statusChangedAt (ISO-8601)",
+    )
+    .option(
+      "--status-changed-before <iso>",
+      "when listing (no --id): inclusive upper bound on statusChangedAt (ISO-8601)",
+    )
+    .option(
+      "--created-by <text>",
+      "when listing (no --id): substring match on createdBy (case-sensitive)",
+    )
+    .option(
+      "--updated-by <text>",
+      "when listing (no --id): substring match on updatedBy (case-sensitive)",
+    )
+    .option(
+      "--status-changed-by <text>",
+      "when listing (no --id): substring match on statusChangedBy (case-sensitive)",
+    )
+    .option(
+      "--title-contains <text>",
+      "when listing (no --id): case-insensitive substring match on title",
+    )
+    .option(
+      "--github-linked",
+      "when listing (no --id): only tickets with a linked GitHub issue number",
+      false,
+    )
     .action(async function (this: Command) {
       const g = readGlobals(this);
-      const o = this.opts<{ id?: string; story?: string }>();
-      await readTicket(g, { id: o.id, storyId: o.story }, deps);
+      const o = this.opts<{
+        id?: string;
+        story?: string;
+        epic?: string;
+        status?: string | string[];
+        createdAfter?: string;
+        createdBefore?: string;
+        updatedAfter?: string;
+        updatedBefore?: string;
+        statusChangedAfter?: string;
+        statusChangedBefore?: string;
+        createdBy?: string;
+        updatedBy?: string;
+        statusChangedBy?: string;
+        titleContains?: string;
+        githubLinked?: boolean;
+      }>();
+      await readTicket(g, o, deps);
     });
   ticket
     .command("update")
@@ -973,16 +1222,32 @@ const readStory = async (
 /**
  * Prints one ticket by id, or ticket list summaries when `id` is omitted or empty.
  *
- * When listing, optional `storyId` filters to tickets under that story (story must exist).
- * `storyId` is ignored when `id` is set (single-ticket read).
+ * When listing, optional `story` filters to tickets under that story (story must exist).
+ * Advanced list flags are ignored when `--id` is set. `--story` and `--epic` cannot be used together.
  *
  * @param g - Global CLI flags (repo, format, worktree, etc.).
- * @param opts - `id` for one row; omit for list. `storyId` narrows the list when `id` is omitted.
+ * @param opts - Parsed `ticket read` options (`id`, `story`, list-only filters).
  * @param deps - Injectable process boundary (log, error, exit).
  */
 const readTicket = async (
   g: GlobalOpts,
-  opts: { id?: string; storyId?: string },
+  opts: {
+    id?: string;
+    story?: string;
+    epic?: string;
+    status?: string | string[];
+    createdAfter?: string;
+    createdBefore?: string;
+    updatedAfter?: string;
+    updatedBefore?: string;
+    statusChangedAfter?: string;
+    statusChangedBefore?: string;
+    createdBy?: string;
+    updatedBy?: string;
+    statusChangedBy?: string;
+    titleContains?: string;
+    githubLinked?: boolean;
+  },
   deps: {
     exit: (code: number) => never;
     log: typeof console.log;
@@ -1004,27 +1269,65 @@ const readTicket = async (
     try {
       const lines = await readAllEventLines(session.worktreePath);
       const proj = replayEvents(lines);
-      const { id, storyId } = opts;
+      const { id, story: storyIdRaw, epic: epicIdRaw, ...listFlagRest } = opts;
       if (id === undefined || id === "") {
         const storyFilter =
-          storyId !== undefined && storyId !== "" ? storyId : undefined;
-        if (storyFilter !== undefined) {
+          storyIdRaw !== undefined && storyIdRaw !== ""
+            ? storyIdRaw
+            : undefined;
+        const epicFilter =
+          epicIdRaw !== undefined && epicIdRaw !== "" ? epicIdRaw : undefined;
+        if (storyFilter !== undefined && epicFilter !== undefined) {
+          deps.error(
+            "Cannot use --story and --epic together when listing tickets",
+          );
+          exitCode = ExitCode.UserError;
+        } else if (epicFilter !== undefined) {
+          const epicRow = proj.epics.get(epicFilter);
+          if (!epicRow || epicRow.deleted) {
+            deps.error("Epic not found");
+            exitCode = ExitCode.UserError;
+          } else {
+            const listQuery = buildTicketListQueryFromReadListOpts(
+              { epic: epicFilter, ...listFlagRest },
+              deps,
+            );
+            deps.log(
+              formatOutput(g.format, {
+                items: listActiveTicketSummaries(proj, {
+                  query: listQuery,
+                }),
+              }),
+            );
+          }
+        } else if (storyFilter !== undefined) {
           const storyRow = proj.stories.get(storyFilter);
           if (!storyRow || storyRow.deleted) {
             deps.error("Story not found");
             exitCode = ExitCode.UserError;
           } else {
+            const listQuery = buildTicketListQueryFromReadListOpts(
+              listFlagRest,
+              deps,
+            );
             deps.log(
               formatOutput(g.format, {
                 items: listActiveTicketSummaries(proj, {
                   storyId: storyFilter,
+                  query: listQuery,
                 }),
               }),
             );
           }
         } else {
+          const listQuery = buildTicketListQueryFromReadListOpts(
+            { epic: epicFilter, ...listFlagRest },
+            deps,
+          );
           deps.log(
-            formatOutput(g.format, { items: listActiveTicketSummaries(proj) }),
+            formatOutput(g.format, {
+              items: listActiveTicketSummaries(proj, { query: listQuery }),
+            }),
           );
         }
       } else {

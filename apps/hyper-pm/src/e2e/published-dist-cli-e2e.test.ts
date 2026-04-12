@@ -234,6 +234,45 @@ describe("dist/main.cjs subprocess (JSON workflow parity)", () => {
       }),
     );
 
+    const ticketListByEpicAndStatus = invokeBundled(
+      [
+        "ticket",
+        "read",
+        "--epic",
+        "epic-dist-e2e-1",
+        "--status",
+        "todo",
+        "--status",
+        "in_progress",
+      ],
+      { repoRoot, tempDir },
+    );
+    expect(ticketListByEpicAndStatus.code).toBe(ExitCode.Success);
+    expect(ticketListByEpicAndStatus.json).toEqual(
+      expect.objectContaining({
+        items: [
+          expect.objectContaining({
+            id: "ticket-dist-e2e-1",
+            storyId: "story-dist-e2e-1",
+            status: "todo",
+          }),
+        ],
+      }),
+    );
+
+    const storyEpicConflict = invokeBundled(
+      [
+        "ticket",
+        "read",
+        "--story",
+        "story-dist-e2e-1",
+        "--epic",
+        "epic-dist-e2e-1",
+      ],
+      { repoRoot, tempDir },
+    );
+    expect(storyEpicConflict.code).toBe(ExitCode.UserError);
+
     const ticketUpdate = invokeBundled(
       [
         "ticket",

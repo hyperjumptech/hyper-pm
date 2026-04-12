@@ -357,4 +357,109 @@ describe("listActiveTicketSummaries", () => {
       listActiveTicketSummaries(projection, { storyId: "missing" }),
     ).toEqual([]);
   });
+
+  it("filters by query.statuses in addition to storyId", () => {
+    const projection = projectionWith({
+      tickets: new Map([
+        [
+          "t-a",
+          {
+            id: "t-a",
+            storyId: "s1",
+            title: "A",
+            body: "",
+            status: "todo",
+            linkedPrs: [],
+            ...audit,
+            ...statusAudit,
+          },
+        ],
+        [
+          "t-b",
+          {
+            id: "t-b",
+            storyId: "s1",
+            title: "B",
+            body: "",
+            status: "done",
+            linkedPrs: [],
+            ...audit,
+            ...statusAudit,
+          },
+        ],
+      ]),
+    });
+    expect(
+      listActiveTicketSummaries(projection, {
+        storyId: "s1",
+        query: { statuses: ["todo"] },
+      }),
+    ).toEqual([
+      {
+        id: "t-a",
+        title: "A",
+        status: "todo",
+        storyId: "s1",
+        ...audit,
+      },
+    ]);
+  });
+
+  it("filters by query.epicId using stories projection", () => {
+    const projection = projectionWith({
+      stories: new Map([
+        [
+          "s1",
+          {
+            id: "s1",
+            epicId: "e1",
+            title: "Story",
+            body: "",
+            status: "backlog",
+            ...audit,
+            ...statusAudit,
+          },
+        ],
+      ]),
+      tickets: new Map([
+        [
+          "t-a",
+          {
+            id: "t-a",
+            storyId: "s1",
+            title: "On epic e1",
+            body: "",
+            status: "todo",
+            linkedPrs: [],
+            ...audit,
+            ...statusAudit,
+          },
+        ],
+        [
+          "t-b",
+          {
+            id: "t-b",
+            storyId: "s-missing",
+            title: "Orphan path",
+            body: "",
+            status: "todo",
+            linkedPrs: [],
+            ...audit,
+            ...statusAudit,
+          },
+        ],
+      ]),
+    });
+    expect(
+      listActiveTicketSummaries(projection, { query: { epicId: "e1" } }),
+    ).toEqual([
+      {
+        id: "t-a",
+        title: "On epic e1",
+        status: "todo",
+        storyId: "s1",
+        ...audit,
+      },
+    ]);
+  });
 });
