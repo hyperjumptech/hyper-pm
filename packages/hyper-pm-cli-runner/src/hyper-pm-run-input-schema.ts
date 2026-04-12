@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * Zod schema for the `hyper_pm_run` tool arguments (mirrors hyper-pm global CLI flags plus subcommand argv).
+ * Zod schema for programmatic hyper-pm runs (MCP tool, web API, etc.): mirrors global CLI flags plus subcommand argv.
  */
 export const hyperPmRunInputSchema = z.object({
   /** Subcommand tokens only, e.g. `["epic", "read"]` or `["doctor"]`. */
@@ -26,5 +26,5 @@ export const hyperPmRunInputSchema = z.object({
   keepWorktree: z.boolean().optional(),
 });
 
-/** Parsed input for running hyper-pm from the MCP tool. */
+/** Parsed input for spawning the hyper-pm CLI. */
 export type HyperPmRunInput = z.infer<typeof hyperPmRunInputSchema>;

@@ -3,7 +3,7 @@ import type { HyperPmRunInput } from "./hyper-pm-run-input-schema";
 /**
  * Builds argv tokens passed to `hyper-pm` after the script path: always includes `--format json`, then optional globals, then subcommand argv.
  *
- * @param input - Validated MCP tool input.
+ * @param input - Validated run input (subcommand argv and optional global flags).
  * @returns Argument list suitable for `spawn(execPath, [mainCjs, ...args])`.
  */
 export const buildHyperPmCliArgv = (input: HyperPmRunInput): string[] => {

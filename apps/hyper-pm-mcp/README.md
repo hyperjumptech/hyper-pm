@@ -17,7 +17,7 @@ From the monorepo root:
 1. Build the CLI bundle: `pnpm --filter hyper-pm build`
 2. Build this server: `pnpm --filter hyper-pm-mcp build`
 
-The server resolves the CLI at `hyper-pm/dist/main.cjs` via `require.resolve("hyper-pm")` (published packages use `dist/index.cjs` as the package entry; see `resolve-hyper-pm-main-path.ts`). Ensure `hyper-pm` is built so `dist/main.cjs` exists before starting the MCP server.
+The server resolves the CLI at `hyper-pm/dist/main.cjs` via `require.resolve("hyper-pm")` (published packages use `dist/index.cjs` as the package entry; see `@workspace/hyper-pm-cli-runner`). Ensure `hyper-pm` is built so `dist/main.cjs` exists before starting the MCP server.
 
 ## Environment
 

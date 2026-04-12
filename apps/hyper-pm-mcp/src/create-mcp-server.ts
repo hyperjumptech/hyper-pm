@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { runHyperPmCli } from "@workspace/hyper-pm-cli-runner";
 import { registerHyperPmTools } from "./register-hyper-pm-tools";
-import { runHyperPmCli } from "./run-hyper-pm-cli";
 
 const serverVersion = "0.1.0";
 

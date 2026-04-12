@@ -22,6 +22,16 @@ const envSchema = z.object({
    * other integrations when auto-resolution from the `hyper-pm` package is insufficient.
    */
   HYPER_PM_CLI_PATH: z.string().optional(),
+  /** Bind address for hyper-pm-web (default 127.0.0.1 when unset). */
+  HYPER_PM_WEB_HOST: z.string().optional(),
+  /** TCP port for hyper-pm-web (coerced from string env). */
+  HYPER_PM_WEB_PORT: z.coerce.number().optional(),
+  /** Absolute git repo root passed as `--repo` for hyper-pm-web runs. */
+  HYPER_PM_WEB_REPO: z.string().optional(),
+  /** Parent directory for disposable worktrees (`--temp-dir`) for hyper-pm-web. */
+  HYPER_PM_WEB_TEMP_DIR: z.string().optional(),
+  /** When set, hyper-pm-web requires `Authorization: Bearer …` on POST /api/run. */
+  HYPER_PM_WEB_TOKEN: z.string().optional(),
   /** Standard temp directory override (process manager / OS). */
   TMPDIR: z.string().optional(),
 });

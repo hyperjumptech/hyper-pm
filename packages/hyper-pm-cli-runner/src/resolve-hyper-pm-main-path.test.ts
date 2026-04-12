@@ -11,7 +11,7 @@ describe("resolveHyperPmMainPath", () => {
         throw new Error("should not resolve package");
       },
       joinPaths: (...parts: string[]) => parts.join("/"),
-      dirnamePath: (p: string) => p,
+      dirnamePath: (path: string) => path,
     });
 
     // Assert

@@ -1,7 +1,9 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import {
+  hyperPmRunInputSchema,
+  runHyperPmCli,
+} from "@workspace/hyper-pm-cli-runner";
 import { formatHyperPmRunMcpText } from "./format-hyper-pm-run-mcp-text";
-import { hyperPmRunInputSchema } from "./hyper-pm-run-input-schema";
-import { runHyperPmCli } from "./run-hyper-pm-cli";
 
 /**
  * Registers hyper-pm MCP tools on the given server instance.

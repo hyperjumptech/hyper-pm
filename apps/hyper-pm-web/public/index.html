@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>hyper-pm web</title>
+    <style>
+      :root {
+        font-family: system-ui, sans-serif;
+        line-height: 1.4;
+        max-width: 52rem;
+        margin: 0 auto;
+        padding: 1rem;
+      }
+      h1 {
+        font-size: 1.25rem;
+      }
+      fieldset {
+        margin: 1rem 0;
+        border: 1px solid #ccc;
+        padding: 0.75rem;
+      }
+      legend {
+        font-weight: 600;
+      }
+      label {
+        display: block;
+        margin: 0.35rem 0 0.1rem;
+      }
+      input,
+      textarea,
+      button,
+      select {
+        font: inherit;
+        max-width: 100%;
+      }
+      input[type="text"],
+      textarea {
+        width: 100%;
+        box-sizing: border-box;
+      }
+      textarea {
+        min-height: 6rem;
+        font-family: ui-monospace, monospace;
+      }
+      button {
+        margin-top: 0.5rem;
+        cursor: pointer;
+      }
+      #out {
+        white-space: pre-wrap;
+        background: #f6f6f6;
+        padding: 0.75rem;
+        border: 1px solid #ddd;
+        min-height: 4rem;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        align-items: center;
+      }
+      .muted {
+        color: #555;
+        font-size: 0.9rem;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>hyper-pm</h1>
+    <p id="status" class="muted">Loading…</p>
+    <p>
+      <label for="bearer">Optional bearer token (stored in this browser)</label>
+      <input type="password" id="bearer" autocomplete="off" />
+      <button type="button" id="saveToken">Save token</button>
+    </p>
+
+    <fieldset>
+      <legend>Init</legend>
+      <div class="row">
+        <label
+          ><input type="checkbox" id="initSyncOff" checked />
+          <code>--sync off</code></label
+        >
+      </div>
+      <button type="button" id="btnInit">Run init</button>
+    </fieldset>
+
+    <fieldset>
+      <legend>Epic</legend>
+      <label
+        >Title <input type="text" id="epicTitle" placeholder="Title"
+      /></label>
+      <label
+        >Body <input type="text" id="epicBody" placeholder="optional"
+      /></label>
+      <label
+        >Id <input type="text" id="epicId" placeholder="optional ULID"
+      /></label>
+      <label
+        >Status <input type="text" id="epicStatus" placeholder="backlog|todo|…"
+      /></label>
+      <button type="button" id="btnEpicCreate">epic create</button>
+      <hr />
+      <label>List / read — id (empty = list)</label>
+      <input type="text" id="epicReadId" placeholder="epic id" />
+      <button type="button" id="btnEpicRead">epic read</button>
+      <hr />
+      <label>Update — id</label>
+      <input type="text" id="epicUpId" placeholder="required" />
+      <label>Title <input type="text" id="epicUpTitle" /></label>
+      <label>Body <input type="text" id="epicUpBody" /></label>
+      <label>Status <input type="text" id="epicUpStatus" /></label>
+      <button type="button" id="btnEpicUpdate">epic update</button>
+      <hr />
+      <label>Delete — id</label>
+      <input type="text" id="epicDelId" placeholder="required" />
+      <button type="button" id="btnEpicDelete">epic delete</button>
+    </fieldset>
+
+    <fieldset>
+      <legend>Story</legend>
+      <label>Title <input type="text" id="storyTitle" /></label>
+      <label>Epic id <input type="text" id="storyEpic" /></label>
+      <label>Body <input type="text" id="storyBody" /></label>
+      <label
+        >Id <input type="text" id="storyId" placeholder="optional"
+      /></label>
+      <label>Status <input type="text" id="storyStatus" /></label>
+      <button type="button" id="btnStoryCreate">story create</button>
+      <hr />
+      <label>Read — id (empty = list)</label>
+      <input type="text" id="storyReadId" />
+      <label
+        >Epic filter (list only) <input type="text" id="storyReadEpic"
+      /></label>
+      <button type="button" id="btnStoryRead">story read</button>
+      <hr />
+      <label>Update — id <input type="text" id="storyUpId" /></label>
+      <label>Title <input type="text" id="storyUpTitle" /></label>
+      <label>Body <input type="text" id="storyUpBody" /></label>
+      <label>Status <input type="text" id="storyUpStatus" /></label>
+      <button type="button" id="btnStoryUpdate">story update</button>
+      <hr />
+      <label>Delete — id <input type="text" id="storyDelId" /></label>
+      <button type="button" id="btnStoryDelete">story delete</button>
+    </fieldset>
+
+    <fieldset>
+      <legend>Ticket</legend>
+      <label>Title <input type="text" id="ticketTitle" /></label>
+      <label
+        >Story id <input type="text" id="ticketStory" placeholder="optional"
+      /></label>
+      <label>Body <textarea id="ticketBody" rows="3"></textarea></label>
+      <label
+        >Id <input type="text" id="ticketId" placeholder="optional"
+      /></label>
+      <label
+        >Status <input type="text" id="ticketStatus" placeholder="default todo"
+      /></label>
+      <button type="button" id="btnTicketCreate">ticket create</button>
+      <hr />
+      <label>Read — id (empty = list)</label>
+      <input type="text" id="ticketReadId" />
+      <button type="button" id="btnTicketRead">ticket read</button>
+      <hr />
+      <label>Update — id <input type="text" id="ticketUpId" /></label>
+      <label>Title <input type="text" id="ticketUpTitle" /></label>
+      <label>Body <textarea id="ticketUpBody" rows="2"></textarea></label>
+      <label>Status <input type="text" id="ticketUpStatus" /></label>
+      <button type="button" id="btnTicketUpdate">ticket update</button>
+      <hr />
+      <label
+        >Comment — ticket id <input type="text" id="ticketCommentId"
+      /></label>
+      <label>Body <textarea id="ticketCommentBody" rows="2"></textarea></label>
+      <button type="button" id="btnTicketComment">ticket comment</button>
+      <hr />
+      <label>Delete — id <input type="text" id="ticketDelId" /></label>
+      <button type="button" id="btnTicketDelete">ticket delete</button>
+    </fieldset>
+
+    <fieldset>
+      <legend>Sync / audit / doctor</legend>
+      <label
+        ><input type="checkbox" id="syncNoGithub" />
+        <code>implicit skip</code> (use CLI <code>--no-github</code> via
+        advanced)</label
+      >
+      <button type="button" id="btnSync">sync</button>
+      <hr />
+      <label
+        >audit limit
+        <input type="text" id="auditLimit" placeholder="optional number"
+      /></label>
+      <label
+        >audit type
+        <input type="text" id="auditType" placeholder="e.g. TicketUpdated"
+      /></label>
+      <label>entity id <input type="text" id="auditEntity" /></label>
+      <button type="button" id="btnAudit">audit</button>
+      <button type="button" id="btnDoctor">doctor</button>
+    </fieldset>
+
+    <fieldset>
+      <legend>Advanced — raw argv (JSON array of strings)</legend>
+      <textarea
+        id="advArgv"
+        rows="4"
+        placeholder='["ticket", "read", "--id", "…"]'
+      ></textarea>
+      <button type="button" id="btnAdvRun">Run</button>
+    </fieldset>
+
+    <h2>Result</h2>
+    <pre id="out"></pre>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

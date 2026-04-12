@@ -1,5 +1,7 @@
-import type { RunHyperPmCliResult } from "./run-hyper-pm-cli-types";
-import { tryParseStdoutJson } from "./try-parse-stdout-json";
+import {
+  tryParseStdoutJson,
+  type RunHyperPmCliResult,
+} from "@workspace/hyper-pm-cli-runner";
 
 /**
  * Serializes hyper-pm CLI output into pretty-printed JSON for MCP `text` content (exit code, streams, parsed stdout when JSON).
