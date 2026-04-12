@@ -1,4 +1,81 @@
-/* global window, document, fetch, localStorage */
+/* global window, document, fetch, localStorage, marked, DOMPurify */
+
+/** @type {boolean} */
+let markdownLibConfigured = false;
+
+/**
+ * Enables GFM-style line breaks for issue-style markdown (once per page load).
+ */
+function configureMarkdownLibOnce() {
+  if (markdownLibConfigured) return;
+  if (typeof marked !== "undefined" && typeof marked.use === "function") {
+    marked.use({
+      gfm: true,
+      breaks: true,
+    });
+  }
+  markdownLibConfigured = true;
+}
+
+/**
+ * @returns {boolean} True when CDN markdown + sanitizer globals are available.
+ */
+function markdownLibsLoaded() {
+  return (
+    typeof marked !== "undefined" &&
+    typeof marked.parse === "function" &&
+    typeof DOMPurify !== "undefined" &&
+    typeof DOMPurify.sanitize === "function"
+  );
+}
+
+/**
+ * Sanitizes HTML produced from user-authored markdown before `innerHTML` use.
+ * @param {string} dirtyHtml
+ * @returns {string}
+ */
+function sanitizeUserMarkdownHtml(dirtyHtml) {
+  if (
+    typeof DOMPurify === "undefined" ||
+    typeof DOMPurify.sanitize !== "function"
+  ) {
+    return "";
+  }
+  return DOMPurify.sanitize(dirtyHtml, { USE_PROFILES: { html: true } });
+}
+
+/**
+ * Renders inline markdown (titles, short labels). Falls back to escaped plain text.
+ * @param {unknown} text
+ * @returns {string}
+ */
+function markdownInlineHtml(text) {
+  const s = String(text ?? "");
+  configureMarkdownLibOnce();
+  if (!markdownLibsLoaded()) {
+    return escapeHtml(s);
+  }
+  const raw =
+    typeof marked.parseInline === "function"
+      ? marked.parseInline(s, { async: false })
+      : marked.parse(s, { async: false });
+  return sanitizeUserMarkdownHtml(/** @type {string} */ (raw));
+}
+
+/**
+ * Flatten markdown to plain text for the window/toolbar title (no HTML).
+ * @param {unknown} text
+ * @returns {string}
+ */
+function markdownToPlainTextForUiChrome(text) {
+  const s = String(text ?? "");
+  if (!trimU(s)) return "";
+  if (!markdownLibsLoaded()) return s.replace(/\s+/g, " ").trim();
+  const wrap = document.createElement("div");
+  wrap.innerHTML = markdownInlineHtml(s);
+  const out = wrap.textContent?.replace(/\s+/g, " ").trim();
+  return out && out.length > 0 ? out : s;
+}
 
 const TOKEN_KEY = "hyperPmWebBearer";
 
@@ -39,7 +116,7 @@ function idChip(id) {
 }
 
 /**
- * Renders plain text as safe HTML for read-only multiline display.
+ * Renders markdown as safe HTML for read-only multiline display (epic/story/ticket bodies).
  * @param {unknown} text
  * @returns {string}
  */
@@ -48,7 +125,13 @@ function readBodyHtml(text) {
   if (!trimU(s)) {
     return '<p class="muted read-empty">No description.</p>';
   }
-  return `<div class="read-body">${escapeHtml(s).replace(/\n/g, "<br />")}</div>`;
+  configureMarkdownLibOnce();
+  if (!markdownLibsLoaded()) {
+    return `<div class="read-body">${escapeHtml(s).replace(/\n/g, "<br />")}</div>`;
+  }
+  const raw = marked.parse(s, { async: false });
+  const clean = sanitizeUserMarkdownHtml(/** @type {string} */ (raw));
+  return `<div class="read-body md-body">${clean}</div>`;
 }
 
 /**
@@ -531,7 +614,7 @@ function setPageTitle(title) {
 function epicRowHtml(row) {
   const id = String(row.id);
   return `<tr>
-    <td class="cell-title"><button type="button" class="link-title btn-open-epic" data-epic-id="${escapeHtml(id)}">${escapeHtml(String(row.title))}</button></td>
+    <td class="cell-title"><button type="button" class="link-title btn-open-epic" data-epic-id="${escapeHtml(id)}"><span class="md-inline">${markdownInlineHtml(row.title)}</span></button></td>
     <td>${badgeHtml(String(row.status))}</td>
     <td>${idChip(id)}</td>
     <td><button type="button" class="ghost btn-open-epic" data-epic-id="${escapeHtml(id)}">Open</button></td>
@@ -547,10 +630,10 @@ function storyRowHtml(row, epicTitles) {
   const eid = String(row.epicId);
   const epicTitle = epicTitles[eid];
   const epicCell = epicTitle
-    ? `<button type="button" class="link-title btn-nav-epic" data-epic-id="${escapeHtml(eid)}">${escapeHtml(epicTitle)}</button>`
+    ? `<button type="button" class="link-title btn-nav-epic" data-epic-id="${escapeHtml(eid)}"><span class="md-inline">${markdownInlineHtml(epicTitle)}</span></button>`
     : idChip(eid);
   return `<tr>
-    <td class="cell-title"><button type="button" class="link-title btn-open-story" data-story-id="${escapeHtml(id)}">${escapeHtml(String(row.title))}</button></td>
+    <td class="cell-title"><button type="button" class="link-title btn-open-story" data-story-id="${escapeHtml(id)}"><span class="md-inline">${markdownInlineHtml(row.title)}</span></button></td>
     <td>${badgeHtml(String(row.status))}</td>
     <td>${epicCell}</td>
     <td>${idChip(id)}</td>
@@ -573,10 +656,10 @@ function ticketRowHtml(row, storyTitles) {
     sid === ""
       ? '<span class="muted">—</span>'
       : stitle
-        ? `<button type="button" class="link-title btn-nav-story" data-story-id="${escapeHtml(sid)}">${escapeHtml(stitle)}</button>`
+        ? `<button type="button" class="link-title btn-nav-story" data-story-id="${escapeHtml(sid)}"><span class="md-inline">${markdownInlineHtml(stitle)}</span></button>`
         : idChip(sid);
   return `<tr>
-    <td class="cell-title"><button type="button" class="link-title btn-open-ticket" data-ticket-id="${escapeHtml(id)}">${escapeHtml(String(row.title))}</button></td>
+    <td class="cell-title"><button type="button" class="link-title btn-open-ticket" data-ticket-id="${escapeHtml(id)}"><span class="md-inline">${markdownInlineHtml(row.title)}</span></button></td>
     <td>${badgeHtml(String(row.status))}</td>
     <td>${sidCell}</td>
     <td>${idChip(id)}</td>
@@ -754,12 +837,14 @@ async function renderEpicEdit() {
       await runCli(["epic", "read", "--id", id])
     );
     const showForm = Boolean(state.epicDetailForm);
-    setPageTitle(showForm ? "Edit epic" : String(row.title));
+    setPageTitle(
+      showForm ? "Edit epic" : markdownToPlainTextForUiChrome(row.title),
+    );
     const readBlock = `
         <div class="panel-head">
           <div>
             <p class="muted" style="margin:0 0 0.25rem;font-size:0.8125rem">Epic</p>
-            <h2 style="margin:0">${escapeHtml(String(row.title))}</h2>
+            <h2 style="margin:0"><span class="md-inline">${markdownInlineHtml(row.title)}</span></h2>
           </div>
           <div class="panel-head-actions">
             <button type="button" class="btn-subtle" id="btnEpicSeeStories">See stories</button>
@@ -908,7 +993,7 @@ async function renderStoriesList() {
       ? epics.find((e) => String(/** @type {{id:string}} */ (e).id) === fe)
       : undefined;
     const storyFilterBanner = fe
-      ? `<div class="filter-context-bar"><span>Showing stories in <strong>${filteredEpicRow ? escapeHtml(String(/** @type {{title:string}} */ (filteredEpicRow).title)) : escapeHtml(fe)}</strong></span><div class="filter-actions"><button type="button" class="ghost" id="btnStoriesCtxEpic">View epic</button><button type="button" class="ghost" id="btnStoriesClearEpic">All stories</button></div></div>`
+      ? `<div class="filter-context-bar"><span>Showing stories in </span><span class="filter-context-entity">${filteredEpicRow ? markdownInlineHtml(String(/** @type {{title:string}} */ (filteredEpicRow).title)) : escapeHtml(fe)}</span><div class="filter-actions"><button type="button" class="ghost" id="btnStoriesCtxEpic">View epic</button><button type="button" class="ghost" id="btnStoriesClearEpic">All stories</button></div></div>`
       : "";
     const storyTable =
       items.length === 0
@@ -1069,19 +1154,21 @@ async function renderStoryEdit() {
       const epicRow = /** @type {Record<string, unknown>} */ (
         await runCli(["epic", "read", "--id", epicId])
       );
-      const t = escapeHtml(String(epicRow.title));
-      epicReadInner = `<span>${t}</span> · ${idChip(epicId)}`;
-      epicFormLine = `Epic: ${t} (<code>${escapeHtml(epicId)}</code>)`;
+      const t = markdownInlineHtml(String(epicRow.title));
+      epicReadInner = `<span class="md-inline">${t}</span> · ${idChip(epicId)}`;
+      epicFormLine = `Epic: <span class="md-inline">${t}</span> (<code>${escapeHtml(epicId)}</code>)`;
     } catch {
       /* keep defaults */
     }
     const showForm = Boolean(state.storyDetailForm);
-    setPageTitle(showForm ? "Edit story" : String(row.title));
+    setPageTitle(
+      showForm ? "Edit story" : markdownToPlainTextForUiChrome(row.title),
+    );
     const readBlock = `
         <div class="panel-head">
           <div>
             <p class="muted" style="margin:0 0 0.25rem;font-size:0.8125rem">Story</p>
-            <h2 style="margin:0">${escapeHtml(String(row.title))}</h2>
+            <h2 style="margin:0"><span class="md-inline">${markdownInlineHtml(row.title)}</span></h2>
           </div>
           <div class="panel-head-actions">
             <button type="button" class="btn-subtle" id="btnStoryOpenEpic">Open epic</button>
@@ -1250,7 +1337,7 @@ async function renderTicketsList() {
       ? stories.find((s) => String(/** @type {{id:string}} */ (s).id) === fs)
       : undefined;
     const ticketFilterBanner = fs
-      ? `<div class="filter-context-bar"><span>Showing tickets for <strong>${filteredStoryRow ? escapeHtml(String(/** @type {{title:string}} */ (filteredStoryRow).title)) : escapeHtml(fs)}</strong></span><div class="filter-actions"><button type="button" class="ghost" id="btnTicketsCtxStory">View story</button><button type="button" class="ghost" id="btnTicketsClearStory">All tickets</button></div></div>`
+      ? `<div class="filter-context-bar"><span>Showing tickets for </span><span class="filter-context-entity">${filteredStoryRow ? markdownInlineHtml(String(/** @type {{title:string}} */ (filteredStoryRow).title)) : escapeHtml(fs)}</span><div class="filter-actions"><button type="button" class="ghost" id="btnTicketsCtxStory">View story</button><button type="button" class="ghost" id="btnTicketsClearStory">All tickets</button></div></div>`
       : "";
     const ticketTable =
       items.length === 0
@@ -1443,11 +1530,11 @@ async function renderTicketEdit() {
         (s) => String(/** @type {{id:string}} */ (s).id) === curStory,
       );
       const storyLinkLabel = linkedStoryRow
-        ? escapeHtml(
+        ? markdownInlineHtml(
             String(/** @type {{title:string}} */ (linkedStoryRow).title),
           )
         : escapeHtml(curStory);
-      storyTitleBtn = `<button type="button" class="link-title issue-meta-link" id="ticketSidebarStoryLink">${storyLinkLabel}</button>`;
+      storyTitleBtn = `<button type="button" class="link-title issue-meta-link" id="ticketSidebarStoryLink"><span class="md-inline">${storyLinkLabel}</span></button>`;
       storyReadInner = linkedStoryRow
         ? `${storyTitleBtn}<span class="issue-meta-sep"> · </span>${idChip(curStory)}`
         : storyTitleBtn;
@@ -1469,8 +1556,8 @@ async function renderTicketEdit() {
         const epicRow = /** @type {Record<string, unknown>} */ (
           await runCli(["epic", "read", "--id", storyEpicId])
         );
-        const et = escapeHtml(String(epicRow.title));
-        const epicLink = `<button type="button" class="link-title issue-meta-link" id="ticketSidebarEpicLink">${et}</button>`;
+        const et = markdownInlineHtml(String(epicRow.title));
+        const epicLink = `<button type="button" class="link-title issue-meta-link" id="ticketSidebarEpicLink"><span class="md-inline">${et}</span></button>`;
         epicReadInner = `${epicLink}<span class="issue-meta-sep"> · </span>${idChip(storyEpicId)}`;
       } catch {
         epicReadInner = `<button type="button" class="link-title issue-meta-link" id="ticketSidebarEpicLink">${escapeHtml(storyEpicId)}</button>`;
@@ -1494,14 +1581,16 @@ async function renderTicketEdit() {
     ].join("");
     const comments = Array.isArray(row.comments) ? row.comments : [];
     const showForm = Boolean(state.ticketDetailForm);
-    setPageTitle(showForm ? "Edit ticket" : String(row.title));
+    setPageTitle(
+      showForm ? "Edit ticket" : markdownToPlainTextForUiChrome(row.title),
+    );
     const readBlock = `
         <div class="issue-detail-layout">
           <div class="issue-main">
             <div class="panel-head issue-panel-head">
               <div>
                 <p class="muted issue-kicker" style="margin:0 0 0.25rem">Ticket</p>
-                <h2 class="issue-title">${escapeHtml(String(row.title))}</h2>
+                <h2 class="issue-title"><span class="md-inline">${markdownInlineHtml(row.title)}</span></h2>
               </div>
               <div class="panel-head-actions">
                 <button type="button" class="btn-subtle" id="btnTicketEnterEdit">Edit</button>
