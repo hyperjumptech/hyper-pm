@@ -11,6 +11,7 @@ import type { Projection, TicketRecord } from "../storage/projection";
  * the ticket must list that id in `dependsOn`.
  *
  * Time bounds are **inclusive** on the parsed instant (`>=` after, `<=` before).
+ * When `assigneeLogin` is set, the ticket must have that normalized GitHub login as `assignee` (AND with other dimensions).
  */
 export type TicketListQuery = {
   /** When non-empty, ticket status must be one of these. */
@@ -73,6 +74,10 @@ export type TicketListQuery = {
    * When set, the ticket's `dependsOn` list must include this id (exact match after trim).
    */
   dependsOnIncludesId?: string;
+  /**
+   * When set, the ticket must have this normalized GitHub login as `assignee` (tickets with no assignee do not match).
+   */
+  assigneeLogin?: string;
 };
 
 /**
@@ -273,6 +278,13 @@ export const ticketMatchesTicketListQuery = (
   if (dependsOnIncludesId !== undefined) {
     const deps = ticket.dependsOn ?? [];
     if (!deps.includes(dependsOnIncludesId)) {
+      return false;
+    }
+  }
+
+  const assigneeLogin = query.assigneeLogin;
+  if (assigneeLogin !== undefined) {
+    if (ticket.assignee === undefined || ticket.assignee !== assigneeLogin) {
       return false;
     }
   }

@@ -373,4 +373,55 @@ describe("ticketMatchesTicketListQuery", () => {
       false,
     );
   });
+
+  it("filters by assigneeLogin exact match", () => {
+    // Setup
+    const projection = emptyProjection();
+
+    // Act / Assert
+    expect(
+      ticketMatchesTicketListQuery(
+        { ...baseTicket, assignee: "alice" },
+        projection,
+        { assigneeLogin: "alice" },
+      ),
+    ).toBe(true);
+    expect(
+      ticketMatchesTicketListQuery(
+        { ...baseTicket, assignee: "alice" },
+        projection,
+        { assigneeLogin: "bob" },
+      ),
+    ).toBe(false);
+    expect(
+      ticketMatchesTicketListQuery({ ...baseTicket }, projection, {
+        assigneeLogin: "alice",
+      }),
+    ).toBe(false);
+  });
+
+  it("combines assigneeLogin with status filter", () => {
+    // Setup
+    const projection = emptyProjection();
+    const q: TicketListQuery = {
+      assigneeLogin: "pat",
+      statuses: ["in_progress"],
+    };
+
+    // Act / Assert
+    expect(
+      ticketMatchesTicketListQuery(
+        { ...baseTicket, assignee: "pat", status: "in_progress" },
+        projection,
+        q,
+      ),
+    ).toBe(true);
+    expect(
+      ticketMatchesTicketListQuery(
+        { ...baseTicket, assignee: "pat", status: "todo" },
+        projection,
+        q,
+      ),
+    ).toBe(false);
+  });
 });

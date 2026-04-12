@@ -123,6 +123,7 @@ import {
   runGithubOutboundSync,
 } from "./sync/run-github-sync";
 import { resolveGithubTokenActor } from "./sync/resolve-github-token-actor";
+import { resolveAuthenticatedGithubLogin } from "./sync/resolve-authenticated-github-login";
 import { resolveGithubTokenForSync } from "./sync/resolve-github-token-for-sync";
 
 type GlobalOpts = {
@@ -404,6 +405,8 @@ const buildTicketListQueryFromReadListOpts = (
     targetFinishBefore?: string;
     /** When set and non-empty (trimmed), list tickets whose `dependsOn` includes this id. */
     dependsOn?: string;
+    /** When set and non-empty, list tickets whose normalized `assignee` equals this login. */
+    assignee?: string;
   },
   deps: {
     exit: (code: number) => never;
@@ -561,6 +564,15 @@ const buildTicketListQueryFromReadListOpts = (
   if (o.dependsOn !== undefined && o.dependsOn.trim() !== "") {
     const trimmed = o.dependsOn.trim();
     query.dependsOnIncludesId = resolveTicketId(projection, trimmed) ?? trimmed;
+  }
+
+  if (o.assignee !== undefined && o.assignee !== "") {
+    const n = normalizeGithubLogin(o.assignee);
+    if (n === "") {
+      deps.error("--assignee must be a non-empty login");
+      deps.exit(ExitCode.UserError);
+    }
+    query.assigneeLogin = n;
   }
 
   return Object.keys(query).length > 0 ? query : undefined;
@@ -1151,6 +1163,15 @@ export const runCli = async (
       "when listing (no --id): only tickets that list this ticket id in dependsOn",
     )
     .option(
+      "--assignee <login>",
+      "when listing (no --id): only tickets assigned to this GitHub login (normalized)",
+    )
+    .option(
+      "--mine",
+      "when listing (no --id): only tickets assigned to the authenticated GitHub user (requires GITHUB_TOKEN or gh auth login)",
+      false,
+    )
+    .option(
       "--priority <p>",
       "when listing (no --id): OR-set of priorities (repeat flag); low|medium|high|urgent",
       (value: string, previous: string[]) => [...previous, value],
@@ -1232,6 +1253,8 @@ export const runCli = async (
         targetFinishAfter?: string;
         targetFinishBefore?: string;
         dependsOn?: string;
+        assignee?: string;
+        mine?: boolean;
         sortBy?: string;
         sortDir?: string;
       }>();
@@ -2619,6 +2642,7 @@ const readStory = async (
  * When listing, optional `story` filters to tickets under that story (story must exist).
  * Advanced list flags are ignored when `--id` is set. `--story` and `--epic` cannot be used together.
  * `--without-story` lists only tickets with no story and cannot be combined with `--story` or `--epic`.
+ * `--mine` and `--assignee` are mutually exclusive when listing; `--mine` requires GitHub auth.
  *
  * @param g - Global CLI flags (repo, format, worktree, etc.).
  * @param opts - Parsed `ticket read` options (`id`, `story`, `withoutStory`, list-only filters, sort flags).
@@ -2654,6 +2678,8 @@ const readTicket = async (
     targetFinishAfter?: string;
     targetFinishBefore?: string;
     dependsOn?: string;
+    assignee?: string;
+    mine?: boolean;
     sortBy?: string;
     sortDir?: string;
   },
@@ -2667,6 +2693,33 @@ const readTicket = async (
   try {
     const repoRoot = await resolveRepoRoot(g.repo);
     const cfg = await loadMergedConfig(repoRoot, g);
+
+    const isListingTickets = opts.id === undefined || opts.id === "";
+    let resolvedListAssignee: string | undefined;
+    if (isListingTickets) {
+      const mine = opts.mine === true;
+      const rawAssignee = opts.assignee;
+      if (mine && rawAssignee !== undefined && rawAssignee !== "") {
+        deps.error("Cannot use --mine and --assignee together");
+        deps.exit(ExitCode.UserError);
+      }
+      if (mine) {
+        const login = await resolveAuthenticatedGithubLogin({
+          envToken: env.GITHUB_TOKEN,
+          cwd: repoRoot,
+        });
+        if (login === null) {
+          deps.error(
+            "GitHub authentication required for --mine: set GITHUB_TOKEN or run gh auth login",
+          );
+          deps.exit(ExitCode.UserError);
+        }
+        resolvedListAssignee = login;
+      } else if (rawAssignee !== undefined && rawAssignee !== "") {
+        resolvedListAssignee = rawAssignee;
+      }
+    }
+
     const tmpBase = g.tempDir ?? env.TMPDIR ?? tmpdir();
     const session = await openDataBranchWorktree({
       repoRoot,
@@ -2685,8 +2738,18 @@ const readTicket = async (
         sortBy: sortByOpt,
         sortDir: sortDirOpt,
         withoutStory: withoutStoryRaw,
+        mine,
+        assignee,
         ...listFlagRest
       } = opts;
+      void mine;
+      void assignee;
+      const listQueryOpts = {
+        ...listFlagRest,
+        ...(resolvedListAssignee !== undefined
+          ? { assignee: resolvedListAssignee }
+          : {}),
+      };
       if (id === undefined || id === "") {
         const listWithoutStory = withoutStoryRaw === true;
         const storyFilter =
@@ -2736,7 +2799,7 @@ const readTicket = async (
           } else {
             const listQuery = buildTicketListQueryFromReadListOpts(
               proj,
-              { epic: epicFilter, ...listFlagRest },
+              { epic: epicFilter, ...listQueryOpts },
               deps,
             );
             deps.log(
@@ -2757,7 +2820,7 @@ const readTicket = async (
           } else {
             const listQuery = buildTicketListQueryFromReadListOpts(
               proj,
-              listFlagRest,
+              listQueryOpts,
               deps,
             );
             deps.log(
@@ -2774,7 +2837,7 @@ const readTicket = async (
         } else if (listWithoutStory) {
           const listQuery = buildTicketListQueryFromReadListOpts(
             proj,
-            { withoutStory: true, ...listFlagRest },
+            { withoutStory: true, ...listQueryOpts },
             deps,
           );
           deps.log(
@@ -2789,7 +2852,7 @@ const readTicket = async (
         } else {
           const listQuery = buildTicketListQueryFromReadListOpts(
             proj,
-            { epic: epicFilter, ...listFlagRest },
+            { epic: epicFilter, ...listQueryOpts },
             deps,
           );
           deps.log(

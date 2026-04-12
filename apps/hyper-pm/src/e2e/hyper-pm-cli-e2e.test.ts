@@ -278,6 +278,8 @@ describe("hyper-pm CLI (e2e)", () => {
         "2026-06-01T00:00:00.000Z",
         "--target-finish-at",
         "2026-06-15T00:00:00.000Z",
+        "--assignee",
+        "e2e-assignee",
       ],
       { repoRoot, tempDir, clock, actor: "e2e" },
     );
@@ -292,6 +294,7 @@ describe("hyper-pm CLI (e2e)", () => {
       expect.objectContaining({
         id: "ticket-e2e-1",
         title: "Ticket A",
+        assignee: "e2e-assignee",
         labels: ["e2e-label"],
         priority: "medium",
         size: "s",
@@ -457,6 +460,32 @@ describe("hyper-pm CLI (e2e)", () => {
       { repoRoot, tempDir, clock, actor: "e2e" },
     );
     expect(ticketCreateCollision.code).toBe(ExitCode.Success);
+
+    const ticketListByAssignee = await invokeHyperPmCli(
+      [
+        "ticket",
+        "read",
+        "--story",
+        "story-e2e-1",
+        "--assignee",
+        "e2e-assignee",
+      ],
+      { repoRoot, tempDir, clock },
+    );
+    expect(ticketListByAssignee.code).toBe(ExitCode.Success);
+    const assigneeFilterItems = (
+      ticketListByAssignee.json as {
+        items: { id: string; assignee?: string }[];
+      }
+    ).items;
+    expect(assigneeFilterItems).toHaveLength(1);
+    expect(assigneeFilterItems[0]).toEqual(
+      expect.objectContaining({
+        id: "ticket-e2e-1",
+        assignee: "e2e-assignee",
+      }),
+    );
+
     await git(repoRoot, ["branch", "hyper-pm/ticket-e2e-2", "HEAD"]);
     const ticketWorkCollision = await invokeHyperPmCli(
       ["ticket", "work", "--id", "ticket-e2e-2"],
