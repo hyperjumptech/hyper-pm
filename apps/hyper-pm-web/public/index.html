@@ -3,219 +3,335 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>hyper-pm web</title>
+    <title>hyper-pm</title>
     <style>
       :root {
-        font-family: system-ui, sans-serif;
-        line-height: 1.4;
-        max-width: 52rem;
-        margin: 0 auto;
-        padding: 1rem;
+        --bg: #f8fafc;
+        --surface: #ffffff;
+        --border: #e2e8f0;
+        --text: #0f172a;
+        --muted: #64748b;
+        --sidebar: #0f172a;
+        --sidebar-text: #f1f5f9;
+        --sidebar-muted: #94a3b8;
+        --accent: #2563eb;
+        --accent-hover: #1d4ed8;
+        --danger: #dc2626;
+        --radius: 8px;
+        --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
       }
-      h1 {
-        font-size: 1.25rem;
+      * {
+        box-sizing: border-box;
       }
-      fieldset {
-        margin: 1rem 0;
-        border: 1px solid #ccc;
-        padding: 0.75rem;
+      body {
+        margin: 0;
+        font-family: var(--font);
+        background: var(--bg);
+        color: var(--text);
+        line-height: 1.45;
+        min-height: 100vh;
       }
-      legend {
+      .app-shell {
+        display: flex;
+        min-height: 100vh;
+      }
+      .sidebar {
+        width: 15.5rem;
+        flex-shrink: 0;
+        background: var(--sidebar);
+        color: var(--sidebar-text);
+        display: flex;
+        flex-direction: column;
+        padding: 1rem 0;
+      }
+      .brand {
+        font-weight: 700;
+        font-size: 1.1rem;
+        padding: 0 1rem 1rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        margin-bottom: 0.5rem;
+      }
+      .nav-section {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--sidebar-muted);
+        padding: 0.75rem 1rem 0.35rem;
+      }
+      .nav-btn {
+        display: block;
+        width: 100%;
+        text-align: left;
+        padding: 0.5rem 1rem;
+        border: none;
+        background: transparent;
+        color: var(--sidebar-text);
+        font: inherit;
+        cursor: pointer;
+        border-radius: 0;
+      }
+      .nav-btn:hover,
+      .nav-btn[aria-current="true"] {
+        background: rgba(255, 255, 255, 0.08);
+      }
+      .workspace {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 0.85rem 1.25rem;
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+      }
+      .topbar h1 {
+        margin: 0;
+        font-size: 1.15rem;
         font-weight: 600;
+      }
+      .health {
+        font-size: 0.8rem;
+        color: var(--muted);
+        max-width: 28rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .toolbar {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      main#main {
+        flex: 1;
+        padding: 1.25rem;
+        overflow: auto;
+      }
+      .panel {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 1rem;
+        max-width: 56rem;
+      }
+      .panel + .panel {
+        margin-top: 1rem;
+      }
+      .panel h2 {
+        margin: 0 0 0.75rem;
+        font-size: 1rem;
       }
       label {
         display: block;
-        margin: 0.35rem 0 0.1rem;
-      }
-      input,
-      textarea,
-      button,
-      select {
-        font: inherit;
-        max-width: 100%;
+        font-size: 0.85rem;
+        font-weight: 500;
+        margin: 0.5rem 0 0.2rem;
       }
       input[type="text"],
-      textarea {
+      input[type="password"],
+      textarea,
+      select {
         width: 100%;
-        box-sizing: border-box;
+        max-width: 32rem;
+        font: inherit;
+        padding: 0.45rem 0.55rem;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: #fff;
       }
       textarea {
-        min-height: 6rem;
-        font-family: ui-monospace, monospace;
-      }
-      button {
-        margin-top: 0.5rem;
-        cursor: pointer;
-      }
-      #out {
-        white-space: pre-wrap;
-        background: #f6f6f6;
-        padding: 0.75rem;
-        border: 1px solid #ddd;
-        min-height: 4rem;
+        min-height: 5rem;
+        resize: vertical;
       }
       .row {
         display: flex;
         flex-wrap: wrap;
         gap: 0.5rem;
         align-items: center;
+        margin-top: 0.5rem;
+      }
+      button {
+        font: inherit;
+        cursor: pointer;
+        border-radius: 6px;
+        padding: 0.45rem 0.85rem;
+        border: 1px solid var(--border);
+        background: var(--surface);
+      }
+      button.primary {
+        background: var(--accent);
+        color: #fff;
+        border-color: var(--accent);
+      }
+      button.primary:hover {
+        background: var(--accent-hover);
+        border-color: var(--accent-hover);
+      }
+      button.danger {
+        color: #fff;
+        background: var(--danger);
+        border-color: var(--danger);
+      }
+      button.ghost {
+        background: transparent;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.9rem;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 0.5rem 0.6rem;
+        border-bottom: 1px solid var(--border);
+      }
+      th {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--muted);
+        font-weight: 600;
+      }
+      tr:hover td {
+        background: #f1f5f9;
       }
       .muted {
-        color: #555;
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+      .stat-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+        gap: 0.75rem;
+      }
+      .stat {
+        padding: 0.75rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: #fff;
+      }
+      .stat strong {
+        display: block;
+        font-size: 1.5rem;
+        font-weight: 700;
+      }
+      #toast {
+        margin: 0 1.25rem;
+        padding: 0.5rem 0.75rem;
+        border-radius: 6px;
         font-size: 0.9rem;
+        display: none;
+      }
+      #toast.show {
+        display: block;
+      }
+      #toast.error {
+        background: #fef2f2;
+        color: #991b1b;
+        border: 1px solid #fecaca;
+      }
+      #toast.ok {
+        background: #f0fdf4;
+        color: #166534;
+        border: 1px solid #bbf7d0;
+      }
+      .comment {
+        border-left: 3px solid var(--border);
+        padding: 0.5rem 0.75rem;
+        margin: 0.5rem 0;
+        background: #f8fafc;
+        border-radius: 0 6px 6px 0;
+      }
+      .comment-meta {
+        font-size: 0.75rem;
+        color: var(--muted);
+        margin-bottom: 0.25rem;
+      }
+      .sidebar-footer {
+        margin-top: auto;
+        padding: 1rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        font-size: 0.8rem;
+      }
+      .sidebar-footer label {
+        color: var(--sidebar-muted);
+        margin-top: 0;
+      }
+      .sidebar-footer input {
+        max-width: 100%;
+        margin-top: 0.25rem;
+      }
+      code {
+        font-size: 0.85em;
+        background: #f1f5f9;
+        padding: 0.1em 0.35em;
+        border-radius: 4px;
       }
     </style>
   </head>
   <body>
-    <h1>hyper-pm</h1>
-    <p id="status" class="muted">Loading…</p>
-    <p>
-      <label for="bearer">Optional bearer token (stored in this browser)</label>
-      <input type="password" id="bearer" autocomplete="off" />
-      <button type="button" id="saveToken">Save token</button>
-    </p>
-
-    <fieldset>
-      <legend>Init</legend>
-      <div class="row">
-        <label
-          ><input type="checkbox" id="initSyncOff" checked />
-          <code>--sync off</code></label
-        >
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Main navigation">
+        <div class="brand">hyper-pm</div>
+        <div class="nav-section">Work items</div>
+        <button type="button" class="nav-btn" data-nav="dashboard">
+          Overview
+        </button>
+        <button type="button" class="nav-btn" data-nav="epics">Epics</button>
+        <button type="button" class="nav-btn" data-nav="stories">
+          Stories
+        </button>
+        <button type="button" class="nav-btn" data-nav="tickets">
+          Tickets
+        </button>
+        <div class="nav-section">Repository</div>
+        <button type="button" class="nav-btn" data-nav="tools">Tools</button>
+        <button type="button" class="nav-btn" data-nav="advanced">
+          Advanced CLI
+        </button>
+        <div class="sidebar-footer">
+          <label for="bearer">API token (optional)</label>
+          <input
+            type="password"
+            id="bearer"
+            autocomplete="off"
+            placeholder="Bearer secret"
+          />
+          <div class="row" style="margin-top: 0.5rem">
+            <button
+              type="button"
+              id="saveToken"
+              class="ghost"
+              style="color: #e2e8f0; border-color: #475569"
+            >
+              Save
+            </button>
+          </div>
+        </div>
+      </aside>
+      <div class="workspace">
+        <header class="topbar">
+          <div>
+            <h1 id="pageTitle">Overview</h1>
+            <p id="healthLine" class="health">Loading…</p>
+          </div>
+          <div class="toolbar">
+            <button type="button" id="btnRefresh" class="primary">
+              Refresh
+            </button>
+          </div>
+        </header>
+        <div id="toast" role="status" aria-live="polite"></div>
+        <main id="main" tabindex="-1"></main>
       </div>
-      <button type="button" id="btnInit">Run init</button>
-    </fieldset>
-
-    <fieldset>
-      <legend>Epic</legend>
-      <label
-        >Title <input type="text" id="epicTitle" placeholder="Title"
-      /></label>
-      <label
-        >Body <input type="text" id="epicBody" placeholder="optional"
-      /></label>
-      <label
-        >Id <input type="text" id="epicId" placeholder="optional ULID"
-      /></label>
-      <label
-        >Status <input type="text" id="epicStatus" placeholder="backlog|todo|…"
-      /></label>
-      <button type="button" id="btnEpicCreate">epic create</button>
-      <hr />
-      <label>List / read — id (empty = list)</label>
-      <input type="text" id="epicReadId" placeholder="epic id" />
-      <button type="button" id="btnEpicRead">epic read</button>
-      <hr />
-      <label>Update — id</label>
-      <input type="text" id="epicUpId" placeholder="required" />
-      <label>Title <input type="text" id="epicUpTitle" /></label>
-      <label>Body <input type="text" id="epicUpBody" /></label>
-      <label>Status <input type="text" id="epicUpStatus" /></label>
-      <button type="button" id="btnEpicUpdate">epic update</button>
-      <hr />
-      <label>Delete — id</label>
-      <input type="text" id="epicDelId" placeholder="required" />
-      <button type="button" id="btnEpicDelete">epic delete</button>
-    </fieldset>
-
-    <fieldset>
-      <legend>Story</legend>
-      <label>Title <input type="text" id="storyTitle" /></label>
-      <label>Epic id <input type="text" id="storyEpic" /></label>
-      <label>Body <input type="text" id="storyBody" /></label>
-      <label
-        >Id <input type="text" id="storyId" placeholder="optional"
-      /></label>
-      <label>Status <input type="text" id="storyStatus" /></label>
-      <button type="button" id="btnStoryCreate">story create</button>
-      <hr />
-      <label>Read — id (empty = list)</label>
-      <input type="text" id="storyReadId" />
-      <label
-        >Epic filter (list only) <input type="text" id="storyReadEpic"
-      /></label>
-      <button type="button" id="btnStoryRead">story read</button>
-      <hr />
-      <label>Update — id <input type="text" id="storyUpId" /></label>
-      <label>Title <input type="text" id="storyUpTitle" /></label>
-      <label>Body <input type="text" id="storyUpBody" /></label>
-      <label>Status <input type="text" id="storyUpStatus" /></label>
-      <button type="button" id="btnStoryUpdate">story update</button>
-      <hr />
-      <label>Delete — id <input type="text" id="storyDelId" /></label>
-      <button type="button" id="btnStoryDelete">story delete</button>
-    </fieldset>
-
-    <fieldset>
-      <legend>Ticket</legend>
-      <label>Title <input type="text" id="ticketTitle" /></label>
-      <label
-        >Story id <input type="text" id="ticketStory" placeholder="optional"
-      /></label>
-      <label>Body <textarea id="ticketBody" rows="3"></textarea></label>
-      <label
-        >Id <input type="text" id="ticketId" placeholder="optional"
-      /></label>
-      <label
-        >Status <input type="text" id="ticketStatus" placeholder="default todo"
-      /></label>
-      <button type="button" id="btnTicketCreate">ticket create</button>
-      <hr />
-      <label>Read — id (empty = list)</label>
-      <input type="text" id="ticketReadId" />
-      <button type="button" id="btnTicketRead">ticket read</button>
-      <hr />
-      <label>Update — id <input type="text" id="ticketUpId" /></label>
-      <label>Title <input type="text" id="ticketUpTitle" /></label>
-      <label>Body <textarea id="ticketUpBody" rows="2"></textarea></label>
-      <label>Status <input type="text" id="ticketUpStatus" /></label>
-      <button type="button" id="btnTicketUpdate">ticket update</button>
-      <hr />
-      <label
-        >Comment — ticket id <input type="text" id="ticketCommentId"
-      /></label>
-      <label>Body <textarea id="ticketCommentBody" rows="2"></textarea></label>
-      <button type="button" id="btnTicketComment">ticket comment</button>
-      <hr />
-      <label>Delete — id <input type="text" id="ticketDelId" /></label>
-      <button type="button" id="btnTicketDelete">ticket delete</button>
-    </fieldset>
-
-    <fieldset>
-      <legend>Sync / audit / doctor</legend>
-      <label
-        ><input type="checkbox" id="syncNoGithub" />
-        <code>implicit skip</code> (use CLI <code>--no-github</code> via
-        advanced)</label
-      >
-      <button type="button" id="btnSync">sync</button>
-      <hr />
-      <label
-        >audit limit
-        <input type="text" id="auditLimit" placeholder="optional number"
-      /></label>
-      <label
-        >audit type
-        <input type="text" id="auditType" placeholder="e.g. TicketUpdated"
-      /></label>
-      <label>entity id <input type="text" id="auditEntity" /></label>
-      <button type="button" id="btnAudit">audit</button>
-      <button type="button" id="btnDoctor">doctor</button>
-    </fieldset>
-
-    <fieldset>
-      <legend>Advanced — raw argv (JSON array of strings)</legend>
-      <textarea
-        id="advArgv"
-        rows="4"
-        placeholder='["ticket", "read", "--id", "…"]'
-      ></textarea>
-      <button type="button" id="btnAdvRun">Run</button>
-    </fieldset>
-
-    <h2>Result</h2>
-    <pre id="out"></pre>
-
+    </div>
     <script src="./app.js"></script>
   </body>
 </html>

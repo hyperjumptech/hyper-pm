@@ -1,6 +1,6 @@
 # hyper-pm-web
 
-Small **local** web UI around the `hyper-pm` CLI. The server spawns the same bundled CLI as the terminal (`hyper-pm/dist/main.cjs`), so behavior matches the CLI.
+Small **local** web UI around the `hyper-pm` CLI. The server spawns the same bundled CLI as the terminal (`hyper-pm/dist/main.cjs`), so behavior matches the CLI. The browser UI uses a **sidebar** (Overview, Epics, Stories, Tickets, Tools) to list work items, open them for edit, create new ones, delete, and **comment on tickets**; **Advanced CLI** still accepts raw argv.
 
 ## Security
 
