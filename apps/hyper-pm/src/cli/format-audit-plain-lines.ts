@@ -251,6 +251,15 @@ export const buildAuditLinkMetadata = (
       if (p["body"] !== undefined) meta["descriptionChanged"] = true;
       if (p["status"] !== undefined) meta["status"] = String(p["status"]);
       if (p["assignee"] !== undefined) meta["assignee"] = p["assignee"];
+      if (p["labels"] !== undefined) meta["labels"] = p["labels"];
+      if (p["priority"] !== undefined) meta["priority"] = p["priority"];
+      if (p["size"] !== undefined) meta["size"] = p["size"];
+      if (p["estimate"] !== undefined) meta["estimate"] = p["estimate"];
+      if (p["startWorkAt"] !== undefined)
+        meta["startWorkAt"] = p["startWorkAt"];
+      if (p["targetFinishAt"] !== undefined) {
+        meta["targetFinishAt"] = p["targetFinishAt"];
+      }
       break;
     }
     case "GithubPrActivity": {
@@ -415,6 +424,28 @@ export const formatAuditHumanSentence = (evt: EventLine): string => {
       }
       if (p["body"] !== undefined) {
         bits.push("updated the description");
+      }
+      if (p["labels"] !== undefined) {
+        if (p["labels"] === null) {
+          bits.push("cleared labels");
+        } else {
+          bits.push("updated labels");
+        }
+      }
+      if (p["priority"] !== undefined) {
+        bits.push("updated priority");
+      }
+      if (p["size"] !== undefined) {
+        bits.push("updated size");
+      }
+      if (p["estimate"] !== undefined) {
+        bits.push("updated estimate");
+      }
+      if (p["startWorkAt"] !== undefined) {
+        bits.push("updated start work date");
+      }
+      if (p["targetFinishAt"] !== undefined) {
+        bits.push("updated target finish date");
       }
       return bits.join("; ");
     }

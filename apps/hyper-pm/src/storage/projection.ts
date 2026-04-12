@@ -605,6 +605,7 @@ export const applyEvent = (projection: Projection, evt: EventLine): void => {
           applyStatusIfChanged(ticket, evt, inboundStatus);
         }
         applyTicketAssigneeFromPayload(ticket, evt.payload);
+        applyTicketPlanningFieldsFromUpdatePayload(ticket, evt.payload);
         applyLastUpdate(ticket, evt);
       }
       break;

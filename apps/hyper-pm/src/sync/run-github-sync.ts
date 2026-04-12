@@ -3,8 +3,17 @@ import type { HyperPmConfig } from "../config/hyper-pm-config";
 import { assigneeFromGithubIssue } from "../lib/github-assignee";
 import {
   buildGithubIssueBody,
+  extractDescriptionBeforeFirstFence,
+  inboundTicketPlanningPayloadFromFenceMeta,
+  parseHyperPmFenceObject,
   parseHyperPmIdFromIssueBody,
+  ticketPlanningForGithubIssueBody,
 } from "../lib/github-issue-body";
+import {
+  mergeOutboundGithubIssueLabelsForTicket,
+  ticketLabelsFromGithubIssueLabels,
+} from "../lib/github-issue-labels";
+import { ticketLabelListsEqual } from "../lib/ticket-planning-fields";
 import {
   resolveTicketInboundStatus,
   statusToGithubIssueState,
@@ -85,6 +94,8 @@ export const runGithubOutboundSync = async (params: {
       parents !== undefined
         ? { epic: parents.epicId, story: parents.storyId }
         : ({} as Record<string, string | undefined>);
+    const ticketPlanning = ticketPlanningForGithubIssueBody(ticket);
+    const ghLabels = mergeOutboundGithubIssueLabelsForTicket(ticket.labels);
 
     if (ticket.githubIssueNumber !== undefined) {
       await params.deps.octokit.rest.issues.update({
@@ -97,9 +108,11 @@ export const runGithubOutboundSync = async (params: {
           type: "ticket",
           parentIds: parentIdsForBody,
           description: ticket.body,
+          ticketPlanning,
         }),
         state: statusToGithubIssueState(ticket.status),
         assignees: ticket.assignee ? [ticket.assignee] : [],
+        labels: ghLabels,
       });
       continue;
     }
@@ -115,8 +128,9 @@ export const runGithubOutboundSync = async (params: {
         type: "ticket",
         parentIds: { epic: parents.epicId, story: parents.storyId },
         description: ticket.body,
+        ticketPlanning,
       }),
-      labels: ["hyper-pm", "ticket"],
+      labels: ghLabels,
       assignees: ticket.assignee ? [ticket.assignee] : [],
     });
     const num = created.data.number;
@@ -181,35 +195,72 @@ export const runGithubInboundSync = async (params: {
       issueState: issueApiState,
       currentStatus: ticket.status,
     });
-    const fenceIdx = issue.body.indexOf("```");
-    const desc =
-      fenceIdx === -1
-        ? issue.body.trim()
-        : issue.body.slice(0, fenceIdx).trim();
+    const desc = extractDescriptionBeforeFirstFence(issue.body);
     const ghTitle = (issue.title ?? "").replace(/^\[hyper-pm\]\s*/, "").trim();
     const nextAssignee = assigneeFromGithubIssue(issue);
+    const nextLabels = ticketLabelsFromGithubIssueLabels(issue.labels);
+    const labelsMatch = ticketLabelListsEqual(ticket.labels, nextLabels);
+
+    const meta = parseHyperPmFenceObject(issue.body) ?? {};
+    const planningSource = inboundTicketPlanningPayloadFromFenceMeta(meta);
+    const planningPayload: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(planningSource)) {
+      const tk = k as keyof TicketRecord;
+      const cur = ticket[tk];
+      if (v === null) {
+        if (cur !== undefined) {
+          planningPayload[k] = null;
+        }
+      } else if (cur !== v) {
+        planningPayload[k] = v;
+      }
+    }
+
+    const titleDiff = ticket.title !== ghTitle;
+    const bodyDiff = ticket.body !== desc;
+    const statusDiff = ticket.status !== nextStatus;
+    const assigneeDiff = ticket.assignee !== nextAssignee;
+    const planningDiff = Object.keys(planningPayload).length > 0;
+
     if (
-      ticket.title === ghTitle &&
-      ticket.body === desc &&
-      ticket.status === nextStatus &&
-      ticket.assignee === nextAssignee
+      !titleDiff &&
+      !bodyDiff &&
+      !statusDiff &&
+      !assigneeDiff &&
+      labelsMatch &&
+      !planningDiff
     ) {
       continue;
     }
+
+    const payload: Record<string, unknown> = {
+      entity: "ticket",
+      entityId: id,
+    };
+    if (titleDiff) {
+      payload["title"] = ghTitle;
+    }
+    if (bodyDiff) {
+      payload["body"] = desc;
+    }
+    if (statusDiff) {
+      payload["status"] = nextStatus;
+    }
+    if (assigneeDiff) {
+      payload["assignee"] = nextAssignee === undefined ? null : nextAssignee;
+    }
+    if (!labelsMatch) {
+      payload["labels"] = nextLabels;
+    }
+    Object.assign(payload, planningPayload);
+
     const evt: EventLine = {
       schema: 1,
       type: "GithubInboundUpdate",
       id: `in-${id}-${issue.id}`,
       ts,
       actor: githubInboundActorFromIssue(issue),
-      payload: {
-        entity: "ticket",
-        entityId: id,
-        title: ghTitle,
-        body: desc,
-        status: nextStatus,
-        assignee: nextAssignee === undefined ? null : nextAssignee,
-      },
+      payload,
     };
     out.push(evt);
     await appendEventLine(params.dataRoot, evt, params.deps.clock);

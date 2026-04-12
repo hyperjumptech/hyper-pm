@@ -645,6 +645,45 @@ describe("replayEvents", () => {
     expect(ticket?.body).toBe("patched");
   });
 
+  it("applies labels and planning fields from GithubInboundUpdate", () => {
+    const lines = [
+      JSON.stringify({
+        schema: 1,
+        type: "TicketCreated",
+        id: "e1",
+        ts: "2026-01-02T00:00:00.000Z",
+        actor: "a",
+        payload: {
+          id: "t1",
+          title: "T",
+          body: "hello",
+          status: "todo",
+          labels: ["old"],
+          priority: "low",
+          estimate: 1,
+        },
+      }),
+      JSON.stringify({
+        schema: 1,
+        type: "GithubInboundUpdate",
+        id: "e2",
+        ts: "2026-01-03T00:00:00.000Z",
+        actor: "gh",
+        payload: {
+          entity: "ticket",
+          entityId: "t1",
+          labels: ["from-gh"],
+          priority: "urgent",
+          estimate: 5,
+        },
+      }),
+    ];
+    const t = replayEvents(lines).tickets.get("t1");
+    expect(t?.labels).toEqual(["from-gh"]);
+    expect(t?.priority).toBe("urgent");
+    expect(t?.estimate).toBe(5);
+  });
+
   it("ignores TicketUpdated branches payload when value is not an array", () => {
     const lines = [
       JSON.stringify({
