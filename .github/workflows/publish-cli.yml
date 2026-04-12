@@ -1,12 +1,12 @@
-name: Publish CLI to npm
+name: Publish hyper-pm apps to npm
 
 on:
   release:
     types: [published]
 
 permissions:
-  id-token: write
   contents: read
+  id-token: write
 
 jobs:
   publish:
@@ -22,15 +22,33 @@ jobs:
           cache: "pnpm"
           registry-url: "https://registry.npmjs.org"
 
+      # Trusted publishing + provenance require npm CLI >= 11.5.1 (see npm trusted-publishers docs).
+      - name: Upgrade npm for OIDC trusted publishing
+        run: npm install -g npm@^11.5.1
+
       - run: pnpm install --frozen-lockfile
 
       - name: Set version from release tag
-        run: npm pkg set "version=${GITHUB_REF_NAME#v}"
-        working-directory: packages/route-action-gen
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          npm pkg set "version=${VERSION}" --prefix apps/hyper-pm
+          npm pkg set "version=${VERSION}" --prefix apps/hyper-pm-web
+          npm pkg set "version=${VERSION}" --prefix apps/hyper-pm-mcp
 
       - name: Build
-        run: pnpm build --filter=route-action-gen
+        run: pnpm build --filter=...hyper-pm
 
-      - name: Publish to npm
-        run: npm publish
-        working-directory: packages/route-action-gen
+      - name: Publish hyper-pm
+        env:
+          NPM_CONFIG_PROVENANCE: "true"
+        run: pnpm publish --filter hyper-pm --access public --no-git-checks
+
+      - name: Publish hyper-pm-web
+        env:
+          NPM_CONFIG_PROVENANCE: "true"
+        run: pnpm publish --filter hyper-pm-web --access public --no-git-checks
+
+      - name: Publish hyper-pm-mcp
+        env:
+          NPM_CONFIG_PROVENANCE: "true"
+        run: pnpm publish --filter hyper-pm-mcp --access public --no-git-checks
