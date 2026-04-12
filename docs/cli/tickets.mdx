@@ -8,28 +8,31 @@ import { Callout } from "fumadocs-ui/components/callout";
 
 ## `ticket create`
 
-| Flag                       | Required | Description                                                                    |
-| -------------------------- | -------- | ------------------------------------------------------------------------------ |
-| `--title <t>`              | yes      | Ticket title                                                                   |
-| `--story <id>`             | no       | Attach to story; omit for an **unlinked** ticket (story must exist)            |
-| `--body <b>`               | no       | Description (default empty string)                                             |
-| `--id <id>`                | no       | Explicit id (otherwise generated)                                              |
-| `--status <s>`             | no       | `backlog` · `todo` · `in_progress` · `done` · `cancelled` (default **`todo`**) |
-| `--assignee <login>`       | no       | GitHub login (normalized); one assignee per ticket                             |
-| `--branch <name>`          | no       | Link a git branch; **repeatable**                                              |
-| `--label <name>`           | no       | Planning label; **repeatable**                                                 |
-| `--priority <p>`           | no       | `low` · `medium` · `high` · `urgent`                                           |
-| `--size <s>`               | no       | `xs` · `s` · `m` · `l` · `xl`                                                  |
-| `--estimate <n>`           | no       | Non-negative number (e.g. story points)                                        |
-| `--start-at <iso>`         | no       | Planned start (`startWorkAt`), ISO-8601 instant                                |
-| `--target-finish-at <iso>` | no       | Planned finish (`targetFinishAt`), ISO-8601 instant                            |
-| `--ai-draft`               | no       | Draft `--body` via AI; requires `HYPER_PM_AI_API_KEY`                          |
+| Flag                       | Required | Description                                                                                  |
+| -------------------------- | -------- | -------------------------------------------------------------------------------------------- |
+| `--title <t>`              | yes      | Ticket title                                                                                 |
+| `--story <id>`             | no       | Attach to story; omit for an **unlinked** ticket (story must exist)                          |
+| `--body <b>`               | no       | Description (default empty string)                                                           |
+| `--id <id>`                | no       | Explicit id (otherwise generated)                                                            |
+| `--status <s>`             | no       | `backlog` · `todo` · `in_progress` · `done` · `cancelled` (default **`todo`**)               |
+| `--assignee <login>`       | no       | GitHub login (normalized); one assignee per ticket                                           |
+| `--branch <name>`          | no       | Link a git branch; **repeatable**                                                            |
+| `--label <name>`           | no       | Planning label; **repeatable**                                                               |
+| `--depends-on <id>`        | no       | Prerequisite ticket id (`dependsOn`); **repeatable** — validated (exists, not self, acyclic) |
+| `--priority <p>`           | no       | `low` · `medium` · `high` · `urgent`                                                         |
+| `--size <s>`               | no       | `xs` · `s` · `m` · `l` · `xl`                                                                |
+| `--estimate <n>`           | no       | Non-negative number (e.g. story points)                                                      |
+| `--start-at <iso>`         | no       | Planned start (`startWorkAt`), ISO-8601 instant                                              |
+| `--target-finish-at <iso>` | no       | Planned finish (`targetFinishAt`), ISO-8601 instant                                          |
+| `--ai-draft`               | no       | Draft `--body` via AI; requires `HYPER_PM_AI_API_KEY`                                        |
 
 ## `ticket read`
 
 ### One ticket
 
-Pass **`--id`**. JSON includes `storyId` (or `null`), `assignee`, `linkedBranches`, `comments`, `prActivityRecent` when present, and planning fields (`labels`, `priority`, `size`, `estimate`, `startWorkAt`, `targetFinishAt`) when set.
+Pass **`--id`**. JSON includes `storyId` (or `null`), `assignee`, `linkedBranches`, `comments`, `prActivityRecent` when present, and planning fields (`labels`, `dependsOn`, `priority`, `size`, `estimate`, `startWorkAt`, `targetFinishAt`) when set. If a prerequisite ticket is later deleted, `dependsOn` may still list its id until you edit dependencies.
+
+List JSON rows include `dependsOn` when non-empty (same as `labels` / `linkedBranches`).
 
 ### List tickets (omit `--id`)
 
@@ -59,6 +62,7 @@ Pass **`--id`**. JSON includes `storyId` (or `null`), `assignee`, `linkedBranche
 | `--title-contains <text>`                               | Case-insensitive substring on title                                                                                   |
 | `--github-linked`                                       | Only tickets with a linked GitHub issue number                                                                        |
 | `--branch <name>`                                       | Normalized **exact** match on a linked branch                                                                         |
+| `--depends-on <id>`                                     | Only tickets whose `dependsOn` includes this ticket id (exact match after trim)                                       |
 
 **Sort (list mode only)**
 
@@ -81,6 +85,8 @@ Pass **`--id`**. JSON includes `storyId` (or `null`), `assignee`, `linkedBranche
 | `--clear-branches`                                                                   | Remove all linked branches                                                 |
 | `--add-label` / `--remove-label`                                                     | **Repeatable**; **mutually exclusive** with `--clear-labels`               |
 | `--clear-labels`                                                                     | Remove all labels                                                          |
+| `--add-depends-on` / `--remove-depends-on`                                           | **Repeatable**; **mutually exclusive** with `--clear-depends-on`           |
+| `--clear-depends-on`                                                                 | Remove all `dependsOn` prerequisites                                       |
 | `--priority`, `--size`, `--estimate`                                                 | Set planning fields; each has a matching **`--clear-*`**                   |
 | `--start-at` / `--clear-start-at`, `--target-finish-at` / `--clear-target-finish-at` | Planned dates                                                              |
 | `--ai-improve`                                                                       | Rewrite `--body` with AI — **requires** `--body` and `HYPER_PM_AI_API_KEY` |
