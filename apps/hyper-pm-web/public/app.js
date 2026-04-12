@@ -4,7 +4,7 @@ const TOKEN_KEY = "hyperPmWebBearer";
 
 const STATUSES = ["backlog", "todo", "in_progress", "done", "cancelled"];
 
-/** @type {{ view: string; epicId?: string; storyId?: string; ticketId?: string; storyFilterEpic?: string; ticketFilterStory?: string }} */
+/** @type {{ view: string; epicId?: string; storyId?: string; ticketId?: string; storyFilterEpic?: string; ticketFilterStory?: string; epicDetailForm?: boolean; storyDetailForm?: boolean; ticketDetailForm?: boolean }} */
 const state = {
   view: "dashboard",
   storyFilterEpic: "",
@@ -36,6 +36,29 @@ function badgeHtml(status) {
  */
 function idChip(id) {
   return `<span class="id-chip">${escapeHtml(id)}</span>`;
+}
+
+/**
+ * Renders plain text as safe HTML for read-only multiline display.
+ * @param {unknown} text
+ * @returns {string}
+ */
+function readBodyHtml(text) {
+  const s = String(text ?? "");
+  if (!trimU(s)) {
+    return '<p class="muted read-empty">No description.</p>';
+  }
+  return `<div class="read-body">${escapeHtml(s).replace(/\n/g, "<br />")}</div>`;
+}
+
+/**
+ * One labeled block in a read-only detail stack (`innerHtml` is trusted HTML from this file only).
+ * @param {string} label
+ * @param {string} innerHtml
+ * @returns {string}
+ */
+function readRowHtml(label, innerHtml) {
+  return `<div class="read-row"><div class="read-label">${escapeHtml(label)}</div><div class="read-value">${innerHtml}</div></div>`;
 }
 
 /**
@@ -263,6 +286,7 @@ async function renderEpicsList() {
   setPageTitle("Epics");
   state.view = "epics";
   delete state.epicId;
+  delete state.epicDetailForm;
   setNavCurrent();
   const main = document.getElementById("main");
   if (!main) return;
@@ -287,6 +311,7 @@ async function renderEpicsList() {
         const id = /** @type {HTMLButtonElement} */ (btn).dataset.epicId;
         if (id) {
           state.epicId = id;
+          state.epicDetailForm = false;
           void renderEpicEdit();
         }
       });
@@ -360,7 +385,6 @@ async function renderEpicEdit() {
     void renderEpicsList();
     return;
   }
-  setPageTitle("Epic");
   state.view = "epicEdit";
   setNavCurrent();
   const main = document.getElementById("main");
@@ -370,11 +394,22 @@ async function renderEpicEdit() {
     const row = /** @type {Record<string, unknown>} */ (
       await runCli(["epic", "read", "--id", id])
     );
-    main.innerHTML = `
-      <div class="panel">
-        <div class="back-link">
-          <button type="button" class="ghost" id="btnBackEpics2">← Epics</button>
+    const showForm = Boolean(state.epicDetailForm);
+    setPageTitle(showForm ? "Edit epic" : String(row.title));
+    const readBlock = `
+        <div class="panel-head">
+          <div>
+            <p class="muted" style="margin:0 0 0.25rem;font-size:0.8125rem">Epic</p>
+            <h2 style="margin:0">${escapeHtml(String(row.title))}</h2>
+          </div>
+          <button type="button" class="primary" id="btnEpicEnterEdit">Edit</button>
         </div>
+        <p class="muted" style="margin-top:0">${idChip(id)}</p>
+        <div class="read-stack">
+          ${readRowHtml("Status", badgeHtml(String(row.status)))}
+          ${readRowHtml("Description", readBodyHtml(row.body))}
+        </div>`;
+    const formBlock = `
         <div class="panel-head" style="border-bottom:none;padding-bottom:0;margin-bottom:0.5rem">
           <h2>Edit epic</h2>
         </div>
@@ -387,57 +422,80 @@ async function renderEpicEdit() {
         ${statusOptionsHtml("editEpicStatus", String(row.status))}
         <div class="row">
           <button type="button" class="primary" id="btnSaveEpic">Save changes</button>
+          <button type="button" class="ghost" id="btnEpicCancelEdit">Cancel</button>
           <button type="button" class="danger" id="btnDeleteEpic">Delete epic</button>
+        </div>`;
+    main.innerHTML = `
+      <div class="panel">
+        <div class="back-link">
+          <button type="button" class="ghost" id="btnBackEpics2">← Epics</button>
         </div>
+        ${showForm ? formBlock : readBlock}
       </div>`;
     document.getElementById("btnBackEpics2")?.addEventListener("click", () => {
       void renderEpicsList();
     });
-    document
-      .getElementById("btnSaveEpic")
-      ?.addEventListener("click", async () => {
-        const title = trimU(
-          document.getElementById("editEpicTitle")?.value ?? "",
-        );
-        const body = document.getElementById("editEpicBody")?.value ?? "";
-        const status =
-          document.getElementById("editEpicStatus")?.value ?? "backlog";
-        if (!title) {
-          toast("Title is required", true);
-          return;
-        }
-        try {
-          await runCli([
-            "epic",
-            "update",
-            "--id",
-            id,
-            "--title",
-            title,
-            "--body",
-            body,
-            "--status",
-            status,
-          ]);
-          toast("Epic saved", false);
+    if (!showForm) {
+      document
+        .getElementById("btnEpicEnterEdit")
+        ?.addEventListener("click", () => {
+          state.epicDetailForm = true;
           void renderEpicEdit();
-        } catch (e) {
-          toast(String(e), true);
-        }
-      });
-    document
-      .getElementById("btnDeleteEpic")
-      ?.addEventListener("click", async () => {
-        if (!window.confirm(`Delete epic ${id}? This cannot be undone.`))
-          return;
-        try {
-          await runCli(["epic", "delete", "--id", id]);
-          toast("Epic deleted", false);
-          void renderEpicsList();
-        } catch (e) {
-          toast(String(e), true);
-        }
-      });
+        });
+    } else {
+      document
+        .getElementById("btnEpicCancelEdit")
+        ?.addEventListener("click", () => {
+          state.epicDetailForm = false;
+          void renderEpicEdit();
+        });
+      document
+        .getElementById("btnSaveEpic")
+        ?.addEventListener("click", async () => {
+          const title = trimU(
+            document.getElementById("editEpicTitle")?.value ?? "",
+          );
+          const body = document.getElementById("editEpicBody")?.value ?? "";
+          const status =
+            document.getElementById("editEpicStatus")?.value ?? "backlog";
+          if (!title) {
+            toast("Title is required", true);
+            return;
+          }
+          try {
+            await runCli([
+              "epic",
+              "update",
+              "--id",
+              id,
+              "--title",
+              title,
+              "--body",
+              body,
+              "--status",
+              status,
+            ]);
+            toast("Epic saved", false);
+            state.epicDetailForm = false;
+            void renderEpicEdit();
+          } catch (e) {
+            toast(String(e), true);
+          }
+        });
+      document
+        .getElementById("btnDeleteEpic")
+        ?.addEventListener("click", async () => {
+          if (!window.confirm(`Delete epic ${id}? This cannot be undone.`))
+            return;
+          try {
+            await runCli(["epic", "delete", "--id", id]);
+            toast("Epic deleted", false);
+            void renderEpicsList();
+          } catch (e) {
+            toast(String(e), true);
+          }
+        });
+    }
   } catch (e) {
     main.innerHTML = `<div class="panel"><p class="muted">${escapeHtml(String(e))}</p><button type="button" class="ghost" id="btnEpicErrBack">← Epics</button></div>`;
     document.getElementById("btnEpicErrBack")?.addEventListener("click", () => {
@@ -450,6 +508,7 @@ async function renderStoriesList() {
   setPageTitle("Stories");
   state.view = "stories";
   delete state.storyId;
+  delete state.storyDetailForm;
   setNavCurrent();
   const main = document.getElementById("main");
   if (!main) return;
@@ -506,6 +565,7 @@ async function renderStoriesList() {
         const sid = /** @type {HTMLButtonElement} */ (btn).dataset.storyId;
         if (sid) {
           state.storyId = sid;
+          state.storyDetailForm = false;
           void renderStoryEdit();
         }
       });
@@ -593,7 +653,6 @@ async function renderStoryEdit() {
     void renderStoriesList();
     return;
   }
-  setPageTitle("Story");
   state.view = "storyEdit";
   setNavCurrent();
   const main = document.getElementById("main");
@@ -604,24 +663,39 @@ async function renderStoryEdit() {
       await runCli(["story", "read", "--id", id])
     );
     const epicId = String(row.epicId);
-    let epicLine = `Epic id <code>${escapeHtml(epicId)}</code>`;
+    let epicReadInner = idChip(epicId);
+    let epicFormLine = `Epic id <code>${escapeHtml(epicId)}</code>`;
     try {
       const epicRow = /** @type {Record<string, unknown>} */ (
         await runCli(["epic", "read", "--id", epicId])
       );
-      epicLine = `Epic: ${escapeHtml(String(epicRow.title))} (<code>${escapeHtml(epicId)}</code>)`;
+      const t = escapeHtml(String(epicRow.title));
+      epicReadInner = `<span>${t}</span> · ${idChip(epicId)}`;
+      epicFormLine = `Epic: ${t} (<code>${escapeHtml(epicId)}</code>)`;
     } catch {
-      /* keep epicLine */
+      /* keep defaults */
     }
-    main.innerHTML = `
-      <div class="panel">
-        <div class="back-link">
-          <button type="button" class="ghost" id="btnBackStories2">← Stories</button>
+    const showForm = Boolean(state.storyDetailForm);
+    setPageTitle(showForm ? "Edit story" : String(row.title));
+    const readBlock = `
+        <div class="panel-head">
+          <div>
+            <p class="muted" style="margin:0 0 0.25rem;font-size:0.8125rem">Story</p>
+            <h2 style="margin:0">${escapeHtml(String(row.title))}</h2>
+          </div>
+          <button type="button" class="primary" id="btnStoryEnterEdit">Edit</button>
         </div>
+        <p class="muted" style="margin-top:0">${idChip(id)}</p>
+        <div class="read-stack">
+          ${readRowHtml("Epic", epicReadInner)}
+          ${readRowHtml("Status", badgeHtml(String(row.status)))}
+          ${readRowHtml("Description", readBodyHtml(row.body))}
+        </div>`;
+    const formBlock = `
         <div class="panel-head" style="border-bottom:none;padding-bottom:0;margin-bottom:0.5rem">
           <h2>Edit story</h2>
         </div>
-        <p class="muted" style="margin-top:0">${idChip(id)} · ${epicLine}</p>
+        <p class="muted" style="margin-top:0">${idChip(id)} · ${epicFormLine}</p>
         <p class="muted" style="font-size:0.85rem">To move a story to another epic, delete and recreate it (CLI does not support changing epic on update).</p>
         <label for="editStoryTitle">Title</label>
         <input type="text" id="editStoryTitle" value="${escapeHtml(String(row.title))}" />
@@ -631,58 +705,81 @@ async function renderStoryEdit() {
         ${statusOptionsHtml("editStoryStatus", String(row.status))}
         <div class="row">
           <button type="button" class="primary" id="btnSaveStory">Save</button>
+          <button type="button" class="ghost" id="btnStoryCancelEdit">Cancel</button>
           <button type="button" class="danger" id="btnDeleteStory">Delete</button>
+        </div>`;
+    main.innerHTML = `
+      <div class="panel">
+        <div class="back-link">
+          <button type="button" class="ghost" id="btnBackStories2">← Stories</button>
         </div>
+        ${showForm ? formBlock : readBlock}
       </div>`;
     document
       .getElementById("btnBackStories2")
       ?.addEventListener("click", () => {
         void renderStoriesList();
       });
-    document
-      .getElementById("btnSaveStory")
-      ?.addEventListener("click", async () => {
-        const title = trimU(
-          document.getElementById("editStoryTitle")?.value ?? "",
-        );
-        const body = document.getElementById("editStoryBody")?.value ?? "";
-        const status =
-          document.getElementById("editStoryStatus")?.value ?? "backlog";
-        if (!title) {
-          toast("Title is required", true);
-          return;
-        }
-        try {
-          await runCli([
-            "story",
-            "update",
-            "--id",
-            id,
-            "--title",
-            title,
-            "--body",
-            body,
-            "--status",
-            status,
-          ]);
-          toast("Story saved", false);
+    if (!showForm) {
+      document
+        .getElementById("btnStoryEnterEdit")
+        ?.addEventListener("click", () => {
+          state.storyDetailForm = true;
           void renderStoryEdit();
-        } catch (e) {
-          toast(String(e), true);
-        }
-      });
-    document
-      .getElementById("btnDeleteStory")
-      ?.addEventListener("click", async () => {
-        if (!window.confirm(`Delete story ${id}?`)) return;
-        try {
-          await runCli(["story", "delete", "--id", id]);
-          toast("Story deleted", false);
-          void renderStoriesList();
-        } catch (e) {
-          toast(String(e), true);
-        }
-      });
+        });
+    } else {
+      document
+        .getElementById("btnStoryCancelEdit")
+        ?.addEventListener("click", () => {
+          state.storyDetailForm = false;
+          void renderStoryEdit();
+        });
+      document
+        .getElementById("btnSaveStory")
+        ?.addEventListener("click", async () => {
+          const title = trimU(
+            document.getElementById("editStoryTitle")?.value ?? "",
+          );
+          const body = document.getElementById("editStoryBody")?.value ?? "";
+          const status =
+            document.getElementById("editStoryStatus")?.value ?? "backlog";
+          if (!title) {
+            toast("Title is required", true);
+            return;
+          }
+          try {
+            await runCli([
+              "story",
+              "update",
+              "--id",
+              id,
+              "--title",
+              title,
+              "--body",
+              body,
+              "--status",
+              status,
+            ]);
+            toast("Story saved", false);
+            state.storyDetailForm = false;
+            void renderStoryEdit();
+          } catch (e) {
+            toast(String(e), true);
+          }
+        });
+      document
+        .getElementById("btnDeleteStory")
+        ?.addEventListener("click", async () => {
+          if (!window.confirm(`Delete story ${id}?`)) return;
+          try {
+            await runCli(["story", "delete", "--id", id]);
+            toast("Story deleted", false);
+            void renderStoriesList();
+          } catch (e) {
+            toast(String(e), true);
+          }
+        });
+    }
   } catch (e) {
     main.innerHTML = `<div class="panel"><p class="muted">${escapeHtml(String(e))}</p><button type="button" class="ghost" id="btnStoryErrBack">← Stories</button></div>`;
     document
@@ -697,6 +794,7 @@ async function renderTicketsList() {
   setPageTitle("Tickets");
   state.view = "tickets";
   delete state.ticketId;
+  delete state.ticketDetailForm;
   setNavCurrent();
   const main = document.getElementById("main");
   if (!main) return;
@@ -751,6 +849,7 @@ async function renderTicketsList() {
         const tid = /** @type {HTMLButtonElement} */ (btn).dataset.ticketId;
         if (tid) {
           state.ticketId = tid;
+          state.ticketDetailForm = false;
           void renderTicketEdit();
         }
       });
@@ -861,7 +960,6 @@ async function renderTicketEdit() {
     void renderTicketsList();
     return;
   }
-  setPageTitle("Ticket");
   state.view = "ticketEdit";
   setNavCurrent();
   const main = document.getElementById("main");
@@ -874,6 +972,17 @@ async function renderTicketEdit() {
     const sj = await runCli(["story", "read"]);
     const stories = listFromJson(sj);
     const curStory = row.storyId == null ? "" : String(row.storyId);
+    let storyReadInner = '<span class="muted">No linked story</span>';
+    if (curStory) {
+      const st = stories.find(
+        (s) => String(/** @type {{id:string}} */ (s).id) === curStory,
+      );
+      if (st) {
+        storyReadInner = `<span>${escapeHtml(String(/** @type {{title:string}} */ (st).title))}</span> · ${idChip(curStory)}`;
+      } else {
+        storyReadInner = idChip(curStory);
+      }
+    }
     const storyOpts = [
       `<option value="">No story</option>`,
       ...stories.map((s) => {
@@ -883,11 +992,23 @@ async function renderTicketEdit() {
       }),
     ].join("");
     const comments = Array.isArray(row.comments) ? row.comments : [];
-    main.innerHTML = `
-      <div class="panel">
-        <div class="back-link">
-          <button type="button" class="ghost" id="btnBackTickets2">← Tickets</button>
+    const showForm = Boolean(state.ticketDetailForm);
+    setPageTitle(showForm ? "Edit ticket" : String(row.title));
+    const readBlock = `
+        <div class="panel-head">
+          <div>
+            <p class="muted" style="margin:0 0 0.25rem;font-size:0.8125rem">Ticket</p>
+            <h2 style="margin:0">${escapeHtml(String(row.title))}</h2>
+          </div>
+          <button type="button" class="primary" id="btnTicketEnterEdit">Edit</button>
         </div>
+        <p class="muted" style="margin-top:0">${idChip(id)}</p>
+        <div class="read-stack">
+          ${readRowHtml("Story", storyReadInner)}
+          ${readRowHtml("Status", badgeHtml(String(row.status)))}
+          ${readRowHtml("Description", readBodyHtml(row.body))}
+        </div>`;
+    const formBlock = `
         <div class="panel-head" style="border-bottom:none;padding-bottom:0;margin-bottom:0.5rem">
           <h2>Edit ticket</h2>
         </div>
@@ -902,8 +1023,15 @@ async function renderTicketEdit() {
         ${statusOptionsHtml("editTicketStatus", String(row.status))}
         <div class="row">
           <button type="button" class="primary" id="btnSaveTicket">Save</button>
+          <button type="button" class="ghost" id="btnTicketCancelEdit">Cancel</button>
           <button type="button" class="danger" id="btnDeleteTicket">Delete</button>
+        </div>`;
+    main.innerHTML = `
+      <div class="panel">
+        <div class="back-link">
+          <button type="button" class="ghost" id="btnBackTickets2">← Tickets</button>
         </div>
+        ${showForm ? formBlock : readBlock}
       </div>
       <div class="panel">
         <div class="panel-head">
@@ -921,58 +1049,74 @@ async function renderTicketEdit() {
       ?.addEventListener("click", () => {
         void renderTicketsList();
       });
-    document
-      .getElementById("btnSaveTicket")
-      ?.addEventListener("click", async () => {
-        const title = trimU(
-          document.getElementById("editTicketTitle")?.value ?? "",
-        );
-        const body = document.getElementById("editTicketBody")?.value ?? "";
-        const status =
-          document.getElementById("editTicketStatus")?.value ?? "todo";
-        const storySel =
-          document.getElementById("editTicketStory")?.value ?? "";
-        if (!title) {
-          toast("Title is required", true);
-          return;
-        }
-        const argv = [
-          "ticket",
-          "update",
-          "--id",
-          id,
-          "--title",
-          title,
-          "--body",
-          body,
-          "--status",
-          status,
-        ];
-        if (storySel) {
-          argv.push("--story", storySel);
-        } else {
-          argv.push("--unlink-story");
-        }
-        try {
-          await runCli(argv);
-          toast("Ticket saved", false);
+    if (!showForm) {
+      document
+        .getElementById("btnTicketEnterEdit")
+        ?.addEventListener("click", () => {
+          state.ticketDetailForm = true;
           void renderTicketEdit();
-        } catch (e) {
-          toast(String(e), true);
-        }
-      });
-    document
-      .getElementById("btnDeleteTicket")
-      ?.addEventListener("click", async () => {
-        if (!window.confirm(`Delete ticket ${id}?`)) return;
-        try {
-          await runCli(["ticket", "delete", "--id", id]);
-          toast("Ticket deleted", false);
-          void renderTicketsList();
-        } catch (e) {
-          toast(String(e), true);
-        }
-      });
+        });
+    } else {
+      document
+        .getElementById("btnTicketCancelEdit")
+        ?.addEventListener("click", () => {
+          state.ticketDetailForm = false;
+          void renderTicketEdit();
+        });
+      document
+        .getElementById("btnSaveTicket")
+        ?.addEventListener("click", async () => {
+          const title = trimU(
+            document.getElementById("editTicketTitle")?.value ?? "",
+          );
+          const body = document.getElementById("editTicketBody")?.value ?? "";
+          const status =
+            document.getElementById("editTicketStatus")?.value ?? "todo";
+          const storySel =
+            document.getElementById("editTicketStory")?.value ?? "";
+          if (!title) {
+            toast("Title is required", true);
+            return;
+          }
+          const argv = [
+            "ticket",
+            "update",
+            "--id",
+            id,
+            "--title",
+            title,
+            "--body",
+            body,
+            "--status",
+            status,
+          ];
+          if (storySel) {
+            argv.push("--story", storySel);
+          } else {
+            argv.push("--unlink-story");
+          }
+          try {
+            await runCli(argv);
+            toast("Ticket saved", false);
+            state.ticketDetailForm = false;
+            void renderTicketEdit();
+          } catch (e) {
+            toast(String(e), true);
+          }
+        });
+      document
+        .getElementById("btnDeleteTicket")
+        ?.addEventListener("click", async () => {
+          if (!window.confirm(`Delete ticket ${id}?`)) return;
+          try {
+            await runCli(["ticket", "delete", "--id", id]);
+            toast("Ticket deleted", false);
+            void renderTicketsList();
+          } catch (e) {
+            toast(String(e), true);
+          }
+        });
+    }
     document
       .getElementById("btnAddComment")
       ?.addEventListener("click", async () => {
