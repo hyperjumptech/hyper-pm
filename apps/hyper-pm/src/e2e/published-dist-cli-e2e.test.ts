@@ -448,6 +448,7 @@ describe("dist/main.cjs subprocess (JSON workflow parity)", () => {
     await writeFile(w1Readme, "# shared\n", "utf8");
     await git(w1, ["add", "README.md"]);
     await git(w1, ["commit", "-m", "init"]);
+    await git(w1, ["branch", "-M", "main"]);
     await git(w1, ["push", "-u", "origin", "main"]);
 
     const temp1 = join(base, "tmp1");
