@@ -23,6 +23,22 @@ function escapeHtml(s) {
 }
 
 /**
+ * @param {string} status
+ */
+function badgeHtml(status) {
+  const s = String(status);
+  const label = s.replace(/_/g, " ");
+  return `<span class="status-pill" data-status="${escapeHtml(s)}">${escapeHtml(label)}</span>`;
+}
+
+/**
+ * @param {string} id
+ */
+function idChip(id) {
+  return `<span class="id-chip">${escapeHtml(id)}</span>`;
+}
+
+/**
  * @param {string} v
  * @returns {string | undefined}
  */
@@ -112,12 +128,12 @@ function toast(message, isError) {
  */
 function tableHtml(items, rowHtml) {
   if (items.length === 0) {
-    return '<p class="muted">Nothing here yet.</p>';
+    return '<div class="empty-state">Nothing here yet. Create your first item to get started.</div>';
   }
   const rows = items
     .map((row) => rowHtml(/** @type {Record<string, unknown>} */ (row)))
     .join("");
-  return `<table><thead><tr><th>Title</th><th>Status</th><th>Id</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+  return `<div class="table-wrap"><table class="data-table"><thead><tr><th>Title</th><th>Status</th><th>Id</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 /**
@@ -160,9 +176,9 @@ function setPageTitle(title) {
 function epicRowHtml(row) {
   const id = String(row.id);
   return `<tr>
-    <td>${escapeHtml(String(row.title))}</td>
-    <td><code>${escapeHtml(String(row.status))}</code></td>
-    <td><code>${escapeHtml(id)}</code></td>
+    <td class="cell-title">${escapeHtml(String(row.title))}</td>
+    <td>${badgeHtml(String(row.status))}</td>
+    <td>${idChip(id)}</td>
     <td><button type="button" class="ghost btn-open-epic" data-epic-id="${escapeHtml(id)}">Open</button></td>
   </tr>`;
 }
@@ -173,10 +189,10 @@ function epicRowHtml(row) {
 function storyRowHtml(row) {
   const id = String(row.id);
   return `<tr>
-    <td>${escapeHtml(String(row.title))}</td>
-    <td><code>${escapeHtml(String(row.status))}</code></td>
-    <td><code>${escapeHtml(String(row.epicId))}</code></td>
-    <td><code>${escapeHtml(id)}</code></td>
+    <td class="cell-title">${escapeHtml(String(row.title))}</td>
+    <td>${badgeHtml(String(row.status))}</td>
+    <td>${idChip(String(row.epicId))}</td>
+    <td>${idChip(id)}</td>
     <td><button type="button" class="ghost btn-open-story" data-story-id="${escapeHtml(id)}">Open</button></td>
   </tr>`;
 }
@@ -186,15 +202,15 @@ function storyRowHtml(row) {
  */
 function ticketRowHtml(row) {
   const id = String(row.id);
-  const sid =
+  const sidCell =
     row.storyId === null || row.storyId === undefined
-      ? "—"
-      : String(row.storyId);
+      ? '<span class="muted">—</span>'
+      : idChip(String(row.storyId));
   return `<tr>
-    <td>${escapeHtml(String(row.title))}</td>
-    <td><code>${escapeHtml(String(row.status))}</code></td>
-    <td>${escapeHtml(sid)}</td>
-    <td><code>${escapeHtml(id)}</code></td>
+    <td class="cell-title">${escapeHtml(String(row.title))}</td>
+    <td>${badgeHtml(String(row.status))}</td>
+    <td>${sidCell}</td>
+    <td>${idChip(id)}</td>
     <td><button type="button" class="ghost btn-open-ticket" data-ticket-id="${escapeHtml(id)}">Open</button></td>
   </tr>`;
 }
@@ -228,13 +244,15 @@ async function renderDashboard() {
     const tickets = listFromJson(tj);
     main.innerHTML = `
       <div class="panel">
-        <h2>At a glance</h2>
-        <div class="stat-grid">
-          <div class="stat"><strong>${epics.length}</strong> Epics</div>
-          <div class="stat"><strong>${stories.length}</strong> Stories</div>
-          <div class="stat"><strong>${tickets.length}</strong> Tickets</div>
+        <div class="panel-head">
+          <h2>Overview</h2>
         </div>
-        <p class="muted" style="margin-top:1rem">Use the sidebar to browse or create work. Choose <strong>Refresh</strong> after changes elsewhere.</p>
+        <p class="muted lead">Work item counts for this repository. Use <strong>Refresh</strong> in the header after edits outside this tab.</p>
+        <div class="stat-grid">
+          <div class="stat-card"><div class="label">Epics</div><strong>${epics.length}</strong></div>
+          <div class="stat-card"><div class="label">Stories</div><strong>${stories.length}</strong></div>
+          <div class="stat-card"><div class="label">Tickets</div><strong>${tickets.length}</strong></div>
+        </div>
       </div>`;
   } catch (e) {
     main.innerHTML = `<div class="panel"><p class="muted">${escapeHtml(String(e))}</p></div>`;
@@ -254,8 +272,8 @@ async function renderEpicsList() {
     const items = listFromJson(json);
     main.innerHTML = `
       <div class="panel">
-        <div class="row" style="justify-content:space-between;margin-bottom:0.75rem">
-          <h2 style="margin:0">All epics</h2>
+        <div class="panel-head">
+          <h2>Epics</h2>
           <button type="button" class="primary" id="btnNewEpic">New epic</button>
         </div>
         ${tableHtml(items, epicRowHtml)}
@@ -285,11 +303,13 @@ async function renderEpicNew() {
   const main = document.getElementById("main");
   if (!main) return;
   main.innerHTML = `
-    <div class="panel">
-      <div class="row" style="margin-bottom:0.75rem">
-        <button type="button" class="ghost" id="btnBackEpics">← Back to epics</button>
-      </div>
-      <h2>Create epic</h2>
+      <div class="panel">
+        <div class="back-link">
+          <button type="button" class="ghost" id="btnBackEpics">← Back to epics</button>
+        </div>
+        <div class="panel-head" style="border-bottom:none;padding-bottom:0;margin-bottom:0.5rem">
+          <h2>Create epic</h2>
+        </div>
       <label for="newEpicTitle">Title</label>
       <input type="text" id="newEpicTitle" required />
       <label for="newEpicBody">Description</label>
@@ -352,11 +372,13 @@ async function renderEpicEdit() {
     );
     main.innerHTML = `
       <div class="panel">
-        <div class="row" style="margin-bottom:0.75rem">
+        <div class="back-link">
           <button type="button" class="ghost" id="btnBackEpics2">← Epics</button>
         </div>
-        <h2>Edit epic</h2>
-        <p class="muted">Id <code>${escapeHtml(id)}</code></p>
+        <div class="panel-head" style="border-bottom:none;padding-bottom:0;margin-bottom:0.5rem">
+          <h2>Edit epic</h2>
+        </div>
+        <p class="muted" style="margin-top:0">${idChip(id)}</p>
         <label for="editEpicTitle">Title</label>
         <input type="text" id="editEpicTitle" value="${escapeHtml(String(row.title))}" />
         <label for="editEpicBody">Description</label>
@@ -449,18 +471,23 @@ async function renderStoriesList() {
           `<option value="${escapeHtml(String(/** @type {{id:string}} */ (e).id))}"${String(/** @type {{id:string}} */ (e).id) === fe ? " selected" : ""}>${escapeHtml(String(/** @type {{title:string}} */ (e).title))}</option>`,
       ),
     ].join("");
+    const storyTable =
+      items.length === 0
+        ? '<div class="empty-state">No stories match this filter.</div>'
+        : `<div class="table-wrap"><table class="data-table"><thead><tr><th>Title</th><th>Status</th><th>Epic</th><th>Id</th><th></th></tr></thead><tbody>
+          ${items.map((row) => storyRowHtml(/** @type {Record<string, unknown>} */ (row))).join("")}
+        </tbody></table></div>`;
     main.innerHTML = `
       <div class="panel">
-        <label for="filterStoryEpic">Filter by epic</label>
-        <select id="filterStoryEpic">${epicOpts}</select>
-        <div class="row" style="justify-content:space-between;margin-top:0.75rem">
-          <h2 style="margin:0">Stories</h2>
+        <div class="filter-bar">
+          <label for="filterStoryEpic">Filter by epic</label>
+          <select id="filterStoryEpic">${epicOpts}</select>
+        </div>
+        <div class="panel-head">
+          <h2>Stories</h2>
           <button type="button" class="primary" id="btnNewStory">New story</button>
         </div>
-        <table><thead><tr><th>Title</th><th>Status</th><th>Epic</th><th>Id</th><th></th></tr></thead><tbody>
-          ${items.map((row) => storyRowHtml(/** @type {Record<string, unknown>} */ (row))).join("")}
-        </tbody></table>
-        ${items.length === 0 ? '<p class="muted">No stories match this filter.</p>' : ""}
+        ${storyTable}
       </div>`;
     document
       .getElementById("filterStoryEpic")
@@ -504,8 +531,12 @@ async function renderStoryNew() {
     .join("");
   main.innerHTML = `
     <div class="panel">
-      <div class="row"><button type="button" class="ghost" id="btnBackStories">← Stories</button></div>
-      <h2>Create story</h2>
+      <div class="back-link">
+        <button type="button" class="ghost" id="btnBackStories">← Stories</button>
+      </div>
+      <div class="panel-head" style="border-bottom:none;padding-bottom:0;margin-bottom:0.5rem">
+        <h2>Create story</h2>
+      </div>
       <label for="newStoryEpic">Epic</label>
       <select id="newStoryEpic" required><option value="">Select epic…</option>${epicOpts}</select>
       <label for="newStoryTitle">Title</label>
@@ -584,9 +615,13 @@ async function renderStoryEdit() {
     }
     main.innerHTML = `
       <div class="panel">
-        <div class="row"><button type="button" class="ghost" id="btnBackStories2">← Stories</button></div>
-        <h2>Edit story</h2>
-        <p class="muted">Id <code>${escapeHtml(id)}</code> · ${epicLine}</p>
+        <div class="back-link">
+          <button type="button" class="ghost" id="btnBackStories2">← Stories</button>
+        </div>
+        <div class="panel-head" style="border-bottom:none;padding-bottom:0;margin-bottom:0.5rem">
+          <h2>Edit story</h2>
+        </div>
+        <p class="muted" style="margin-top:0">${idChip(id)} · ${epicLine}</p>
         <p class="muted" style="font-size:0.85rem">To move a story to another epic, delete and recreate it (CLI does not support changing epic on update).</p>
         <label for="editStoryTitle">Title</label>
         <input type="text" id="editStoryTitle" value="${escapeHtml(String(row.title))}" />
@@ -649,7 +684,7 @@ async function renderStoryEdit() {
         }
       });
   } catch (e) {
-    main.innerHTML = `<div class="panel"><p class="muted">${escapeHtml(String(e))}</p><button type="button" id="btnStoryErrBack">← Stories</button></div>`;
+    main.innerHTML = `<div class="panel"><p class="muted">${escapeHtml(String(e))}</p><button type="button" class="ghost" id="btnStoryErrBack">← Stories</button></div>`;
     document
       .getElementById("btnStoryErrBack")
       ?.addEventListener("click", () => {
@@ -681,18 +716,23 @@ async function renderTicketsList() {
           `<option value="${escapeHtml(String(/** @type {{id:string}} */ (s).id))}"${String(/** @type {{id:string}} */ (s).id) === fs ? " selected" : ""}>${escapeHtml(String(/** @type {{title:string}} */ (s).title))}</option>`,
       ),
     ].join("");
+    const ticketTable =
+      items.length === 0
+        ? '<div class="empty-state">No tickets match this filter.</div>'
+        : `<div class="table-wrap"><table class="data-table"><thead><tr><th>Title</th><th>Status</th><th>Story</th><th>Id</th><th></th></tr></thead><tbody>
+          ${items.map((row) => ticketRowHtml(/** @type {Record<string, unknown>} */ (row))).join("")}
+        </tbody></table></div>`;
     main.innerHTML = `
       <div class="panel">
-        <label for="filterTicketStory">Filter by story</label>
-        <select id="filterTicketStory">${storyOpts}</select>
-        <div class="row" style="justify-content:space-between;margin-top:0.75rem">
-          <h2 style="margin:0">Tickets</h2>
+        <div class="filter-bar">
+          <label for="filterTicketStory">Filter by story</label>
+          <select id="filterTicketStory">${storyOpts}</select>
+        </div>
+        <div class="panel-head">
+          <h2>Tickets</h2>
           <button type="button" class="primary" id="btnNewTicket">New ticket</button>
         </div>
-        <table><thead><tr><th>Title</th><th>Status</th><th>Story</th><th>Id</th><th></th></tr></thead><tbody>
-          ${items.map((row) => ticketRowHtml(/** @type {Record<string, unknown>} */ (row))).join("")}
-        </tbody></table>
-        ${items.length === 0 ? '<p class="muted">No tickets match this filter.</p>' : ""}
+        ${ticketTable}
       </div>`;
     document
       .getElementById("filterTicketStory")
@@ -737,16 +777,20 @@ async function renderTicketNew() {
   ].join("");
   main.innerHTML = `
     <div class="panel">
-      <div class="row"><button type="button" class="ghost" id="btnBackTickets">← Tickets</button></div>
-      <h2>Create ticket</h2>
+      <div class="back-link">
+        <button type="button" class="ghost" id="btnBackTickets">← Tickets</button>
+      </div>
+      <div class="panel-head" style="border-bottom:none;padding-bottom:0;margin-bottom:0.5rem">
+        <h2>Create ticket</h2>
+      </div>
       <label for="newTicketStory">Story (optional)</label>
       <select id="newTicketStory">${storyOpts}</select>
       <label for="newTicketTitle">Title</label>
       <input type="text" id="newTicketTitle" />
       <label for="newTicketBody">Description</label>
       <textarea id="newTicketBody" rows="5"></textarea>
-      ${statusOptionsHtml("newTicketStatus", "todo")}
       <label for="newTicketStatus">Status</label>
+      ${statusOptionsHtml("newTicketStatus", "todo")}
       <div class="row">
         <button type="button" class="primary" id="btnCreateTicket">Create</button>
       </div>
@@ -841,9 +885,13 @@ async function renderTicketEdit() {
     const comments = Array.isArray(row.comments) ? row.comments : [];
     main.innerHTML = `
       <div class="panel">
-        <div class="row"><button type="button" class="ghost" id="btnBackTickets2">← Tickets</button></div>
-        <h2>Edit ticket</h2>
-        <p class="muted">Id <code>${escapeHtml(id)}</code></p>
+        <div class="back-link">
+          <button type="button" class="ghost" id="btnBackTickets2">← Tickets</button>
+        </div>
+        <div class="panel-head" style="border-bottom:none;padding-bottom:0;margin-bottom:0.5rem">
+          <h2>Edit ticket</h2>
+        </div>
+        <p class="muted" style="margin-top:0">${idChip(id)}</p>
         <label for="editTicketStory">Story</label>
         <select id="editTicketStory">${storyOpts}</select>
         <label for="editTicketTitle">Title</label>
@@ -858,7 +906,9 @@ async function renderTicketEdit() {
         </div>
       </div>
       <div class="panel">
-        <h2>Comments</h2>
+        <div class="panel-head">
+          <h2>Comments</h2>
+        </div>
         ${commentsHtml(comments)}
         <label for="newCommentBody">Add comment</label>
         <textarea id="newCommentBody" rows="3" placeholder="Write a comment…"></textarea>
@@ -941,7 +991,7 @@ async function renderTicketEdit() {
         }
       });
   } catch (e) {
-    main.innerHTML = `<div class="panel"><p class="muted">${escapeHtml(String(e))}</p><button type="button" id="btnTicketErrBack">← Tickets</button></div>`;
+    main.innerHTML = `<div class="panel"><p class="muted">${escapeHtml(String(e))}</p><button type="button" class="ghost" id="btnTicketErrBack">← Tickets</button></div>`;
     document
       .getElementById("btnTicketErrBack")
       ?.addEventListener("click", () => {
@@ -957,23 +1007,29 @@ function renderTools() {
   const main = document.getElementById("main");
   if (!main) return;
   main.innerHTML = `
-    <div class="panel">
-      <h2>Initialize repository</h2>
+    <div class="panel panel-tools">
+      <div class="panel-head">
+        <h2>Initialize repository</h2>
+      </div>
       <p class="muted">Creates the hyper-pm data branch and config if missing.</p>
       <label><input type="checkbox" id="initSyncOff" checked /> Start with sync off</label>
       <div class="row">
         <button type="button" class="primary" id="btnInit">Run init</button>
       </div>
     </div>
-    <div class="panel">
-      <h2>Sync with GitHub</h2>
+    <div class="panel panel-tools">
+      <div class="panel-head">
+        <h2>Sync with GitHub</h2>
+      </div>
       <label><input type="checkbox" id="syncNoGithub" /> Skip GitHub network (<code>--no-github</code>)</label>
       <div class="row">
         <button type="button" class="primary" id="btnSync">Run sync</button>
       </div>
     </div>
-    <div class="panel">
-      <h2>Audit &amp; doctor</h2>
+    <div class="panel panel-tools">
+      <div class="panel-head">
+        <h2>Audit &amp; doctor</h2>
+      </div>
       <label for="auditLimit">Audit limit</label>
       <input type="text" id="auditLimit" placeholder="e.g. 50" />
       <label for="auditType">Event type</label>
@@ -1035,14 +1091,16 @@ function renderAdvanced() {
   if (!main) return;
   main.innerHTML = `
     <div class="panel">
-      <h2>Raw argv</h2>
+      <div class="panel-head">
+        <h2>Raw argv</h2>
+      </div>
       <p class="muted">JSON array of CLI tokens after global flags. Repo, temp dir, and format are still enforced by the server.</p>
       <textarea id="advArgv" rows="6" placeholder='["ticket", "read", "--id", "…"]'></textarea>
       <div class="row">
         <button type="button" class="primary" id="btnAdvRun">Run</button>
       </div>
-      <h3 style="margin-top:1rem;font-size:0.95rem">Output</h3>
-      <pre id="advOut" class="muted" style="white-space:pre-wrap;background:#f1f5f9;padding:0.75rem;border-radius:6px;max-height:20rem;overflow:auto"></pre>
+      <h3>Output</h3>
+      <pre id="advOut" class="pre-out muted"></pre>
     </div>`;
   document.getElementById("btnAdvRun")?.addEventListener("click", async () => {
     const raw = document.getElementById("advArgv")?.value ?? "";
