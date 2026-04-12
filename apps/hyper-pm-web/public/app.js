@@ -193,6 +193,85 @@ function idChip(id) {
 }
 
 /**
+ * Returns a GitHub-style `#n` when `row.number` is a positive integer; otherwise falls back to the ULID chip.
+ * The full ULID is kept in `title` for hover / copy in the browser.
+ *
+ * @param {Record<string, unknown>} row
+ */
+function workItemNumberChip(row) {
+  const id = String(row.id);
+  const n = row.number;
+  if (
+    typeof n === "number" &&
+    Number.isFinite(n) &&
+    Number.isInteger(n) &&
+    n >= 1
+  ) {
+    return `<span class="id-chip" title="id: ${escapeHtml(id)}">#${escapeHtml(String(n))}</span>`;
+  }
+  return `<span class="id-chip" title="No display number (replay assigns one on next load)">${escapeHtml(id)}</span>`;
+}
+
+/**
+ * @param {string} entityId
+ * @param {Record<string, Record<string, unknown>>} byId
+ */
+function workItemNumberChipFromLookup(entityId, byId) {
+  const row = byId[entityId];
+  if (row) return workItemNumberChip(row);
+  return idChip(entityId);
+}
+
+/**
+ * @param {unknown[]} rows
+ * @returns {Record<string, Record<string, unknown>>}
+ */
+function rowsById(rows) {
+  /** @type {Record<string, Record<string, unknown>>} */
+  const out = {};
+  for (const r of rows) {
+    const row = /** @type {Record<string, unknown>} */ (r);
+    const id = String(row.id ?? "");
+    if (id) out[id] = row;
+  }
+  return out;
+}
+
+/**
+ * @param {Record<string, unknown>} row
+ */
+function workItemDeleteLabel(row) {
+  const n = row.number;
+  if (
+    typeof n === "number" &&
+    Number.isFinite(n) &&
+    Number.isInteger(n) &&
+    n >= 1
+  ) {
+    return `#${String(n)}`;
+  }
+  return String(row.id);
+}
+
+/**
+ * @param {Record<string, unknown>} t
+ */
+function ticketDependsOptionLabel(t) {
+  const tid = String(t.id);
+  const title = String(t.title ?? "").slice(0, 80);
+  const n = t.number;
+  if (
+    typeof n === "number" &&
+    Number.isFinite(n) &&
+    Number.isInteger(n) &&
+    n >= 1
+  ) {
+    return `${title} (#${String(n)})`;
+  }
+  return `${title} (${tid})`;
+}
+
+/**
  * Renders markdown as safe HTML for read-only multiline display (epic/story/ticket bodies).
  * @param {unknown} text
  * @returns {string}
@@ -840,9 +919,10 @@ function ticketDependsOnPickerHtml(
   const opts = candidates
     .map((t) => {
       const tid = String(t.id);
-      const title = String(t.title ?? "").slice(0, 80);
       const isSel = sel.has(tid) ? " selected" : "";
-      return `<option value="${escapeHtml(tid)}"${isSel}>${escapeHtml(title)} (${escapeHtml(tid)})</option>`;
+      return `<option value="${escapeHtml(tid)}"${isSel}>${escapeHtml(
+        ticketDependsOptionLabel(/** @type {Record<string, unknown>} */ (t)),
+      )}</option>`;
     })
     .join("");
   return `<select id="${escapeHtml(selectId)}" class="ticket-deps-picker" multiple size="6" aria-label="Dependency tickets">${opts}</select>
@@ -1006,7 +1086,7 @@ function tableHtml(items, rowHtml) {
   const rows = items
     .map((row) => rowHtml(/** @type {Record<string, unknown>} */ (row)))
     .join("");
-  return `<div class="table-wrap"><table class="data-table"><thead><tr><th>Title</th><th>Status</th><th>Id</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  return `<div class="table-wrap"><table class="data-table"><thead><tr><th>Title</th><th>Status</th><th>#</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 /**
@@ -1051,7 +1131,7 @@ function epicRowHtml(row) {
   return `<tr>
     <td class="cell-title"><button type="button" class="link-title btn-open-epic" data-epic-id="${escapeHtml(id)}"><span class="md-inline">${markdownInlineHtml(row.title)}</span></button></td>
     <td>${badgeHtml(String(row.status))}</td>
-    <td>${idChip(id)}</td>
+    <td>${workItemNumberChip(row)}</td>
     <td><button type="button" class="ghost btn-open-epic" data-epic-id="${escapeHtml(id)}">Open</button></td>
   </tr>`;
 }
@@ -1059,19 +1139,20 @@ function epicRowHtml(row) {
 /**
  * @param {Record<string, unknown>} row
  * @param {Record<string, string>} epicTitles epic id → title
+ * @param {Record<string, Record<string, unknown>>} epicById
  */
-function storyRowHtml(row, epicTitles) {
+function storyRowHtml(row, epicTitles, epicById) {
   const id = String(row.id);
   const eid = String(row.epicId);
   const epicTitle = epicTitles[eid];
   const epicCell = epicTitle
     ? `<button type="button" class="link-title btn-nav-epic" data-epic-id="${escapeHtml(eid)}"><span class="md-inline">${markdownInlineHtml(epicTitle)}</span></button>`
-    : idChip(eid);
+    : workItemNumberChipFromLookup(eid, epicById);
   return `<tr>
     <td class="cell-title"><button type="button" class="link-title btn-open-story" data-story-id="${escapeHtml(id)}"><span class="md-inline">${markdownInlineHtml(row.title)}</span></button></td>
     <td>${badgeHtml(String(row.status))}</td>
     <td>${epicCell}</td>
-    <td>${idChip(id)}</td>
+    <td>${workItemNumberChip(row)}</td>
     <td><button type="button" class="ghost btn-open-story" data-story-id="${escapeHtml(id)}">Open</button></td>
   </tr>`;
 }
@@ -1079,8 +1160,9 @@ function storyRowHtml(row, epicTitles) {
 /**
  * @param {Record<string, unknown>} row
  * @param {Record<string, string>} storyTitles story id → title
+ * @param {Record<string, Record<string, unknown>>} storyById
  */
-function ticketRowHtml(row, storyTitles) {
+function ticketRowHtml(row, storyTitles, storyById) {
   const id = String(row.id);
   const sid =
     row.storyId === null || row.storyId === undefined
@@ -1092,12 +1174,12 @@ function ticketRowHtml(row, storyTitles) {
       ? '<span class="muted">—</span>'
       : stitle
         ? `<button type="button" class="link-title btn-nav-story" data-story-id="${escapeHtml(sid)}"><span class="md-inline">${markdownInlineHtml(stitle)}</span></button>`
-        : idChip(sid);
+        : workItemNumberChipFromLookup(sid, storyById);
   return `<tr>
     <td class="cell-title"><button type="button" class="link-title btn-open-ticket" data-ticket-id="${escapeHtml(id)}"><span class="md-inline">${markdownInlineHtml(row.title)}</span></button></td>
     <td>${badgeHtml(String(row.status))}</td>
     <td>${sidCell}</td>
-    <td>${idChip(id)}</td>
+    <td>${workItemNumberChip(row)}</td>
     <td><button type="button" class="ghost btn-open-ticket" data-ticket-id="${escapeHtml(id)}">Open</button></td>
   </tr>`;
 }
@@ -1295,7 +1377,7 @@ async function renderEpicEdit() {
           </div>
           <aside class="issue-sidebar" aria-label="Epic metadata">
             <div class="read-stack issue-meta-stack">
-              ${readRowHtml("Epic ID", idChip(id))}
+              ${readRowHtml("Number", workItemNumberChip(row))}
               ${readRowHtml("Status", badgeHtml(String(row.status)))}
             </div>
           </aside>
@@ -1321,7 +1403,7 @@ async function renderEpicEdit() {
           </div>
           <aside class="issue-sidebar" aria-label="Epic fields">
             <div class="read-stack issue-meta-stack">
-              ${readRowHtml("Epic ID", idChip(id))}
+              ${readRowHtml("Number", workItemNumberChip(row))}
               <div class="read-row">
                 <div class="read-label">Status</div>
                 <div class="read-value">${statusOptionsHtml("editEpicStatus", String(row.status))}</div>
@@ -1401,7 +1483,11 @@ async function renderEpicEdit() {
       document
         .getElementById("btnDeleteEpic")
         ?.addEventListener("click", async () => {
-          if (!window.confirm(`Delete epic ${id}? This cannot be undone.`))
+          if (
+            !window.confirm(
+              `Delete epic ${workItemDeleteLabel(row)}? This cannot be undone.`,
+            )
+          )
             return;
           try {
             await runCli(["epic", "delete", "--id", id]);
@@ -1446,6 +1532,7 @@ async function renderStoriesList() {
         /** @type {{title:string}} */ (e).title,
       );
     }
+    const epicById = rowsById(epics);
     const epicOpts = [
       `<option value="">All epics</option>`,
       ...epics.map(
@@ -1462,12 +1549,13 @@ async function renderStoriesList() {
     const storyTable =
       items.length === 0
         ? '<div class="empty-state">No stories match this filter.</div>'
-        : `<div class="table-wrap"><table class="data-table"><thead><tr><th>Title</th><th>Status</th><th>Epic</th><th>Id</th><th></th></tr></thead><tbody>
+        : `<div class="table-wrap"><table class="data-table"><thead><tr><th>Title</th><th>Status</th><th>Epic</th><th>#</th><th></th></tr></thead><tbody>
           ${items
             .map((row) =>
               storyRowHtml(
                 /** @type {Record<string, unknown>} */ (row),
                 epicTitles,
+                epicById,
               ),
             )
             .join("")}
@@ -1619,8 +1707,8 @@ async function renderStoryEdit() {
         await runCli(["epic", "read", "--id", epicId])
       );
       const t = markdownInlineHtml(String(epicRow.title));
-      epicReadInner = `<span class="md-inline">${t}</span> · ${idChip(epicId)}`;
-      epicFormLine = `Epic: <span class="md-inline">${t}</span> (<code>${escapeHtml(epicId)}</code>)`;
+      epicReadInner = `<span class="md-inline">${t}</span> · ${workItemNumberChip(epicRow)}`;
+      epicFormLine = `Epic: <span class="md-inline">${t}</span> (${workItemDeleteLabel(epicRow)} · <code>${escapeHtml(epicId)}</code>)`;
     } catch {
       /* keep defaults */
     }
@@ -1649,7 +1737,7 @@ async function renderStoryEdit() {
           </div>
           <aside class="issue-sidebar" aria-label="Story metadata">
             <div class="read-stack issue-meta-stack">
-              ${readRowHtml("Story ID", idChip(id))}
+              ${readRowHtml("Number", workItemNumberChip(row))}
               ${readRowHtml("Epic", epicReadInner)}
               ${readRowHtml("Status", badgeHtml(String(row.status)))}
             </div>
@@ -1678,7 +1766,7 @@ async function renderStoryEdit() {
           </div>
           <aside class="issue-sidebar" aria-label="Story fields">
             <div class="read-stack issue-meta-stack">
-              ${readRowHtml("Story ID", idChip(id))}
+              ${readRowHtml("Number", workItemNumberChip(row))}
               ${readRowHtml("Epic", epicFormLine)}
               <div class="read-row">
                 <div class="read-label">Status</div>
@@ -1774,7 +1862,8 @@ async function renderStoryEdit() {
       document
         .getElementById("btnDeleteStory")
         ?.addEventListener("click", async () => {
-          if (!window.confirm(`Delete story ${id}?`)) return;
+          if (!window.confirm(`Delete story ${workItemDeleteLabel(row)}?`))
+            return;
           try {
             await runCli(["story", "delete", "--id", id]);
             toast("Story deleted", false);
@@ -1824,6 +1913,7 @@ async function renderTicketsList() {
         /** @type {{title:string}} */ (s).title,
       );
     }
+    const storyById = rowsById(stories);
     const storyOpts = [
       `<option value="">All tickets</option>`,
       ...stories.map(
@@ -1851,12 +1941,13 @@ async function renderTicketsList() {
     const ticketTable =
       items.length === 0
         ? '<div class="empty-state">No tickets match this filter.</div>'
-        : `<div class="table-wrap"><table class="data-table"><thead><tr><th>Title</th><th>Status</th><th>Story</th><th>Id</th><th></th></tr></thead><tbody>
+        : `<div class="table-wrap"><table class="data-table"><thead><tr><th>Title</th><th>Status</th><th>Story</th><th>#</th><th></th></tr></thead><tbody>
           ${items
             .map((row) =>
               ticketRowHtml(
                 /** @type {Record<string, unknown>} */ (row),
                 storyTitles,
+                storyById,
               ),
             )
             .join("")}
@@ -2101,6 +2192,8 @@ async function renderTicketEdit() {
     const allTickets = listFromJson(ticketListJson).map(
       (t) => /** @type {Record<string, unknown>} */ (t),
     );
+    const storyById = rowsById(stories);
+    const ticketById = rowsById(allTickets);
     const depIds = ticketDependsOnFromRow(row);
     const curStory = row.storyId == null ? "" : String(row.storyId);
     let storyReadInner = '<span class="muted">No linked story</span>';
@@ -2119,8 +2212,10 @@ async function renderTicketEdit() {
         : escapeHtml(curStory);
       storyTitleBtn = `<button type="button" class="link-title issue-meta-link" id="ticketSidebarStoryLink"><span class="md-inline">${storyLinkLabel}</span></button>`;
       storyReadInner = linkedStoryRow
-        ? `${storyTitleBtn}<span class="issue-meta-sep"> · </span>${idChip(curStory)}`
-        : storyTitleBtn;
+        ? `${storyTitleBtn}<span class="issue-meta-sep"> · </span>${workItemNumberChip(
+            /** @type {Record<string, unknown>} */ (linkedStoryRow),
+          )}`
+        : `${storyTitleBtn}<span class="issue-meta-sep"> · </span>${workItemNumberChipFromLookup(curStory, storyById)}`;
     }
     /** @type {string} */
     let storyEpicId = "";
@@ -2141,7 +2236,7 @@ async function renderTicketEdit() {
         );
         const et = markdownInlineHtml(String(epicRow.title));
         const epicLink = `<button type="button" class="link-title issue-meta-link" id="ticketSidebarEpicLink"><span class="md-inline">${et}</span></button>`;
-        epicReadInner = `${epicLink}<span class="issue-meta-sep"> · </span>${idChip(storyEpicId)}`;
+        epicReadInner = `${epicLink}<span class="issue-meta-sep"> · </span>${workItemNumberChip(epicRow)}`;
       } catch {
         epicReadInner = `<button type="button" class="link-title issue-meta-link" id="ticketSidebarEpicLink">${escapeHtml(storyEpicId)}</button>`;
       }
@@ -2158,10 +2253,15 @@ async function renderTicketEdit() {
       depIds.length === 0
         ? '<span class="muted">None</span>'
         : `<ul style="margin:0;padding-left:1.125rem">${depIds
-            .map(
-              (did) =>
-                `<li style="margin:0.2rem 0"><button type="button" class="link-title btn-open-ticket-dep" data-ticket-id="${escapeHtml(did)}">${escapeHtml(did)}</button></li>`,
-            )
+            .map((did) => {
+              const depRow = ticketById[did];
+              const depLabel = depRow
+                ? workItemDeleteLabel(
+                    /** @type {Record<string, unknown>} */ (depRow),
+                  )
+                : did;
+              return `<li style="margin:0.2rem 0"><button type="button" class="link-title btn-open-ticket-dep" data-ticket-id="${escapeHtml(did)}">${escapeHtml(depLabel)}</button></li>`;
+            })
             .join("")}</ul>`;
     const depsPickerEdit = ticketDependsOnPickerHtml(
       "editTicketDependsOn",
@@ -2212,7 +2312,7 @@ async function renderTicketEdit() {
           </div>
           <aside class="issue-sidebar" aria-label="Ticket metadata">
             <div class="read-stack issue-meta-stack">
-              ${readRowHtml("Ticket ID", idChip(id))}
+              ${readRowHtml("Number", workItemNumberChip(row))}
               ${readRowHtml("Story", storyReadInner)}
               ${readRowHtml("Epic", epicReadInner)}
               ${readRowHtml("Status", badgeHtml(String(row.status)))}
@@ -2245,7 +2345,7 @@ async function renderTicketEdit() {
           </div>
           <aside class="issue-sidebar" aria-label="Ticket fields">
             <div class="read-stack issue-meta-stack">
-              ${readRowHtml("Ticket ID", idChip(id))}
+              ${readRowHtml("Number", workItemNumberChip(row))}
               <div class="read-row">
                 <div class="read-label">Story</div>
                 <div class="read-value">
@@ -2420,7 +2520,8 @@ async function renderTicketEdit() {
       document
         .getElementById("btnDeleteTicket")
         ?.addEventListener("click", async () => {
-          if (!window.confirm(`Delete ticket ${id}?`)) return;
+          if (!window.confirm(`Delete ticket ${workItemDeleteLabel(row)}?`))
+            return;
           try {
             await runCli(["ticket", "delete", "--id", id]);
             toast("Ticket deleted", false);
