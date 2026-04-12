@@ -682,6 +682,104 @@ function listFromJson(json) {
 }
 
 /**
+ * Reads normalized prerequisite ticket ids from a `ticket read` row.
+ * @param {unknown} row
+ * @returns {string[]}
+ */
+function ticketDependsOnFromRow(row) {
+  const r = /** @type {Record<string, unknown>} */ (row);
+  const raw = r.dependsOn;
+  if (!Array.isArray(raw)) return [];
+  return raw.map((x) => String(x)).filter((s) => trimU(s));
+}
+
+/**
+ * @param {string} selectId
+ * @param {Record<string, unknown>[]} ticketRows
+ * @param {string | undefined} excludeTicketId
+ * @param {string[]} selectedIds
+ * @returns {string}
+ */
+function ticketDependsOnPickerHtml(
+  selectId,
+  ticketRows,
+  excludeTicketId,
+  selectedIds,
+) {
+  const sel = new Set(selectedIds);
+  const candidates = ticketRows.filter((t) => {
+    const tid = String(t.id);
+    return tid !== excludeTicketId;
+  });
+  if (candidates.length === 0) {
+    return `<p class="muted" style="margin:0;font-size:0.8125rem">No other tickets to link as dependencies.</p>`;
+  }
+  const opts = candidates
+    .map((t) => {
+      const tid = String(t.id);
+      const title = String(t.title ?? "").slice(0, 80);
+      const isSel = sel.has(tid) ? " selected" : "";
+      return `<option value="${escapeHtml(tid)}"${isSel}>${escapeHtml(title)} (${escapeHtml(tid)})</option>`;
+    })
+    .join("");
+  return `<select id="${escapeHtml(selectId)}" class="ticket-deps-picker" multiple size="6" aria-label="Dependency tickets">${opts}</select>
+    <p class="muted" style="font-size:0.8125rem;margin:0.35rem 0 0;line-height:1.45">Hold <kbd>Ctrl</kbd> / <kbd>Cmd</kbd> to select multiple. This ticket is blocked until the selected tickets exist in the graph (CLI validates cycles).</p>`;
+}
+
+/**
+ * @param {string} selectId
+ * @returns {string[]}
+ */
+function selectedIdsFromDependsPicker(selectId) {
+  const el = document.getElementById(selectId);
+  if (!el) return [];
+  const sel = /** @type {HTMLSelectElement} */ (el);
+  const out = [];
+  const seen = new Set();
+  for (let i = 0; i < sel.selectedOptions.length; i += 1) {
+    const v = trimU(sel.selectedOptions[i]?.value ?? "");
+    if (!v || seen.has(v)) continue;
+    seen.add(v);
+    out.push(v);
+  }
+  return out;
+}
+
+/**
+ * @param {string[]} prev
+ * @param {string[]} next
+ * @returns {boolean}
+ */
+function ticketDependsOnSetsEqual(prev, next) {
+  const a = [...new Set(prev.map(String))].sort().join("\0");
+  const b = [...new Set(next.map(String))].sort().join("\0");
+  return a === b;
+}
+
+/**
+ * Appends `ticket update` dependency flags to `argv` when `next` differs from `prev`.
+ * @param {string[]} prev
+ * @param {string[]} next
+ * @param {string[]} argv
+ * @returns {void}
+ */
+function appendTicketDependsOnUpdateArgs(prev, next, argv) {
+  if (ticketDependsOnSetsEqual(prev, next)) return;
+  if (next.length === 0) {
+    if (prev.length > 0) argv.push("--clear-depends-on");
+    return;
+  }
+  const prevSet = new Set(prev);
+  const nextSet = new Set(next);
+  for (const p of prev) {
+    if (!nextSet.has(p)) argv.push("--remove-depends-on", p);
+  }
+  for (const n of next) {
+    if (!prevSet.has(n)) argv.push("--add-depends-on", n);
+  }
+}
+
+/**
  * Parses `repo commit-authors` JSON rows for the assignee picker.
  * @param {unknown} json
  * @returns {{ name: string; email: string; loginGuess?: string }[]}
@@ -1681,12 +1779,16 @@ async function renderTicketNew() {
   setNavCurrent();
   const main = document.getElementById("main");
   if (!main) return;
-  const [sj, authorJson] = await Promise.all([
+  const [sj, authorJson, ticketJson] = await Promise.all([
     runCli(["story", "read"]).catch(() => ({ items: [] })),
     runCli(["repo", "commit-authors"]).catch(() => ({ items: [] })),
+    runCli(["ticket", "read"]).catch(() => ({ items: [] })),
   ]);
   const stories = listFromJson(sj);
   const commitAuthors = commitAuthorsFromJson(authorJson);
+  const allTickets = listFromJson(ticketJson).map(
+    (t) => /** @type {Record<string, unknown>} */ (t),
+  );
   const authorOptsHtml = [
     `<option value="">Select commit author…</option>`,
     ...commitAuthors.map((a, i) => {
@@ -1717,6 +1819,14 @@ async function renderTicketNew() {
       <textarea id="newTicketBody" rows="5"></textarea>
       <label for="newTicketStatus">Status</label>
       ${statusOptionsHtml("newTicketStatus", "todo")}
+      <h3 style="margin-top:1.25rem">Dependencies (optional)</h3>
+      <label for="newTicketDependsOn">Blocked by other tickets</label>
+      ${ticketDependsOnPickerHtml(
+        "newTicketDependsOn",
+        allTickets,
+        undefined,
+        [],
+      )}
       <h3 style="margin-top:1.25rem">Assignee (optional)</h3>
       <label for="newTicketAssigneeLogin">GitHub login</label>
       <input type="text" id="newTicketAssigneeLogin" autocomplete="off" placeholder="e.g. octocat" />
@@ -1769,7 +1879,18 @@ async function renderTicketNew() {
       );
       if (assigneeLogin) argv.push("--assignee", assigneeLogin.toLowerCase());
       try {
-        await runCli(argv);
+        const created = /** @type {Record<string, unknown>} */ (
+          await runCli(argv)
+        );
+        const newId =
+          created && typeof created.id === "string" ? created.id : undefined;
+        const depIds = selectedIdsFromDependsPicker("newTicketDependsOn");
+        if (newId && depIds.length > 0) {
+          /** @type {string[]} */
+          const depArgv = ["ticket", "update", "--id", newId];
+          for (const d of depIds) depArgv.push("--add-depends-on", d);
+          await runCli(depArgv);
+        }
         toast("Ticket created", false);
         void pushAppRoute({
           kind: "tickets",
@@ -1813,14 +1934,19 @@ async function renderTicketEdit() {
   if (!main) return;
   main.innerHTML = '<p class="muted">Loading…</p>';
   try {
-    const [rowRaw, sj, authorJson] = await Promise.all([
+    const [rowRaw, sj, authorJson, ticketListJson] = await Promise.all([
       runCli(["ticket", "read", "--id", id]),
       runCli(["story", "read"]),
       runCli(["repo", "commit-authors"]).catch(() => ({ items: [] })),
+      runCli(["ticket", "read"]).catch(() => ({ items: [] })),
     ]);
     const row = /** @type {Record<string, unknown>} */ (rowRaw);
     const commitAuthors = commitAuthorsFromJson(authorJson);
     const stories = listFromJson(sj);
+    const allTickets = listFromJson(ticketListJson).map(
+      (t) => /** @type {Record<string, unknown>} */ (t),
+    );
+    const depIds = ticketDependsOnFromRow(row);
     const curStory = row.storyId == null ? "" : String(row.storyId);
     let storyReadInner = '<span class="muted">No linked story</span>';
     /** @type {string} */
@@ -1873,6 +1999,21 @@ async function renderTicketEdit() {
         : `<div class="label-pill-wrap">${labelStrs
             .map((lb) => `<span class="label-pill">${escapeHtml(lb)}</span>`)
             .join("")}</div>`;
+    const depsReadInner =
+      depIds.length === 0
+        ? '<span class="muted">None</span>'
+        : `<ul style="margin:0;padding-left:1.125rem">${depIds
+            .map(
+              (did) =>
+                `<li style="margin:0.2rem 0"><button type="button" class="link-title btn-open-ticket-dep" data-ticket-id="${escapeHtml(did)}">${escapeHtml(did)}</button></li>`,
+            )
+            .join("")}</ul>`;
+    const depsPickerEdit = ticketDependsOnPickerHtml(
+      "editTicketDependsOn",
+      allTickets,
+      id,
+      depIds,
+    );
     const storyOpts = [
       `<option value="">No story</option>`,
       ...stories.map((s) => {
@@ -1927,6 +2068,7 @@ async function renderTicketEdit() {
                   : '<span class="muted">Unassigned</span>',
               )}
               ${readRowHtml("Labels", labelsInner)}
+              ${readRowHtml("Depends on", depsReadInner)}
             </div>
           </aside>
         </div>`;
@@ -1983,7 +2125,11 @@ async function renderTicketEdit() {
                 </div>
               </div>
               ${readRowHtml("Labels", labelsInner)}
-              <p class="muted" style="font-size:0.8125rem;margin:0;line-height:1.45">Change labels with <code>hyper-pm ticket update</code> in the CLI.</p>
+              <div class="read-row">
+                <div class="read-label">Depends on</div>
+                <div class="read-value">${depsPickerEdit}</div>
+              </div>
+              <p class="muted" style="font-size:0.8125rem;margin:0;line-height:1.45">Dependencies save with this form. Change labels with <code>hyper-pm ticket update</code> in the CLI.</p>
             </div>
           </aside>
         </div>`;
@@ -2028,6 +2174,12 @@ async function renderTicketEdit() {
       ?.addEventListener("click", () => {
         navigateToEpic(storyEpicId);
       });
+    main.querySelectorAll(".btn-open-ticket-dep").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const tid = /** @type {HTMLButtonElement} */ (btn).dataset.ticketId;
+        if (tid) navigateToTicket(tid);
+      });
+    });
     if (!showForm) {
       document
         .getElementById("btnTicketHistory")
@@ -2096,6 +2248,9 @@ async function renderTicketEdit() {
               argv.push("--assignee", loginNorm);
             }
           }
+          const prevDeps = ticketDependsOnFromRow(row);
+          const nextDeps = selectedIdsFromDependsPicker("editTicketDependsOn");
+          appendTicketDependsOnUpdateArgs(prevDeps, nextDeps, argv);
           try {
             await runCli(argv);
             toast("Ticket saved", false);
