@@ -10,6 +10,7 @@ import {
 const ticketFixture = (over: Partial<TicketRecord>): TicketRecord =>
   ({
     id: "t1",
+    number: 1,
     storyId: null,
     title: "Title",
     body: "Body",

@@ -40,6 +40,14 @@ These apply before any subcommand (for example `hyper-pm --format text epic read
 
 ## Commands
 
+### Work item display numbers
+
+Each epic, story, and ticket has a durable ULID `id` plus a per-type **`number`**: a small positive integer (separate counters for epics, stories, and tickets). List JSON includes `number` on each row; full `read` JSON includes it on the record.
+
+Any CLI flag that accepts a work item **`--id`** (or a parent like `--epic`, `--story`, or ticket list filters that take ids) also accepts that item’s **`number`** when it is written as an all-digit token (for example `ticket read 3` after you confirm ticket `3` in `ticket read` list output). Resolution tries the ULID/id string first, then a unique numeric match. If two items share the same `number` after a bad merge, numeric lookup is ambiguous and the command fails until the JSONL conflict is fixed.
+
+Parallel offline edits can still assign the same next `number` on different branches; resolving that is the same class of problem as other JSONL merge conflicts.
+
 ### `init`
 
 Create or adopt the orphan data branch and write `.hyper-pm/config.json`.

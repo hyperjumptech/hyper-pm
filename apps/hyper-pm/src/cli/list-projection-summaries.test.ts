@@ -34,6 +34,7 @@ describe("listActiveEpicSummaries", () => {
           "b",
           {
             id: "b",
+            number: 3,
             title: "B",
             body: "",
             status: "backlog",
@@ -46,6 +47,7 @@ describe("listActiveEpicSummaries", () => {
           "a",
           {
             id: "a",
+            number: 1,
             title: "A",
             body: "",
             status: "backlog",
@@ -57,6 +59,7 @@ describe("listActiveEpicSummaries", () => {
           "c",
           {
             id: "c",
+            number: 2,
             title: "C",
             body: "",
             status: "todo",
@@ -67,8 +70,8 @@ describe("listActiveEpicSummaries", () => {
       ]),
     });
     expect(listActiveEpicSummaries(projection)).toEqual([
-      { id: "a", title: "A", status: "backlog", ...audit },
-      { id: "c", title: "C", status: "todo", ...audit },
+      { id: "a", number: 1, title: "A", status: "backlog", ...audit },
+      { id: "c", number: 2, title: "C", status: "todo", ...audit },
     ]);
   });
 
@@ -85,6 +88,7 @@ describe("listActiveStorySummaries", () => {
           "y",
           {
             id: "y",
+            number: 2,
             epicId: "e1",
             title: "Y",
             body: "",
@@ -98,6 +102,7 @@ describe("listActiveStorySummaries", () => {
           "x",
           {
             id: "x",
+            number: 1,
             epicId: "e1",
             title: "X",
             body: "",
@@ -109,7 +114,14 @@ describe("listActiveStorySummaries", () => {
       ]),
     });
     expect(listActiveStorySummaries(projection)).toEqual([
-      { id: "x", epicId: "e1", title: "X", status: "in_progress", ...audit },
+      {
+        id: "x",
+        number: 1,
+        epicId: "e1",
+        title: "X",
+        status: "in_progress",
+        ...audit,
+      },
     ]);
   });
 
@@ -120,6 +132,7 @@ describe("listActiveStorySummaries", () => {
           "s-a",
           {
             id: "s-a",
+            number: 1,
             epicId: "e1",
             title: "A",
             body: "",
@@ -132,6 +145,7 @@ describe("listActiveStorySummaries", () => {
           "s-b",
           {
             id: "s-b",
+            number: 2,
             epicId: "e2",
             title: "B",
             body: "",
@@ -143,7 +157,14 @@ describe("listActiveStorySummaries", () => {
       ]),
     });
     expect(listActiveStorySummaries(projection, { epicId: "e1" })).toEqual([
-      { id: "s-a", epicId: "e1", title: "A", status: "backlog", ...audit },
+      {
+        id: "s-a",
+        number: 1,
+        epicId: "e1",
+        title: "A",
+        status: "backlog",
+        ...audit,
+      },
     ]);
   });
 
@@ -154,6 +175,7 @@ describe("listActiveStorySummaries", () => {
           "s-a",
           {
             id: "s-a",
+            number: 1,
             epicId: "e1",
             title: "A",
             body: "",
@@ -178,6 +200,7 @@ describe("listActiveTicketSummaries", () => {
           "t2",
           {
             id: "t2",
+            number: 2,
             storyId: "s1",
             title: "Closed",
             body: "",
@@ -193,6 +216,7 @@ describe("listActiveTicketSummaries", () => {
           "t1",
           {
             id: "t1",
+            number: 1,
             storyId: "s1",
             title: "Open",
             body: "",
@@ -208,6 +232,7 @@ describe("listActiveTicketSummaries", () => {
     expect(listActiveTicketSummaries(projection)).toEqual([
       {
         id: "t1",
+        number: 1,
         title: "Open",
         status: "todo",
         storyId: "s1",
@@ -223,6 +248,7 @@ describe("listActiveTicketSummaries", () => {
           "t1",
           {
             id: "t1",
+            number: 1,
             storyId: "s1",
             title: "Open",
             body: "",
@@ -239,6 +265,7 @@ describe("listActiveTicketSummaries", () => {
     expect(listActiveTicketSummaries(projection)).toEqual([
       {
         id: "t1",
+        number: 1,
         title: "Open",
         status: "todo",
         storyId: "s1",
@@ -255,6 +282,7 @@ describe("listActiveTicketSummaries", () => {
           "t1",
           {
             id: "t1",
+            number: 1,
             storyId: "s1",
             title: "Open",
             body: "",
@@ -270,6 +298,7 @@ describe("listActiveTicketSummaries", () => {
     expect(listActiveTicketSummaries(projection)).toEqual([
       {
         id: "t1",
+        number: 1,
         title: "Open",
         status: "todo",
         storyId: "s1",
@@ -286,6 +315,7 @@ describe("listActiveTicketSummaries", () => {
           "t1",
           {
             id: "t1",
+            number: 1,
             storyId: "s1",
             title: "Open",
             body: "",
@@ -315,6 +345,7 @@ describe("listActiveTicketSummaries", () => {
     expect(listActiveTicketSummaries(projection)).toEqual([
       {
         id: "t1",
+        number: 1,
         title: "Open",
         status: "in_progress",
         storyId: "s1",
@@ -335,6 +366,7 @@ describe("listActiveTicketSummaries", () => {
           "t-a",
           {
             id: "t-a",
+            number: 1,
             storyId: "s1",
             title: "On S1",
             body: "",
@@ -349,6 +381,7 @@ describe("listActiveTicketSummaries", () => {
           "t-b",
           {
             id: "t-b",
+            number: 2,
             storyId: "s2",
             title: "On S2",
             body: "",
@@ -364,6 +397,7 @@ describe("listActiveTicketSummaries", () => {
     expect(listActiveTicketSummaries(projection, { storyId: "s1" })).toEqual([
       {
         id: "t-a",
+        number: 1,
         title: "On S1",
         status: "todo",
         storyId: "s1",
@@ -379,6 +413,7 @@ describe("listActiveTicketSummaries", () => {
           "t-orphan",
           {
             id: "t-orphan",
+            number: 1,
             storyId: null,
             title: "No story",
             body: "",
@@ -393,6 +428,7 @@ describe("listActiveTicketSummaries", () => {
           "t-linked",
           {
             id: "t-linked",
+            number: 2,
             storyId: "s1",
             title: "On S1",
             body: "",
@@ -412,6 +448,7 @@ describe("listActiveTicketSummaries", () => {
     ).toEqual([
       {
         id: "t-orphan",
+        number: 1,
         title: "No story",
         status: "todo",
         storyId: null,
@@ -427,6 +464,7 @@ describe("listActiveTicketSummaries", () => {
           "t-a",
           {
             id: "t-a",
+            number: 1,
             storyId: "s1",
             title: "On S1",
             body: "",
@@ -451,6 +489,7 @@ describe("listActiveTicketSummaries", () => {
           "t-a",
           {
             id: "t-a",
+            number: 1,
             storyId: "s1",
             title: "A",
             body: "",
@@ -465,6 +504,7 @@ describe("listActiveTicketSummaries", () => {
           "t-b",
           {
             id: "t-b",
+            number: 2,
             storyId: "s1",
             title: "B",
             body: "",
@@ -485,6 +525,7 @@ describe("listActiveTicketSummaries", () => {
     ).toEqual([
       {
         id: "t-a",
+        number: 1,
         title: "A",
         status: "todo",
         storyId: "s1",
@@ -500,6 +541,7 @@ describe("listActiveTicketSummaries", () => {
           "s1",
           {
             id: "s1",
+            number: 1,
             epicId: "e1",
             title: "Story",
             body: "",
@@ -514,6 +556,7 @@ describe("listActiveTicketSummaries", () => {
           "t-a",
           {
             id: "t-a",
+            number: 1,
             storyId: "s1",
             title: "On epic e1",
             body: "",
@@ -528,6 +571,7 @@ describe("listActiveTicketSummaries", () => {
           "t-b",
           {
             id: "t-b",
+            number: 2,
             storyId: "s-missing",
             title: "Orphan path",
             body: "",
@@ -545,6 +589,7 @@ describe("listActiveTicketSummaries", () => {
     ).toEqual([
       {
         id: "t-a",
+        number: 1,
         title: "On epic e1",
         status: "todo",
         storyId: "s1",
@@ -561,6 +606,7 @@ describe("listActiveTicketSummaries", () => {
           "t-early",
           {
             id: "t-early",
+            number: 1,
             storyId: "s1",
             title: "Early",
             body: "",
@@ -578,6 +624,7 @@ describe("listActiveTicketSummaries", () => {
           "t-late",
           {
             id: "t-late",
+            number: 2,
             storyId: "s1",
             title: "Late",
             body: "",
@@ -611,6 +658,7 @@ describe("listActiveTicketSummaries", () => {
           "t1",
           {
             id: "t1",
+            number: 1,
             storyId: null,
             title: "T",
             body: "",
@@ -637,6 +685,7 @@ describe("listActiveTicketSummaries", () => {
     expect(rows).toEqual([
       {
         id: "t1",
+        number: 1,
         title: "T",
         status: "todo",
         storyId: null,

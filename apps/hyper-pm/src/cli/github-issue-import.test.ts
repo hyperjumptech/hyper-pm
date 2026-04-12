@@ -26,6 +26,7 @@ const baseTicket = (
   partial: Partial<TicketRecord> & { id: string },
 ): TicketRecord => ({
   id: partial.id,
+  number: partial.number ?? 1,
   storyId: partial.storyId ?? null,
   title: partial.title ?? "",
   body: partial.body ?? "",
@@ -456,17 +457,19 @@ describe("partitionGithubIssuesForImport", () => {
 });
 
 describe("mergeTicketImportCreatePayload", () => {
-  it("adds id and optional storyId", () => {
+  it("adds id, number, and optional storyId", () => {
     // Act
     const full = mergeTicketImportCreatePayload(
       "tid",
       { title: "T", body: "" },
       "  s1  ",
+      4,
     );
 
     // Assert
     expect(full).toEqual({
       id: "tid",
+      number: 4,
       title: "T",
       body: "",
       storyId: "s1",
@@ -475,9 +478,10 @@ describe("mergeTicketImportCreatePayload", () => {
 
   it("omits storyId when story argument is empty", () => {
     // Act
-    const full = mergeTicketImportCreatePayload("tid", { title: "T" }, "");
+    const full = mergeTicketImportCreatePayload("tid", { title: "T" }, "", 1);
 
     // Assert
+    expect(full).toEqual({ id: "tid", number: 1, title: "T" });
     expect(full).not.toHaveProperty("storyId");
   });
 });

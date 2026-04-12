@@ -24,6 +24,8 @@ type AuditSummaryFields = {
 /** One row for `epic read` when listing (no `--id`). */
 export type EpicListSummary = {
   id: string;
+  /** Display number for this data branch (epic-only counter). */
+  number: number;
   title: string;
   status: WorkItemStatus;
 } & AuditSummaryFields;
@@ -31,6 +33,8 @@ export type EpicListSummary = {
 /** One row for `story read` when listing (no `--id`). */
 export type StoryListSummary = {
   id: string;
+  /** Display number for this data branch (story-only counter). */
+  number: number;
   title: string;
   epicId: string;
   status: WorkItemStatus;
@@ -46,6 +50,8 @@ export type TicketLastPrActivitySummary = {
 /** One row for `ticket read` when listing (no `--id`). */
 export type TicketListSummary = {
   id: string;
+  /** Display number for this data branch (ticket-only counter). */
+  number: number;
   title: string;
   status: WorkItemStatus;
   storyId: string | null;
@@ -76,6 +82,7 @@ export const listActiveEpicSummaries = (
     .filter((e) => !e.deleted)
     .map((e) => ({
       id: e.id,
+      number: e.number,
       title: e.title,
       status: e.status,
       createdAt: e.createdAt,
@@ -122,6 +129,7 @@ export const listActiveStorySummaries = (
     )
     .map((s) => ({
       id: s.id,
+      number: s.number,
       title: s.title,
       epicId: s.epicId,
       status: s.status,
@@ -178,6 +186,7 @@ export const listActiveTicketSummaries = (
         : undefined;
     return {
       id: t.id,
+      number: t.number,
       title: t.title,
       status: t.status,
       storyId: t.storyId,

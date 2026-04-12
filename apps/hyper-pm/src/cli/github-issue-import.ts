@@ -278,17 +278,19 @@ export const partitionGithubIssuesForImport = (params: {
 };
 
 /**
- * Attaches `id` and optional `storyId` to a ticket create payload base.
+ * Attaches `id`, `number`, and optional `storyId` to a ticket create payload base.
  *
  * @param ticketId - New ticket ULID.
  * @param base - From {@link buildTicketCreatedPayloadBaseFromGithubIssue}.
  * @param storyId - Optional story id (trimmed); omitted when undefined or empty.
+ * @param number - Next ticket display number for this data branch.
  * @returns Full `TicketCreated` payload.
  */
 export const mergeTicketImportCreatePayload = (
   ticketId: string,
   base: Record<string, unknown>,
   storyId: string | undefined,
+  number: number,
 ): Record<string, unknown> => {
   const storyTrimmed =
     storyId !== undefined && storyId !== "" ? storyId.trim() : undefined;
@@ -296,5 +298,5 @@ export const mergeTicketImportCreatePayload = (
     storyTrimmed !== undefined && storyTrimmed !== ""
       ? { storyId: storyTrimmed }
       : {};
-  return { id: ticketId, ...base, ...storyPayload };
+  return { id: ticketId, number, ...base, ...storyPayload };
 };

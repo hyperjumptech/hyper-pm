@@ -27,6 +27,7 @@ const statusAudit = {
 
 const baseTicket = {
   id: "t1",
+  number: 1,
   storyId: "s1",
   title: "Hello World",
   body: "",
@@ -84,6 +85,7 @@ describe("ticketMatchesTicketListQuery", () => {
           "s1",
           {
             id: "s1",
+            number: 1,
             epicId: "e1",
             title: "S",
             body: "",
@@ -110,6 +112,7 @@ describe("ticketMatchesTicketListQuery", () => {
           "s1",
           {
             id: "s1",
+            number: 1,
             epicId: "e1",
             title: "S",
             body: "",
@@ -193,7 +196,7 @@ describe("ticketMatchesTicketListQuery", () => {
 
   it("filters withoutStoryOnly to tickets with null storyId", () => {
     const projection = emptyProjection();
-    const orphan = { ...baseTicket, id: "t0", storyId: null };
+    const orphan = { ...baseTicket, id: "t0", number: 2, storyId: null };
     expect(
       ticketMatchesTicketListQuery(orphan, projection, {
         withoutStoryOnly: true,
@@ -214,6 +217,7 @@ describe("ticketMatchesTicketListQuery", () => {
           "s1",
           {
             id: "s1",
+            number: 1,
             epicId: "e1",
             title: "S",
             body: "",

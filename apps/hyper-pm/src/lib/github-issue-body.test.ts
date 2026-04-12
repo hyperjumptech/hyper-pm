@@ -12,6 +12,7 @@ import type { TicketRecord } from "../storage/projection";
 
 const baseTicket = (): TicketRecord => ({
   id: "t1",
+  number: 1,
   storyId: null,
   title: "T",
   body: "",

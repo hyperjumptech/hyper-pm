@@ -41,6 +41,8 @@ type StatusTransitionAudit = {
 
 export type EpicRecord = {
   id: string;
+  /** Monotonic display number for this data branch (independent from story/ticket counters). */
+  number: number;
   title: string;
   body: string;
   status: WorkItemStatus;
@@ -50,6 +52,8 @@ export type EpicRecord = {
 
 export type StoryRecord = {
   id: string;
+  /** Monotonic display number for this data branch (independent from epic/ticket counters). */
+  number: number;
   epicId: string;
   title: string;
   body: string;
@@ -69,6 +73,8 @@ export type TicketCommentRecord = {
 
 export type TicketRecord = {
   id: string;
+  /** Monotonic display number for this data branch (independent from epic/story counters). */
+  number: number;
   /** Present when the ticket belongs to a story; `null` when unlinked / never assigned. */
   storyId: string | null;
   title: string;
@@ -112,6 +118,113 @@ export type Projection = {
   stories: Map<string, StoryRecord>;
   tickets: Map<string, TicketRecord>;
   syncCursor?: string;
+};
+
+/**
+ * Reads an optional strictly positive safe integer from an event payload field.
+ *
+ * @param payload - Event payload object.
+ * @param key - Field name (typically `"number"` on `*Created` events).
+ * @returns The integer when present and valid; otherwise `undefined`.
+ */
+export const readOptionalPositiveIntegerFromPayload = (
+  payload: Record<string, unknown>,
+  key: string,
+): number | undefined => {
+  if (!Object.prototype.hasOwnProperty.call(payload, key)) return undefined;
+  const raw = payload[key];
+  if (typeof raw !== "number" || !Number.isFinite(raw)) return undefined;
+  if (!Number.isInteger(raw)) return undefined;
+  if (raw < 1 || raw > Number.MAX_SAFE_INTEGER) return undefined;
+  return raw;
+};
+
+/**
+ * Returns the largest `number` among iterable work-item rows (defaults to `0` when empty).
+ *
+ * @param rows - Epic, story, or ticket rows (may include deleted).
+ */
+const maxNumberAmongRows = (rows: Iterable<{ number: number }>): number => {
+  let m = 0;
+  for (const r of rows) {
+    if (r.number > m) m = r.number;
+  }
+  return m;
+};
+
+/**
+ * Returns the highest epic `number` in the projection (including deleted rows).
+ *
+ * @param projection - Replayed projection state.
+ */
+export const maxEpicNumberInProjection = (projection: Projection): number =>
+  maxNumberAmongRows(projection.epics.values());
+
+/**
+ * Returns the highest story `number` in the projection (including deleted rows).
+ *
+ * @param projection - Replayed projection state.
+ */
+export const maxStoryNumberInProjection = (projection: Projection): number =>
+  maxNumberAmongRows(projection.stories.values());
+
+/**
+ * Returns the highest ticket `number` in the projection (including deleted rows).
+ *
+ * @param projection - Replayed projection state.
+ */
+export const maxTicketNumberInProjection = (projection: Projection): number =>
+  maxNumberAmongRows(projection.tickets.values());
+
+/**
+ * Returns the next epic `number` to assign when appending `EpicCreated`.
+ *
+ * @param projection - State before the new create is applied.
+ */
+export const nextEpicNumberForCreate = (projection: Projection): number =>
+  maxEpicNumberInProjection(projection) + 1;
+
+/**
+ * Returns the next story `number` to assign when appending `StoryCreated`.
+ *
+ * @param projection - State before the new create is applied.
+ */
+export const nextStoryNumberForCreate = (projection: Projection): number =>
+  maxStoryNumberInProjection(projection) + 1;
+
+/**
+ * Returns the next ticket `number` to assign when appending `TicketCreated`.
+ *
+ * @param projection - State before the new create is applied.
+ */
+export const nextTicketNumberForCreate = (projection: Projection): number =>
+  maxTicketNumberInProjection(projection) + 1;
+
+type CreateEntityKind = "epic" | "story" | "ticket";
+
+/**
+ * Resolves `number` for a `*Created` event: explicit payload wins; otherwise `max+1` for that type.
+ *
+ * @param projection - Current projection before the new row is inserted.
+ * @param kind - Which counter namespace to use.
+ * @param payload - Parsed create payload.
+ */
+const resolveWorkItemCreateNumber = (
+  projection: Projection,
+  kind: CreateEntityKind,
+  payload: Record<string, unknown>,
+): number => {
+  const explicit = readOptionalPositiveIntegerFromPayload(payload, "number");
+  if (explicit !== undefined) {
+    return explicit;
+  }
+  return (
+    (kind === "epic"
+      ? maxEpicNumberInProjection(projection)
+      : kind === "story"
+        ? maxStoryNumberInProjection(projection)
+        : maxTicketNumberInProjection(projection)) + 1
+  );
 };
 
 type WorkflowRow = {
@@ -446,6 +559,7 @@ export const applyEvent = (projection: Projection, evt: EventLine): void => {
       const status = resolveStatusForNewEpicStoryPayload(evt.payload);
       const row: EpicRecord = {
         id,
+        number: resolveWorkItemCreateNumber(projection, "epic", evt.payload),
         title: String(evt.payload["title"] ?? ""),
         body: String(evt.payload["body"] ?? ""),
         status,
@@ -491,6 +605,7 @@ export const applyEvent = (projection: Projection, evt: EventLine): void => {
       const status = resolveStatusForNewEpicStoryPayload(evt.payload);
       const row: StoryRecord = {
         id,
+        number: resolveWorkItemCreateNumber(projection, "story", evt.payload),
         epicId: String(evt.payload["epicId"]),
         title: String(evt.payload["title"] ?? ""),
         body: String(evt.payload["body"] ?? ""),
@@ -538,6 +653,7 @@ export const applyEvent = (projection: Projection, evt: EventLine): void => {
       const status = resolveStatusForNewTicketPayload(evt.payload);
       const row: TicketRecord = {
         id,
+        number: resolveWorkItemCreateNumber(projection, "ticket", evt.payload),
         storyId: storyIdFromTicketCreatedPayload(evt.payload),
         title: String(evt.payload["title"] ?? ""),
         body,

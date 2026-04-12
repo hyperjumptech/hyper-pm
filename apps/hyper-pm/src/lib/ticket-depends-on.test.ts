@@ -16,6 +16,7 @@ const minimalTicket = (
 ): TicketRecord =>
   ({
     id,
+    number: 1,
     storyId: null,
     title: "",
     body: "",

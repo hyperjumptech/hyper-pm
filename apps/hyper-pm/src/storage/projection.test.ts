@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { GITHUB_PR_ACTIVITY_RECENT_CAP } from "../lib/github-pr-activity";
-import { replayEvents } from "./projection";
+import {
+  readOptionalPositiveIntegerFromPayload,
+  replayEvents,
+} from "./projection";
 
 describe("replayEvents", () => {
   it("applies creates and updates in timestamp order", () => {
@@ -32,6 +35,7 @@ describe("replayEvents", () => {
     expect(epic?.createdBy).toBe("test");
     expect(epic?.updatedAt).toBe("2026-01-03T00:00:00.000Z");
     expect(epic?.updatedBy).toBe("test");
+    expect(epic?.number).toBe(1);
   });
 
   it("captures PR refs on tickets and maps legacy open state to todo", () => {
@@ -1092,5 +1096,129 @@ describe("replayEvents", () => {
       "d1",
       "d2",
     ]);
+  });
+});
+
+describe("readOptionalPositiveIntegerFromPayload", () => {
+  it("returns undefined for missing or invalid values", () => {
+    // Act
+    const missing = readOptionalPositiveIntegerFromPayload({}, "number");
+    const stringVal = readOptionalPositiveIntegerFromPayload(
+      { number: "3" },
+      "number",
+    );
+    const floatVal = readOptionalPositiveIntegerFromPayload(
+      { number: 3.5 },
+      "number",
+    );
+    const zero = readOptionalPositiveIntegerFromPayload(
+      { number: 0 },
+      "number",
+    );
+    const neg = readOptionalPositiveIntegerFromPayload(
+      { number: -1 },
+      "number",
+    );
+    const nan = readOptionalPositiveIntegerFromPayload(
+      { number: NaN },
+      "number",
+    );
+    const inf = readOptionalPositiveIntegerFromPayload(
+      { number: Infinity },
+      "number",
+    );
+
+    // Assert
+    expect(missing).toBeUndefined();
+    expect(stringVal).toBeUndefined();
+    expect(floatVal).toBeUndefined();
+    expect(zero).toBeUndefined();
+    expect(neg).toBeUndefined();
+    expect(nan).toBeUndefined();
+    expect(inf).toBeUndefined();
+  });
+
+  it("returns positive safe integers when valid", () => {
+    // Act
+    const n = readOptionalPositiveIntegerFromPayload({ number: 7 }, "number");
+    const wrongKey = readOptionalPositiveIntegerFromPayload(
+      { other: 1 },
+      "number",
+    );
+    const max = readOptionalPositiveIntegerFromPayload(
+      { number: Number.MAX_SAFE_INTEGER },
+      "number",
+    );
+
+    // Assert
+    expect(n).toBe(7);
+    expect(wrongKey).toBeUndefined();
+    expect(max).toBe(Number.MAX_SAFE_INTEGER);
+  });
+});
+
+describe("replayEvents work item numbers", () => {
+  it("assigns monotonic numbers when payloads omit number", () => {
+    // Setup
+    const lines = [
+      JSON.stringify({
+        schema: 1,
+        type: "EpicCreated",
+        id: "a",
+        ts: "2026-01-01T00:00:00.000Z",
+        actor: "x",
+        payload: { id: "e1", title: "A", body: "" },
+      }),
+      JSON.stringify({
+        schema: 1,
+        type: "EpicCreated",
+        id: "b",
+        ts: "2026-01-02T00:00:00.000Z",
+        actor: "x",
+        payload: { id: "e2", title: "B", body: "" },
+      }),
+    ];
+
+    // Act
+    const p = replayEvents(lines);
+
+    // Assert
+    expect(p.epics.get("e1")?.number).toBe(1);
+    expect(p.epics.get("e2")?.number).toBe(2);
+  });
+
+  it("uses explicit payload number and continues auto sequence from max", () => {
+    // Setup
+    const lines = [
+      JSON.stringify({
+        schema: 1,
+        type: "TicketCreated",
+        id: "a",
+        ts: "2026-01-01T00:00:00.000Z",
+        actor: "x",
+        payload: {
+          id: "t1",
+          number: 42,
+          title: "T",
+          body: "",
+          status: "todo",
+        },
+      }),
+      JSON.stringify({
+        schema: 1,
+        type: "TicketCreated",
+        id: "b",
+        ts: "2026-01-02T00:00:00.000Z",
+        actor: "x",
+        payload: { id: "t2", title: "T2", body: "", status: "todo" },
+      }),
+    ];
+
+    // Act
+    const p = replayEvents(lines);
+
+    // Assert
+    expect(p.tickets.get("t1")?.number).toBe(42);
+    expect(p.tickets.get("t2")?.number).toBe(43);
   });
 });

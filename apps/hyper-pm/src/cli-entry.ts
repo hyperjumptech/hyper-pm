@@ -57,6 +57,13 @@ import {
   tryParseGithubImportListState,
 } from "./cli/github-issue-import";
 import {
+  assertCreatePayloadUsesExpectedHeadNumber,
+  resolveEpicId,
+  resolveStoryId,
+  resolveTicketDependsOnTokensToIds,
+  resolveTicketId,
+} from "./cli/resolve-projection-work-item-id";
+import {
   tryParseIsoDateMillis,
   type TicketListQuery,
 } from "./cli/ticket-list-query";
@@ -98,7 +105,13 @@ import { appendEventLine } from "./storage/append-event";
 import type { EventLine, EventType } from "./storage/event-line";
 import { eventTypeSchema } from "./storage/event-line";
 import { readAllEventLines } from "./storage/read-event-lines";
-import { replayEvents } from "./storage/projection";
+import {
+  nextEpicNumberForCreate,
+  nextStoryNumberForCreate,
+  nextTicketNumberForCreate,
+  replayEvents,
+  type Projection,
+} from "./storage/projection";
 import {
   defaultGithubPrActivitySyncDeps,
   runGithubPrActivitySync,
@@ -355,11 +368,13 @@ const parseCliWorkItemStatusList = (
 /**
  * Builds a {@link TicketListQuery} from raw `ticket read` list flags, or `undefined` when no filters apply.
  *
+ * @param projection - Replayed projection (used to resolve epic/ticket refs by display `number`).
  * @param o - Parsed CLI options for listing-only flags.
  * @param deps - Process boundary for user-facing errors (invalid dates or statuses).
  * @returns Query object, or `undefined` when every advanced dimension is unset.
  */
 const buildTicketListQueryFromReadListOpts = (
+  projection: Projection,
   o: {
     status?: string | string[];
     epic?: string;
@@ -401,7 +416,8 @@ const buildTicketListQueryFromReadListOpts = (
     query.statuses = parseCliWorkItemStatusList(statusTokens, deps);
   }
   if (o.epic !== undefined && o.epic !== "") {
-    query.epicId = o.epic;
+    const trimmed = o.epic.trim();
+    query.epicId = resolveEpicId(projection, trimmed) ?? trimmed;
   }
   const createdAfterMs = parseCliOptionalIsoMillis(
     o.createdAfter,
@@ -543,7 +559,8 @@ const buildTicketListQueryFromReadListOpts = (
   }
 
   if (o.dependsOn !== undefined && o.dependsOn.trim() !== "") {
-    query.dependsOnIncludesId = o.dependsOn.trim();
+    const trimmed = o.dependsOn.trim();
+    query.dependsOnIncludesId = resolveTicketId(projection, trimmed) ?? trimmed;
   }
 
   return Object.keys(query).length > 0 ? query : undefined;
@@ -664,19 +681,19 @@ export const runCli = async (
         status?: string;
       }>();
       await mutateDataBranch(g, deps, async (root, { actor }) => {
+        const lines = await readAllEventLines(root);
+        const proj = replayEvents(lines);
         const id = o.id ?? ulid();
         const status = parseCliWorkItemStatus(o.status, deps);
-        const evt = makeEvent(
-          "EpicCreated",
-          {
-            id,
-            title: o.title,
-            body: o.body,
-            ...(status !== undefined ? { status } : {}),
-          },
-          deps.clock,
-          actor,
-        );
+        const payload: Record<string, unknown> = {
+          id,
+          number: nextEpicNumberForCreate(proj),
+          title: o.title,
+          body: o.body,
+          ...(status !== undefined ? { status } : {}),
+        };
+        assertCreatePayloadUsesExpectedHeadNumber(proj, "epic", payload);
+        const evt = makeEvent("EpicCreated", payload, deps.clock, actor);
         await appendEventLine(root, evt, deps.clock);
         return evt.payload;
       });
@@ -707,18 +724,19 @@ export const runCli = async (
       await mutateDataBranch(g, deps, async (root, { actor }) => {
         const lines = await readAllEventLines(root);
         const proj = replayEvents(lines);
-        const cur = proj.epics.get(o.id);
+        const epicId = resolveEpicId(proj, o.id) ?? o.id.trim();
+        const cur = proj.epics.get(epicId);
         if (!cur || cur.deleted) {
           throw new Error(`Epic not found: ${o.id}`);
         }
         const status = parseCliWorkItemStatus(o.status, deps);
-        const draft: Record<string, unknown> = { id: o.id };
+        const draft: Record<string, unknown> = { id: epicId };
         if (o.title !== undefined) draft["title"] = o.title;
         if (o.body !== undefined) draft["body"] = o.body;
         if (status !== undefined) draft["status"] = status;
         const payload = pruneEpicOrStoryUpdatePayloadAgainstRow(cur, draft);
         if (isNoOpUpdatePayload(payload)) {
-          return { id: o.id, noChanges: true };
+          return { id: epicId, noChanges: true };
         }
         const evt = makeEvent("EpicUpdated", payload, deps.clock, actor);
         await appendEventLine(root, evt, deps.clock);
@@ -732,9 +750,12 @@ export const runCli = async (
       const g = readGlobals(this);
       const o = this.opts<{ id: string }>();
       await mutateDataBranch(g, deps, async (root, { actor }) => {
-        const evt = makeEvent("EpicDeleted", { id: o.id }, deps.clock, actor);
+        const lines = await readAllEventLines(root);
+        const proj = replayEvents(lines);
+        const epicId = resolveEpicId(proj, o.id) ?? o.id.trim();
+        const evt = makeEvent("EpicDeleted", { id: epicId }, deps.clock, actor);
         await appendEventLine(root, evt, deps.clock);
-        return { id: o.id, deleted: true };
+        return { id: epicId, deleted: true };
       });
     });
 
@@ -761,24 +782,23 @@ export const runCli = async (
       await mutateDataBranch(g, deps, async (root, { actor }) => {
         const lines = await readAllEventLines(root);
         const proj = replayEvents(lines);
-        const epic = proj.epics.get(o.epic);
+        const epicId = resolveEpicId(proj, o.epic) ?? o.epic.trim();
+        const epic = proj.epics.get(epicId);
         if (!epic || epic.deleted) {
           throw new Error(`Epic not found: ${o.epic}`);
         }
         const id = o.id ?? ulid();
         const status = parseCliWorkItemStatus(o.status, deps);
-        const evt = makeEvent(
-          "StoryCreated",
-          {
-            id,
-            epicId: o.epic,
-            title: o.title,
-            body: o.body,
-            ...(status !== undefined ? { status } : {}),
-          },
-          deps.clock,
-          actor,
-        );
+        const payload: Record<string, unknown> = {
+          id,
+          number: nextStoryNumberForCreate(proj),
+          epicId,
+          title: o.title,
+          body: o.body,
+          ...(status !== undefined ? { status } : {}),
+        };
+        assertCreatePayloadUsesExpectedHeadNumber(proj, "story", payload);
+        const evt = makeEvent("StoryCreated", payload, deps.clock, actor);
         await appendEventLine(root, evt, deps.clock);
         return evt.payload;
       });
@@ -813,18 +833,19 @@ export const runCli = async (
       await mutateDataBranch(g, deps, async (root, { actor }) => {
         const lines = await readAllEventLines(root);
         const proj = replayEvents(lines);
-        const cur = proj.stories.get(o.id);
+        const storyId = resolveStoryId(proj, o.id) ?? o.id.trim();
+        const cur = proj.stories.get(storyId);
         if (!cur || cur.deleted) {
           throw new Error(`Story not found: ${o.id}`);
         }
         const status = parseCliWorkItemStatus(o.status, deps);
-        const draft: Record<string, unknown> = { id: o.id };
+        const draft: Record<string, unknown> = { id: storyId };
         if (o.title !== undefined) draft["title"] = o.title;
         if (o.body !== undefined) draft["body"] = o.body;
         if (status !== undefined) draft["status"] = status;
         const payload = pruneEpicOrStoryUpdatePayloadAgainstRow(cur, draft);
         if (isNoOpUpdatePayload(payload)) {
-          return { id: o.id, noChanges: true };
+          return { id: storyId, noChanges: true };
         }
         const evt = makeEvent("StoryUpdated", payload, deps.clock, actor);
         await appendEventLine(root, evt, deps.clock);
@@ -838,9 +859,17 @@ export const runCli = async (
       const g = readGlobals(this);
       const o = this.opts<{ id: string }>();
       await mutateDataBranch(g, deps, async (root, { actor }) => {
-        const evt = makeEvent("StoryDeleted", { id: o.id }, deps.clock, actor);
+        const lines = await readAllEventLines(root);
+        const proj = replayEvents(lines);
+        const storyId = resolveStoryId(proj, o.id) ?? o.id.trim();
+        const evt = makeEvent(
+          "StoryDeleted",
+          { id: storyId },
+          deps.clock,
+          actor,
+        );
         await appendEventLine(root, evt, deps.clock);
-        return { id: o.id, deleted: true };
+        return { id: storyId, deleted: true };
       });
     });
 
@@ -966,9 +995,6 @@ export const runCli = async (
         deps,
       );
       const dependsOnTokensCreate = normalizeCliStringList(o.dependsOn);
-      const dependsOnNormCreate = normalizeTicketDependsOnIds(
-        dependsOnTokensCreate,
-      );
 
       const planningPayload: Record<string, unknown> = {
         ...labelsPayloadCreate,
@@ -988,20 +1014,28 @@ export const runCli = async (
           storyRaw !== undefined && storyRaw !== ""
             ? storyRaw.trim()
             : undefined;
+        const storyIdResolved =
+          storyTrimmed !== undefined
+            ? (resolveStoryId(proj, storyTrimmed) ?? storyTrimmed)
+            : undefined;
         if (storyTrimmed !== undefined) {
-          const storyRow = proj.stories.get(storyTrimmed);
+          const storyRow = proj.stories.get(storyIdResolved ?? "");
           if (!storyRow || storyRow.deleted) {
             throw new Error(`Story not found: ${storyTrimmed}`);
           }
         }
         const id = o.id ?? ulid();
+        const dependsOnNormCreate = resolveTicketDependsOnTokensToIds(
+          proj,
+          dependsOnTokensCreate,
+        );
         const status = parseCliWorkItemStatus(o.status, deps);
         const assigneeCreate =
           o.assignee !== undefined
             ? { assignee: normalizeGithubLogin(o.assignee) }
             : {};
         const storyPayload =
-          storyTrimmed !== undefined ? { storyId: storyTrimmed } : {};
+          storyIdResolved !== undefined ? { storyId: storyIdResolved } : {};
         const branchTokens = normalizeCliStringList(o.branch);
         const branchesNorm = normalizeTicketBranchListFromStrings(branchTokens);
         const branchesPayload =
@@ -1018,19 +1052,26 @@ export const runCli = async (
           dependsOnNormCreate.length > 0
             ? { dependsOn: dependsOnNormCreate }
             : {};
+        const createPayload: Record<string, unknown> = {
+          id,
+          number: nextTicketNumberForCreate(proj),
+          ...storyPayload,
+          title: o.title,
+          body,
+          ...(status !== undefined ? { status } : {}),
+          ...assigneeCreate,
+          ...branchesPayload,
+          ...dependsOnPayloadCreate,
+          ...planningPayload,
+        };
+        assertCreatePayloadUsesExpectedHeadNumber(
+          proj,
+          "ticket",
+          createPayload,
+        );
         const evt = makeEvent(
           "TicketCreated",
-          {
-            id,
-            ...storyPayload,
-            title: o.title,
-            body,
-            ...(status !== undefined ? { status } : {}),
-            ...assigneeCreate,
-            ...branchesPayload,
-            ...dependsOnPayloadCreate,
-            ...planningPayload,
-          },
+          createPayload,
           deps.clock,
           actor,
         );
@@ -1443,25 +1484,30 @@ export const runCli = async (
       await mutateDataBranch(g, deps, async (root, { actor }) => {
         const lines = await readAllEventLines(root);
         const proj = replayEvents(lines);
+        const ticketId = resolveTicketId(proj, o.id) ?? o.id.trim();
+        const storyIdResolved =
+          storyTrimmed !== undefined
+            ? (resolveStoryId(proj, storyTrimmed) ?? storyTrimmed)
+            : undefined;
         if (storyTrimmed !== undefined) {
-          const storyRow = proj.stories.get(storyTrimmed);
+          const storyRow = proj.stories.get(storyIdResolved ?? "");
           if (!storyRow || storyRow.deleted) {
             throw new Error(`Story not found: ${storyTrimmed}`);
           }
         }
-        const curTicket = proj.tickets.get(o.id);
+        const curTicket = proj.tickets.get(ticketId);
         if (curTicket === undefined || curTicket.deleted) {
           throw new Error(`Ticket not found: ${o.id}`);
         }
         const status = parseCliWorkItemStatus(o.status, deps);
-        const payload: Record<string, unknown> = { id: o.id };
+        const payload: Record<string, unknown> = { id: ticketId };
         if (o.title !== undefined) payload["title"] = o.title;
         if (body !== undefined) payload["body"] = body;
         if (status !== undefined) payload["status"] = status;
         if (o.unlinkStory) {
           payload["storyId"] = null;
         } else if (storyTrimmed !== undefined) {
-          payload["storyId"] = storyTrimmed;
+          payload["storyId"] = storyIdResolved;
         }
         if (o.unassign) {
           payload["assignee"] = null;
@@ -1529,19 +1575,19 @@ export const runCli = async (
             nextDepends = [];
           } else {
             const removeDepSet = new Set(
-              normalizeTicketDependsOnIds(removeDependsOnTokens),
+              resolveTicketDependsOnTokensToIds(proj, removeDependsOnTokens),
             );
             nextDepends = normalizeTicketDependsOnIds(
               (curTicket.dependsOn ?? []).filter((d) => !removeDepSet.has(d)),
             );
             nextDepends = normalizeTicketDependsOnIds([
               ...nextDepends,
-              ...addDependsOnTokens,
+              ...resolveTicketDependsOnTokensToIds(proj, addDependsOnTokens),
             ]);
           }
           const depErr = validateTicketDependsOnForWrite({
             projection: proj,
-            fromTicketId: o.id,
+            fromTicketId: ticketId,
             nextDependsOn: nextDepends,
           });
           if (depErr !== undefined) {
@@ -1571,7 +1617,7 @@ export const runCli = async (
           payload,
         );
         if (isNoOpUpdatePayload(prunedPayload)) {
-          return { id: o.id, noChanges: true };
+          return { id: ticketId, noChanges: true };
         }
         const evt = makeEvent(
           "TicketUpdated",
@@ -1614,25 +1660,25 @@ export const runCli = async (
           runGit,
         );
       }
-      const preferred = normalizeTicketBranchName(
-        o.branch ?? `hyper-pm/${o.id}`,
-      );
-      if (preferred === undefined) {
-        deps.error(
-          "Invalid --branch or default branch name for this ticket id",
-        );
-        deps.exit(ExitCode.UserError);
-      }
       await mutateDataBranch(g, deps, async (root, { actor }) => {
         const lines = await readAllEventLines(root);
         const proj = replayEvents(lines);
-        const curRow = proj.tickets.get(o.id);
+        const ticketId = resolveTicketId(proj, o.id) ?? o.id.trim();
+        const preferred = normalizeTicketBranchName(
+          o.branch ?? `hyper-pm/${ticketId}`,
+        );
+        if (preferred === undefined) {
+          throw new Error(
+            "Invalid --branch or default branch name for this ticket id",
+          );
+        }
+        const curRow = proj.tickets.get(ticketId);
         if (curRow === undefined || curRow.deleted) {
           throw new Error(`Ticket not found: ${o.id}`);
         }
         if (curRow.status === "done" || curRow.status === "cancelled") {
           throw new Error(
-            `Ticket ${o.id} is ${curRow.status}; change status before starting work`,
+            `Ticket ${ticketId} is ${curRow.status}; change status before starting work`,
           );
         }
         const { branch: chosenBranch } = await pickUniqueLocalBranchName({
@@ -1653,7 +1699,7 @@ export const runCli = async (
         }
         next = normalizeTicketBranchListFromStrings(next);
         const payload: Record<string, unknown> = {
-          id: o.id,
+          id: ticketId,
           status: "in_progress",
         };
         if (!ticketBranchListsEqual(next, curRow.linkedBranches)) {
@@ -1662,7 +1708,7 @@ export const runCli = async (
         const evt = makeEvent("TicketUpdated", payload, deps.clock, actor);
         await appendEventLine(root, evt, deps.clock);
         const result: Record<string, unknown> = {
-          id: o.id,
+          id: ticketId,
           status: "in_progress",
           branch: chosenBranch,
           branches: next,
@@ -1689,18 +1735,19 @@ export const runCli = async (
       await mutateDataBranch(g, deps, async (root, { actor }) => {
         const lines = await readAllEventLines(root);
         const proj = replayEvents(lines);
-        const row = proj.tickets.get(o.id);
+        const ticketId = resolveTicketId(proj, o.id) ?? o.id.trim();
+        const row = proj.tickets.get(ticketId);
         if (!row || row.deleted) {
           throw new Error(`Ticket not found: ${o.id}`);
         }
         const evt = makeEvent(
           "TicketCommentAdded",
-          { ticketId: o.id, body: trimmed },
+          { ticketId, body: trimmed },
           deps.clock,
           actor,
         );
         await appendEventLine(root, evt, deps.clock);
-        return { commentId: evt.id, ticketId: o.id, body: trimmed };
+        return { commentId: evt.id, ticketId, body: trimmed };
       });
     });
   ticket
@@ -1710,9 +1757,17 @@ export const runCli = async (
       const g = readGlobals(this);
       const o = this.opts<{ id: string }>();
       await mutateDataBranch(g, deps, async (root, { actor }) => {
-        const evt = makeEvent("TicketDeleted", { id: o.id }, deps.clock, actor);
+        const lines = await readAllEventLines(root);
+        const proj = replayEvents(lines);
+        const ticketId = resolveTicketId(proj, o.id) ?? o.id.trim();
+        const evt = makeEvent(
+          "TicketDeleted",
+          { id: ticketId },
+          deps.clock,
+          actor,
+        );
         await appendEventLine(root, evt, deps.clock);
-        return { id: o.id, deleted: true };
+        return { id: ticketId, deleted: true };
       });
     });
   ticket
@@ -1798,7 +1853,9 @@ export const runCli = async (
             ? storyRaw.trim()
             : undefined;
         if (storyTrimmed !== undefined && storyTrimmed !== "") {
-          const storyRow = proj.stories.get(storyTrimmed);
+          const storyIdForImport =
+            resolveStoryId(proj, storyTrimmed) ?? storyTrimmed;
+          const storyRow = proj.stories.get(storyIdForImport);
           if (!storyRow || storyRow.deleted) {
             deps.error(`Story not found: ${storyTrimmed}`);
             deps.exit(ExitCode.UserError);
@@ -1841,12 +1898,25 @@ export const runCli = async (
             );
           } else {
             const imported: { ticketId: string; issueNumber: number }[] = [];
+            let importProj = proj;
+            let importLines = lines;
+            const storyIdForPayload =
+              storyTrimmed !== undefined && storyTrimmed !== ""
+                ? (resolveStoryId(importProj, storyTrimmed) ?? storyTrimmed)
+                : undefined;
             for (const c of candidates) {
               const ticketId = ulid();
+              const nextNum = nextTicketNumberForCreate(importProj);
               const createPayload = mergeTicketImportCreatePayload(
                 ticketId,
                 c.ticketCreatedPayloadBase,
-                storyTrimmed,
+                storyIdForPayload,
+                nextNum,
+              );
+              assertCreatePayloadUsesExpectedHeadNumber(
+                importProj,
+                "ticket",
+                createPayload,
               );
               const createdEvt = makeEvent(
                 "TicketCreated",
@@ -1867,6 +1937,8 @@ export const runCli = async (
               );
               await appendEventLine(session.worktreePath, linkEvt, deps.clock);
               imported.push({ ticketId, issueNumber: c.issueNumber });
+              importLines = await readAllEventLines(session.worktreePath);
+              importProj = replayEvents(importLines);
             }
             await commitDataWorktreeIfNeeded(
               session.worktreePath,
@@ -2441,7 +2513,8 @@ const readEpic = async (
           formatOutput(g.format, { items: listActiveEpicSummaries(proj) }),
         );
       } else {
-        const row = proj.epics.get(id);
+        const epicId = resolveEpicId(proj, id) ?? id.trim();
+        const row = proj.epics.get(epicId);
         if (!row || row.deleted) {
           deps.error("Epic not found");
           exitCode = ExitCode.UserError;
@@ -2495,8 +2568,12 @@ const readStory = async (
       const proj = replayEvents(lines);
       const { id, epicId } = opts;
       if (id === undefined || id === "") {
-        const epicFilter =
+        const epicFilterRaw =
           epicId !== undefined && epicId !== "" ? epicId : undefined;
+        const epicFilter =
+          epicFilterRaw !== undefined
+            ? (resolveEpicId(proj, epicFilterRaw) ?? epicFilterRaw.trim())
+            : undefined;
         if (epicFilter !== undefined) {
           const epicRow = proj.epics.get(epicFilter);
           if (!epicRow || epicRow.deleted) {
@@ -2517,7 +2594,8 @@ const readStory = async (
           );
         }
       } else {
-        const row = proj.stories.get(id);
+        const storyId = resolveStoryId(proj, id) ?? id.trim();
+        const row = proj.stories.get(storyId);
         if (!row || row.deleted) {
           deps.error("Story not found");
           exitCode = ExitCode.UserError;
@@ -2613,10 +2691,12 @@ const readTicket = async (
         const listWithoutStory = withoutStoryRaw === true;
         const storyFilter =
           storyIdRaw !== undefined && storyIdRaw !== ""
-            ? storyIdRaw
+            ? (resolveStoryId(proj, storyIdRaw) ?? storyIdRaw.trim())
             : undefined;
         const epicFilter =
-          epicIdRaw !== undefined && epicIdRaw !== "" ? epicIdRaw : undefined;
+          epicIdRaw !== undefined && epicIdRaw !== ""
+            ? (resolveEpicId(proj, epicIdRaw) ?? epicIdRaw.trim())
+            : undefined;
         const sortBy = tryParseTicketListSortField(sortByOpt);
         const sortDir = tryParseTicketListSortDir(sortDirOpt);
         if (sortBy === undefined) {
@@ -2655,6 +2735,7 @@ const readTicket = async (
             exitCode = ExitCode.UserError;
           } else {
             const listQuery = buildTicketListQueryFromReadListOpts(
+              proj,
               { epic: epicFilter, ...listFlagRest },
               deps,
             );
@@ -2675,6 +2756,7 @@ const readTicket = async (
             exitCode = ExitCode.UserError;
           } else {
             const listQuery = buildTicketListQueryFromReadListOpts(
+              proj,
               listFlagRest,
               deps,
             );
@@ -2691,6 +2773,7 @@ const readTicket = async (
           }
         } else if (listWithoutStory) {
           const listQuery = buildTicketListQueryFromReadListOpts(
+            proj,
             { withoutStory: true, ...listFlagRest },
             deps,
           );
@@ -2705,6 +2788,7 @@ const readTicket = async (
           );
         } else {
           const listQuery = buildTicketListQueryFromReadListOpts(
+            proj,
             { epic: epicFilter, ...listFlagRest },
             deps,
           );
@@ -2719,7 +2803,8 @@ const readTicket = async (
           );
         }
       } else {
-        const row = proj.tickets.get(id);
+        const ticketId = resolveTicketId(proj, id) ?? id.trim();
+        const row = proj.tickets.get(ticketId);
         if (!row || row.deleted) {
           deps.error("Ticket not found");
           exitCode = ExitCode.UserError;

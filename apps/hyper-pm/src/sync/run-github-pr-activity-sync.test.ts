@@ -58,6 +58,7 @@ describe("runGithubPrActivitySync", () => {
         "t1",
         {
           id: "t1",
+          number: 1,
           storyId: "s1",
           title: "T",
           body: "",
@@ -163,6 +164,7 @@ describe("runGithubPrActivitySync", () => {
         "t1",
         {
           id: "t1",
+          number: 1,
           storyId: "s1",
           title: "T",
           body: "",

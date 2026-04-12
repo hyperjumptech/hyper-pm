@@ -14,6 +14,7 @@ import {
 
 const baseTicket = (over: Partial<TicketRecord>): TicketRecord => ({
   id: "t1",
+  number: 1,
   storyId: "s1",
   title: "Alpha",
   body: "",

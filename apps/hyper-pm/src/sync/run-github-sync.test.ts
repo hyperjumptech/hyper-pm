@@ -38,6 +38,7 @@ const epicStory = (): Pick<Projection, "epics" | "stories"> => ({
       "e1",
       {
         id: "e1",
+        number: 1,
         title: "Epic",
         body: "",
         status: "backlog",
@@ -51,6 +52,7 @@ const epicStory = (): Pick<Projection, "epics" | "stories"> => ({
       "s1",
       {
         id: "s1",
+        number: 1,
         epicId: "e1",
         title: "Story",
         body: "",
@@ -91,6 +93,7 @@ describe("runGithubOutboundSync", () => {
           "t1",
           {
             id: "t1",
+            number: 1,
             storyId: "s1",
             title: "Task",
             body: "hello",
@@ -155,6 +158,7 @@ describe("runGithubOutboundSync", () => {
           "t-new",
           {
             id: "t-new",
+            number: 1,
             storyId: "s1",
             title: "New ticket",
             body: "desc",
@@ -213,6 +217,7 @@ describe("runGithubOutboundSync", () => {
           "t-orphan",
           {
             id: "t-orphan",
+            number: 1,
             storyId: null,
             title: "Unlinked",
             body: "hello",
@@ -266,6 +271,7 @@ describe("runGithubOutboundSync", () => {
           "t-new-orphan",
           {
             id: "t-new-orphan",
+            number: 1,
             storyId: null,
             title: "Orphan",
             body: "",
@@ -315,6 +321,7 @@ describe("runGithubOutboundSync", () => {
           "t1",
           {
             id: "t1",
+            number: 1,
             storyId: "s1",
             title: "Task",
             body: "hello",
@@ -407,6 +414,7 @@ describe("runGithubInboundSync", () => {
           "t1",
           {
             id: "t1",
+            number: 1,
             storyId: "s1",
             title: "My ticket",
             body: "hello",
@@ -489,6 +497,7 @@ describe("runGithubInboundSync", () => {
           "t1",
           {
             id: "t1",
+            number: 1,
             storyId: "s1",
             title: "My ticket",
             body: "hello",
@@ -569,6 +578,7 @@ describe("runGithubInboundSync", () => {
           "t1",
           {
             id: "t1",
+            number: 1,
             storyId: "s1",
             title: "My ticket",
             body: "hello",
@@ -648,6 +658,7 @@ describe("runGithubInboundSync", () => {
           "t1",
           {
             id: "t1",
+            number: 1,
             storyId: "s1",
             title: "My ticket",
             body: "hello",
