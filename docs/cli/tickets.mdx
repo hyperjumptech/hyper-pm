@@ -1,49 +1,132 @@
 ---
 title: Tickets
-description: ticket create/read/update/delete, work, comment — flags and behaviors.
+description: ticket create, read, update, delete, work, comment, import-github — full CLI reference.
 icon: Ticket
 ---
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-## CRUD
+## `ticket create`
 
-### `ticket create`
+| Flag                       | Required | Description                                                                    |
+| -------------------------- | -------- | ------------------------------------------------------------------------------ |
+| `--title <t>`              | yes      | Ticket title                                                                   |
+| `--story <id>`             | no       | Attach to story; omit for an **unlinked** ticket (story must exist)            |
+| `--body <b>`               | no       | Description (default empty string)                                             |
+| `--id <id>`                | no       | Explicit id (otherwise generated)                                              |
+| `--status <s>`             | no       | `backlog` · `todo` · `in_progress` · `done` · `cancelled` (default **`todo`**) |
+| `--assignee <login>`       | no       | GitHub login (normalized); one assignee per ticket                             |
+| `--branch <name>`          | no       | Link a git branch; **repeatable**                                              |
+| `--label <name>`           | no       | Planning label; **repeatable**                                                 |
+| `--priority <p>`           | no       | `low` · `medium` · `high` · `urgent`                                           |
+| `--size <s>`               | no       | `xs` · `s` · `m` · `l` · `xl`                                                  |
+| `--estimate <n>`           | no       | Non-negative number (e.g. story points)                                        |
+| `--start-at <iso>`         | no       | Planned start (`startWorkAt`), ISO-8601 instant                                |
+| `--target-finish-at <iso>` | no       | Planned finish (`targetFinishAt`), ISO-8601 instant                            |
+| `--ai-draft`               | no       | Draft `--body` via AI; requires `HYPER_PM_AI_API_KEY`                          |
 
-- **Required:** `--title`
-- **Optional:** `--story`, `--body`, `--id`, `--status`, `--assignee`, **`--branch`** (repeatable), **`--label`** (repeatable), **`--priority`**, **`--size`**, **`--estimate`**, **`--start-at`**, **`--target-finish-at`**, **`--ai-draft`** (needs `HYPER_PM_AI_API_KEY`)
+## `ticket read`
 
-### `ticket read`
+### One ticket
 
-- **One ticket:** `--id` — JSON includes linked branches, comments, planning fields when set, and PR activity summaries when recorded.
-- **List:** omit `--id` and use filters documented in **`hyper-pm ticket read --help`** (story / epic / status / labels / dates / sort, etc.).
+Pass **`--id`**. JSON includes `storyId` (or `null`), `assignee`, `linkedBranches`, `comments`, `prActivityRecent` when present, and planning fields (`labels`, `priority`, `size`, `estimate`, `startWorkAt`, `targetFinishAt`) when set.
 
-### `ticket update`
+### List tickets (omit `--id`)
 
-- **Required:** `--id`
-- **Patches:** title, body, status, story link (`--story` / `--unlink-story`), assignee, branches, labels, planning fields, clears for each family, **`--ai-improve`** (requires `--body` and API key).
+**Scope (mutually exclusive):**
 
-### `ticket delete`
+| Flag              | Meaning                                       |
+| ----------------- | --------------------------------------------- |
+| `--story <id>`    | Only tickets under this story                 |
+| `--epic <id>`     | Only tickets whose story belongs to this epic |
+| `--without-story` | Only tickets **without** a story              |
 
-Soft-delete with **`--id`**.
+**Filters**
+
+| Flag                                                    | Meaning                                                                                                               |
+| ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `--status <s>`                                          | **Repeatable** — ticket matches if status is any listed value (`backlog`, `todo`, `in_progress`, `done`, `cancelled`) |
+| `--priority <p>`                                        | **Repeatable** — OR match on priority                                                                                 |
+| `--size <s>`                                            | **Repeatable** — OR match on size                                                                                     |
+| `--label <name>`                                        | **Repeatable** — ticket must have **every** listed label                                                              |
+| `--estimate-min <n>` / `--estimate-max <n>`             | Inclusive bounds on `estimate`                                                                                        |
+| `--start-after` / `--start-before`                      | ISO-8601 inclusive bounds on `startWorkAt`                                                                            |
+| `--target-finish-after` / `--target-finish-before`      | ISO-8601 inclusive bounds on `targetFinishAt`                                                                         |
+| `--created-after` / `--created-before`                  | Inclusive bounds on `createdAt`                                                                                       |
+| `--updated-after` / `--updated-before`                  | Inclusive bounds on `updatedAt`                                                                                       |
+| `--status-changed-after` / `--status-changed-before`    | Inclusive bounds on `statusChangedAt`                                                                                 |
+| `--created-by` / `--updated-by` / `--status-changed-by` | Substring match (case-sensitive) on actor fields                                                                      |
+| `--title-contains <text>`                               | Case-insensitive substring on title                                                                                   |
+| `--github-linked`                                       | Only tickets with a linked GitHub issue number                                                                        |
+| `--branch <name>`                                       | Normalized **exact** match on a linked branch                                                                         |
+
+**Sort (list mode only)**
+
+| Flag                | Meaning                                                                                                                                                                                                                          |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--sort-by <field>` | One of: `id`, `title`, `status`, `storyId`, `createdAt`, `updatedAt`, `statusChangedAt`, `assignee`, `githubIssueNumber`, `lastPrActivityAt`, `priority`, `size`, `estimate`, `startWorkAt`, `targetFinishAt` (default **`id`**) |
+| `--sort-dir <d>`    | `asc` or `desc` (default **`asc`**; ties break on `id` ascending)                                                                                                                                                                |
+
+## `ticket update`
+
+| Flag                                                                                 | Notes                                                                      |
+| ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
+| `--id <id>`                                                                          | **Required**                                                               |
+| `--title`, `--body`, `--status`                                                      | Standard patches                                                           |
+| `--story <id>`                                                                       | Attach to story (**mutually exclusive** with `--unlink-story`)             |
+| `--unlink-story`                                                                     | Clear story link                                                           |
+| `--assignee <login>`                                                                 | Set assignee (**mutually exclusive** with `--unassign`)                    |
+| `--unassign`                                                                         | Clear assignee                                                             |
+| `--add-branch` / `--remove-branch`                                                   | **Repeatable**; **mutually exclusive** with `--clear-branches`             |
+| `--clear-branches`                                                                   | Remove all linked branches                                                 |
+| `--add-label` / `--remove-label`                                                     | **Repeatable**; **mutually exclusive** with `--clear-labels`               |
+| `--clear-labels`                                                                     | Remove all labels                                                          |
+| `--priority`, `--size`, `--estimate`                                                 | Set planning fields; each has a matching **`--clear-*`**                   |
+| `--start-at` / `--clear-start-at`, `--target-finish-at` / `--clear-target-finish-at` | Planned dates                                                              |
+| `--ai-improve`                                                                       | Rewrite `--body` with AI — **requires** `--body` and `HYPER_PM_AI_API_KEY` |
 
 ## `ticket work`
 
-Starts work in the **primary clone** (not the data worktree):
+Runs in the **primary clone** (not the data worktree).
 
-- **Required:** `--id`
-- **Optional:** `--branch` (default `hyper-pm/<id>` with numeric suffix if taken), `--from` ref for the fork point.
+| Flag              | Required | Description                                                                                                        |
+| ----------------- | -------- | ------------------------------------------------------------------------------------------------------------------ |
+| `--id <id>`       | yes      | Ticket to start                                                                                                    |
+| `--branch <name>` | no       | Preferred local branch (default `hyper-pm/<id>`). If taken, suffixes `-2`, `-3`, … on the **whole** preferred name |
+| `--from <ref>`    | no       | Fork point; default: remote HEAD when present, else `main`, `master`, or `HEAD`                                    |
 
-Creates and checks out the branch, sets ticket to **`in_progress`**, and appends the branch to **linked branches**. Rejects **`done`** / **`cancelled`**.
+Creates and checks out the branch, sets ticket to **`in_progress`**, appends branch to linked branches. **Rejects** tickets already **`done`** or **`cancelled`**. Success JSON includes `branch` and, when suffixed, `branchPreferred`.
 
 ## `ticket comment`
 
-Append a durable comment event:
+| Flag            | Required                   |
+| --------------- | -------------------------- |
+| `--id <id>`     | yes                        |
+| `--body <text>` | yes — non-empty after trim |
 
-- **Required:** `--id`, **`--body`** (non-empty after trim)
+## `ticket delete`
+
+| Flag        | Required |
+| ----------- | -------- |
+| `--id <id>` | yes      |
+
+Soft-delete.
+
+## `ticket import-github`
+
+Creates local tickets for GitHub issues not yet represented in hyper-pm.
+
+| Flag           | Description                                                                   |
+| -------------- | ----------------------------------------------------------------------------- |
+| `--dry-run`    | List candidates and skips; **no** JSONL writes                                |
+| `--story <id>` | Attach every imported ticket to this story (must exist)                       |
+| `--state <s>`  | `open` · `closed` · `all` (default **`all`**) — passed to GitHub’s issue list |
+| `--issue <n>`  | **Repeatable** or comma-separated — only those issue numbers                  |
+
+Requires **`issueMapping: "ticket"`** in config. Skips pull requests, issues already linked to a ticket, and issues whose body contains a non-empty `hyper_pm_id` in the JSON fence. After a real import, run **`sync`** once so outbound sync can refresh GitHub bodies.
 
 <Callout type="info">
 
-GitHub sync rules for assignees and issue creation vs updates are summarized on [GitHub sync](/integrations/github-sync).
+GitHub sync rules (assignees, when issues are created vs updated) are summarized on [GitHub sync](/integrations/github-sync).
 
 </Callout>

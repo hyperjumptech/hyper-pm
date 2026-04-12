@@ -2,6 +2,7 @@
   "title": "CLI reference",
   "icon": "Terminal",
   "pages": [
+    "command-overview",
     "global-options",
     "init-doctor",
     "epics-stories",

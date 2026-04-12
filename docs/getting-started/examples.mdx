@@ -1,0 +1,144 @@
+---
+title: Examples
+description: Copy-paste recipes for common hyper-pm CLI tasks.
+icon: FlaskConical
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+Replace placeholders like `<epic-id>` with ids from **`epic read`** / **`story read`** / **`ticket read`** (JSON `id` fields, or the first column in **`--format text`** tables).
+
+## Bootstrap a repo
+
+```bash
+cd /path/to/your/git/repo
+hyper-pm init
+hyper-pm doctor
+```
+
+## Create a full hierarchy (JSON ids)
+
+```bash
+# Create and capture ids with jq (default output is JSON)
+EPIC_ID=$(hyper-pm epic create --title "Payments rollout" | jq -r '.id')
+STORY_ID=$(hyper-pm story create --title "ACH refunds" --epic "$EPIC_ID" | jq -r '.id')
+hyper-pm ticket create --title "Idempotent webhook handler" --story "$STORY_ID" \
+  --priority high --size m --label backend --label payments
+```
+
+## Human-readable tables
+
+```bash
+hyper-pm --format text epic read
+hyper-pm --format text story read --epic <epic-id>
+hyper-pm --format text ticket read --story <story-id>
+```
+
+## Standalone ticket (no story)
+
+```bash
+hyper-pm ticket create --title "Chore: rotate CI token" --status backlog
+```
+
+## List and filter tickets
+
+```bash
+# Active work
+hyper-pm --format text ticket read --status todo --status in_progress
+
+# Everything under one epic (via story membership)
+hyper-pm --format text ticket read --epic <epic-id>
+
+# Triage: unlinked tickets only
+hyper-pm --format text ticket read --without-story
+
+# By label (repeat --label; ticket must have every listed label)
+hyper-pm --format text ticket read --label bug --label customer
+
+# Sorted by last update
+hyper-pm --format text ticket read --sort-by updatedAt --sort-dir desc
+```
+
+## Start work from a ticket
+
+```bash
+hyper-pm ticket work --id <ticket-id>
+# optional: custom branch name or fork point
+hyper-pm ticket work --id <ticket-id> --branch feature/my-fix --from origin/main
+```
+
+## Comments and status
+
+```bash
+hyper-pm ticket comment --id <ticket-id> --body "Verified on staging; ready for review."
+hyper-pm ticket update --id <ticket-id> --status in_progress
+hyper-pm ticket update --id <ticket-id> --status done
+```
+
+## Planning fields patch
+
+```bash
+hyper-pm ticket update --id <ticket-id> \
+  --priority urgent \
+  --size s \
+  --estimate 3 \
+  --start-at "2026-04-14T09:00:00Z" \
+  --target-finish-at "2026-04-18T17:00:00Z"
+```
+
+Clear planning fields when needed:
+
+```bash
+hyper-pm ticket update --id <ticket-id> --clear-priority --clear-estimate
+```
+
+## Audit trail (text)
+
+```bash
+hyper-pm --format text audit --limit 20
+hyper-pm --format text audit --type TicketUpdated --entity-id <ticket-id>
+hyper-pm --format text audit --text-style plain-links --limit 50
+```
+
+## Sync and import (GitHub)
+
+```bash
+export GITHUB_REPO="owner/repo"
+hyper-pm sync
+```
+
+Import issues as local tickets (requires `issueMapping: "ticket"` in config — see [GitHub sync](/integrations/github-sync)):
+
+```bash
+hyper-pm ticket import-github --dry-run
+hyper-pm ticket import-github --story <story-id> --state open
+hyper-pm ticket import-github --issue 120 --issue 121
+```
+
+<Callout type="info">
+
+After a real import, run **`sync`** once so outbound sync can normalize GitHub bodies with the hyper-pm metadata fence.
+
+</Callout>
+
+## Web UI: `POST /api/run`
+
+With **`hyper-pm-web`** running (default **`http://127.0.0.1:3847`**), **`argv`** is only the subcommand tail — the server injects **`--repo`**, **`--temp-dir`**, and **`--format json`** (do not put those in **`argv`**).
+
+```bash
+curl -sS -X POST "http://127.0.0.1:3847/api/run" \
+  -H "Content-Type: application/json" \
+  -d '{"argv":["epic","read"]}' | jq .
+```
+
+Bearer auth when **`HYPER_PM_WEB_TOKEN`** is set: add **`-H "Authorization: Bearer $HYPER_PM_WEB_TOKEN"`**. More detail: [Web UI](/integrations/web-ui).
+
+## MCP: `hyper_pm_run`
+
+MCP clients call the **`hyper_pm_run`** tool with JSON like **`{"argv":["ticket","read","--id","…"]}`** and optional **`repo`**, **`sync`**, etc. See [MCP server](/integrations/mcp-server).
+
+## Point at another clone
+
+```bash
+hyper-pm --repo /path/to/other/checkout --format text epic read
+```

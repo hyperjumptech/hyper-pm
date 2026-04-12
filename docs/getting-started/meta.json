@@ -1,6 +1,6 @@
 {
   "title": "Getting started",
   "icon": "Rocket",
-  "pages": ["install", "quickstart", "configuration"],
+  "pages": ["install", "quickstart", "user-guide", "examples", "configuration"],
   "defaultOpen": true
 }

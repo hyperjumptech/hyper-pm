@@ -1,25 +1,57 @@
 ---
 title: Web UI (hyper-pm-web)
-description: Local browser UI that wraps the hyper-pm CLI bundle.
+description: Local browser UI and HTTP API around the hyper-pm CLI — install, env, security, and automation.
 icon: Monitor
 ---
 
 import { Callout } from "fumadocs-ui/components/callout";
 import { Step, Steps } from "fumadocs-ui/components/steps";
 
-**`hyper-pm-web`** serves a small **local** UI around the same **`hyper-pm/dist/main.cjs`** binary the CLI uses, so behavior stays aligned.
+**`hyper-pm-web`** is a **small local server** that serves a browser UI and an HTTP API. Every action still runs the same bundled **`hyper-pm`** binary as the [CLI](/cli/command-overview), so behavior, data, and GitHub sync match what you get in the terminal.
+
+Use it when you prefer **clicking and forms** over shell flags, or when you want a **stable `POST /api/run`** endpoint for scripts (with the server fixing repo and temp paths).
+
+## What you get in the browser
+
+The UI is organized in a **sidebar**, roughly:
+
+- **Overview** — high-level view of the managed repo.
+- **Epics**, **Stories**, **Tickets** — list, open, create, edit, and delete work items (same semantics as CLI CRUD).
+- **Tools** — utilities that still go through the CLI.
+- **Advanced CLI** — send **raw `argv`** (subcommand tokens only; see below) for anything not wrapped as a form.
+
+Ticket flows include **comments** on tickets, aligned with [`ticket comment`](/cli/tickets).
 
 ## Security defaults
 
 <Callout type="warn">
 
-- Defaults to **127.0.0.1** — see **`HYPER_PM_WEB_HOST`**. Do not expose the dev server to untrusted networks without TLS and authentication.
-- **`--repo`**, **`--temp-dir`**, and **`--format`** are **chosen by the server**; clients cannot override them through `argv`.
+- The server defaults to **127.0.0.1** — see **`HYPER_PM_WEB_HOST`**. Do not expose it to untrusted networks without TLS and a real authentication layer.
+- **`--repo`**, **`--temp-dir`**, and **`--format`** are **always chosen by the server**. The browser (or API client) **cannot** inject them in `argv` (requests that try are rejected).
 - Optional **`HYPER_PM_WEB_TOKEN`**: when set, **`POST /api/run`** requires **`Authorization: Bearer <token>`**.
 
 </Callout>
 
-## Run locally
+## Install and run
+
+### From npm (published packages)
+
+The npm package name is **`hyper-pm-web`**. It depends on **`hyper-pm`**; installing the web app normally pulls the CLI as a dependency.
+
+```bash
+npm install -g hyper-pm-web
+```
+
+From the Git repository you want to manage (so the default repo is your `cwd`), start the server:
+
+```bash
+cd /path/to/your/git/repo
+hyper-pm-web
+```
+
+Or set **`HYPER_PM_WEB_REPO`** to an absolute repo path and run from anywhere.
+
+### From this monorepo (development)
 
 <Steps>
   <Step>
@@ -35,29 +67,101 @@ pnpm --filter hyper-pm build
 
 ### Configure (optional)
 
-See **`apps/hyper-pm-web/README.md`** and root **`packages/env/env.example`**. Common variables include **`HYPER_PM_WEB_REPO`** (repo root for `--repo`, defaulting to server `cwd`), **`HYPER_PM_WEB_TEMP_DIR`** (worktree parent or ephemeral temp cleaned on shutdown), plus **`HYPER_PM_WEB_HOST`**, **`HYPER_PM_WEB_PORT`**, and **`HYPER_PM_WEB_TOKEN`**.
+Environment variables are documented in **`apps/hyper-pm-web/env.example`** and the root **`packages/env/env.example`**.
+
+| Variable                    | Role                                                                                                                                                                         |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`HYPER_PM_WEB_REPO`**     | Git repo root passed as **`--repo`** (default: server process **`cwd`**, resolved to an absolute path)                                                                       |
+| **`HYPER_PM_WEB_TEMP_DIR`** | Parent for disposable worktrees (**`--temp-dir`**). If unset, the server creates a unique directory under the OS temp dir and **deletes it** on **`SIGINT`** / **`SIGTERM`** |
+| **`HYPER_PM_WEB_HOST`**     | Bind address (default **`127.0.0.1`**)                                                                                                                                       |
+| **`HYPER_PM_WEB_PORT`**     | Port (default **`3847`**)                                                                                                                                                    |
+| **`HYPER_PM_WEB_TOKEN`**    | If set, bearer auth for **`POST /api/run`**                                                                                                                                  |
+| **`HYPER_PM_CLI_PATH`**     | Absolute path to **`hyper-pm/dist/main.cjs`** when package resolution is not enough                                                                                          |
 
   </Step>
   <Step>
 
 ### Start the app
 
-From the Git repo you want to manage (so default `--repo` is correct):
-
 ```bash
+cd /path/to/your/git/repo
 pnpm --filter hyper-pm-web dev
 ```
 
-Or production-style **`build`** then **`start`**.
+Production-style:
+
+```bash
+pnpm --filter hyper-pm-web build
+pnpm --filter hyper-pm-web start
+```
 
   </Step>
 </Steps>
 
 Open the printed URL (default **`http://127.0.0.1:3847`**).
 
+## GitHub sync and AI helpers
+
+The child CLI inherits the **same environment variables** as a normal shell: **`GITHUB_TOKEN`**, **`GITHUB_REPO`**, **`HYPER_PM_AI_API_KEY`**, etc. Configure them in the shell profile, process manager, or container before starting **`hyper-pm-web`**.
+
+See [GitHub sync](/integrations/github-sync) and [Configuration](/getting-started/configuration).
+
 ## HTTP API
 
-- **`GET /api/health`** — `{ ok, repoPath, tempDirParent }`
-- **`POST /api/run`** — JSON body compatible with **`@workspace/hyper-pm-cli-runner`** input, except **`repo`** and **`tempDir`** in `argv` are ignored or forbidden; the server merges configured paths.
+### `GET /api/health`
 
-GitHub sync and other features use the **same environment variables** as the CLI.
+Returns JSON like:
+
+```json
+{ "ok": true, "repoPath": "…", "tempDirParent": "…" }
+```
+
+Use it for readiness checks.
+
+### `POST /api/run`
+
+Runs **`hyper-pm`** with **`--format json`**, server-provided **`--repo`** and **`--temp-dir`**, plus your body fields.
+
+**Body shape** matches **`@workspace/hyper-pm-cli-runner`** input **except** `repo` and `tempDir` are **omitted** from the JSON (they are merged server-side). Optional fields: `cwd`, `actor`, `githubRepo`, `dataBranch`, `remote`, `sync`, `keepWorktree`.
+
+**`argv`** (required) is the list of tokens **after** global options — same as MCP’s [`hyper_pm_run`](/integrations/mcp-server), for example:
+
+```json
+{ "argv": ["epic", "read"] }
+```
+
+`argv` **must not** contain `--repo`, `--temp-dir`, or `--format` (or `=` forms); the server injects those.
+
+**Success response** (`200`):
+
+```json
+{
+  "ok": true,
+  "exitCode": 0,
+  "stdout": "…",
+  "stderr": "…",
+  "signal": null,
+  "json": {}
+}
+```
+
+`json` is the parsed **`stdout`** when it is valid JSON, otherwise `null`.
+
+**`curl`** example (with optional bearer token):
+
+```bash
+curl -sS -X POST "http://127.0.0.1:3847/api/run" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $HYPER_PM_WEB_TOKEN" \
+  -d '{"argv":["doctor"]}' | jq .
+```
+
+## Publishing (maintainers)
+
+Publish **`hyper-pm` first**, then **`hyper-pm-web`**, using **`pnpm publish`** from each app so `workspace:` ranges rewrite correctly. Details in **`apps/hyper-pm-web/README.md`**.
+
+<Callout type="info">
+
+For terminal-first workflows and every CLI flag in one place, see [Examples](/getting-started/examples) and the [CLI reference](/cli/command-overview).
+
+</Callout>

@@ -1,0 +1,63 @@
+---
+title: Command overview
+description: All hyper-pm CLI commands at a glance with links to detailed reference.
+icon: LayoutList
+---
+
+Every invocation follows:
+
+```text
+hyper-pm [global options] <command> [subcommand] [options]
+```
+
+**Global options** must appear **before** `<command>`. Details: [Global options](/cli/global-options).
+
+## Top-level commands
+
+| Command  | Purpose                                              | Details                                    |
+| -------- | ---------------------------------------------------- | ------------------------------------------ |
+| `init`   | Create/adopt data branch and `.hyper-pm/config.json` | [init & doctor](/cli/init-doctor)          |
+| `doctor` | Validate event log replay                            | [init & doctor](/cli/init-doctor)          |
+| `epic`   | Epics CRUD                                           | [Epics & stories](/cli/epics-stories)      |
+| `story`  | Stories CRUD                                         | [Epics & stories](/cli/epics-stories)      |
+| `ticket` | Tickets CRUD, work, comment, GitHub import           | [Tickets](/cli/tickets)                    |
+| `repo`   | Read-only helpers on the checked-out repo            | [repo, sync & audit](/cli/repo-sync-audit) |
+| `sync`   | GitHub Issues sync                                   | [repo, sync & audit](/cli/repo-sync-audit) |
+| `audit`  | Query durable events                                 | [repo, sync & audit](/cli/repo-sync-audit) |
+
+## `epic` subcommands
+
+`create` · `read` · `update` · `delete` — see [Epics & stories](/cli/epics-stories).
+
+## `story` subcommands
+
+`create` · `read` · `update` · `delete` — see [Epics & stories](/cli/epics-stories).
+
+## `ticket` subcommands
+
+| Subcommand      | Summary                                                       |
+| --------------- | ------------------------------------------------------------- |
+| `create`        | New ticket; optional `--story`, planning fields, `--ai-draft` |
+| `read`          | One ticket (`--id`) or filtered list (omit `--id`)            |
+| `update`        | Patch fields; branch/label add/remove/clear; `--ai-improve`   |
+| `work`          | Create/checkout branch, set `in_progress`, link branch        |
+| `comment`       | Append local comment event                                    |
+| `delete`        | Soft-delete                                                   |
+| `import-github` | Import GitHub issues as tickets                               |
+
+Full flags: [Tickets](/cli/tickets).
+
+## `repo` subcommands
+
+| Subcommand               | Summary                                 |
+| ------------------------ | --------------------------------------- |
+| `commit-authors`         | Authors by email (optional login guess) |
+| `suggest-assignee-login` | Guess GitHub login from `--email`       |
+
+## Help in the terminal
+
+```bash
+hyper-pm --help
+hyper-pm ticket --help
+hyper-pm ticket read --help
+```
