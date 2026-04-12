@@ -978,38 +978,58 @@ async function renderEpicEdit() {
       showForm ? "Edit epic" : markdownToPlainTextForUiChrome(row.title),
     );
     const readBlock = `
-        <div class="panel-head">
-          <div>
-            <p class="muted" style="margin:0 0 0.25rem;font-size:0.8125rem">Epic</p>
-            <h2 style="margin:0"><span class="md-inline">${markdownInlineHtml(row.title)}</span></h2>
+        <div class="issue-detail-layout">
+          <div class="issue-main">
+            <div class="panel-head issue-panel-head">
+              <div>
+                <p class="muted issue-kicker" style="margin:0 0 0.25rem">Epic</p>
+                <h2 class="issue-title"><span class="md-inline">${markdownInlineHtml(row.title)}</span></h2>
+              </div>
+              <div class="panel-head-actions">
+                <button type="button" class="btn-subtle" id="btnEpicHistory">History</button>
+                <button type="button" class="btn-subtle" id="btnEpicSeeStories">See stories</button>
+                <button type="button" class="btn-subtle" id="btnEpicEnterEdit">Edit</button>
+              </div>
+            </div>
+            <div class="issue-body">
+              ${readBodyHtml(row.body)}
+            </div>
           </div>
-          <div class="panel-head-actions">
-            <button type="button" class="btn-subtle" id="btnEpicHistory">History</button>
-            <button type="button" class="btn-subtle" id="btnEpicSeeStories">See stories</button>
-            <button type="button" class="btn-subtle" id="btnEpicEnterEdit">Edit</button>
-          </div>
-        </div>
-        <p class="muted" style="margin-top:0">${idChip(id)}</p>
-        <div class="read-stack">
-          ${readRowHtml("Status", badgeHtml(String(row.status)))}
-          ${readRowHtml("Description", readBodyHtml(row.body))}
+          <aside class="issue-sidebar" aria-label="Epic metadata">
+            <div class="read-stack issue-meta-stack">
+              ${readRowHtml("Epic ID", idChip(id))}
+              ${readRowHtml("Status", badgeHtml(String(row.status)))}
+            </div>
+          </aside>
         </div>`;
     const formBlock = `
-        <div class="panel-head" style="border-bottom:none;padding-bottom:0;margin-bottom:0.5rem">
-          <h2>Edit epic</h2>
-          <button type="button" class="btn-subtle" id="btnEpicSeeStories">See stories</button>
-        </div>
-        <p class="muted" style="margin-top:0">${idChip(id)}</p>
-        <label for="editEpicTitle">Title</label>
-        <input type="text" id="editEpicTitle" value="${escapeHtml(String(row.title))}" />
-        <label for="editEpicBody">Description</label>
-        <textarea id="editEpicBody" rows="6">${escapeHtml(String(row.body ?? ""))}</textarea>
-        <label for="editEpicStatus">Status</label>
-        ${statusOptionsHtml("editEpicStatus", String(row.status))}
-        <div class="row">
-          <button type="button" class="primary" id="btnSaveEpic">Save changes</button>
-          <button type="button" class="ghost" id="btnEpicCancelEdit">Cancel</button>
-          <button type="button" class="danger" id="btnDeleteEpic">Delete epic</button>
+        <div class="issue-detail-layout">
+          <div class="issue-main">
+            <div class="panel-head issue-panel-head" style="border-bottom:none;padding-bottom:0;margin-bottom:0.5rem">
+              <h2 class="issue-title">Edit epic</h2>
+              <div class="panel-head-actions">
+                <button type="button" class="btn-subtle" id="btnEpicSeeStories">See stories</button>
+              </div>
+            </div>
+            <label for="editEpicTitle">Title</label>
+            <input type="text" id="editEpicTitle" value="${escapeHtml(String(row.title))}" />
+            <label for="editEpicBody">Description</label>
+            <textarea id="editEpicBody" rows="6">${escapeHtml(String(row.body ?? ""))}</textarea>
+            <div class="row">
+              <button type="button" class="primary" id="btnSaveEpic">Save changes</button>
+              <button type="button" class="ghost" id="btnEpicCancelEdit">Cancel</button>
+              <button type="button" class="danger" id="btnDeleteEpic">Delete epic</button>
+            </div>
+          </div>
+          <aside class="issue-sidebar" aria-label="Epic fields">
+            <div class="read-stack issue-meta-stack">
+              ${readRowHtml("Epic ID", idChip(id))}
+              <div class="read-row">
+                <div class="read-label">Status</div>
+                <div class="read-value">${statusOptionsHtml("editEpicStatus", String(row.status))}</div>
+              </div>
+            </div>
+          </aside>
         </div>`;
     const epicTopBar = `
         <nav class="detail-page-top" aria-label="Epic">
@@ -1308,44 +1328,63 @@ async function renderStoryEdit() {
       showForm ? "Edit story" : markdownToPlainTextForUiChrome(row.title),
     );
     const readBlock = `
-        <div class="panel-head">
-          <div>
-            <p class="muted" style="margin:0 0 0.25rem;font-size:0.8125rem">Story</p>
-            <h2 style="margin:0"><span class="md-inline">${markdownInlineHtml(row.title)}</span></h2>
+        <div class="issue-detail-layout">
+          <div class="issue-main">
+            <div class="panel-head issue-panel-head">
+              <div>
+                <p class="muted issue-kicker" style="margin:0 0 0.25rem">Story</p>
+                <h2 class="issue-title"><span class="md-inline">${markdownInlineHtml(row.title)}</span></h2>
+              </div>
+              <div class="panel-head-actions">
+                <button type="button" class="btn-subtle" id="btnStoryHistory">History</button>
+                <button type="button" class="btn-subtle" id="btnStoryOpenEpic">Open epic</button>
+                <button type="button" class="btn-subtle" id="btnStorySeeTickets">See tickets</button>
+                <button type="button" class="btn-subtle" id="btnStoryEnterEdit">Edit</button>
+              </div>
+            </div>
+            <div class="issue-body">
+              ${readBodyHtml(row.body)}
+            </div>
           </div>
-          <div class="panel-head-actions">
-            <button type="button" class="btn-subtle" id="btnStoryHistory">History</button>
-            <button type="button" class="btn-subtle" id="btnStoryOpenEpic">Open epic</button>
-            <button type="button" class="btn-subtle" id="btnStorySeeTickets">See tickets</button>
-            <button type="button" class="btn-subtle" id="btnStoryEnterEdit">Edit</button>
-          </div>
-        </div>
-        <p class="muted" style="margin-top:0">${idChip(id)}</p>
-        <div class="read-stack">
-          ${readRowHtml("Epic", epicReadInner)}
-          ${readRowHtml("Status", badgeHtml(String(row.status)))}
-          ${readRowHtml("Description", readBodyHtml(row.body))}
+          <aside class="issue-sidebar" aria-label="Story metadata">
+            <div class="read-stack issue-meta-stack">
+              ${readRowHtml("Story ID", idChip(id))}
+              ${readRowHtml("Epic", epicReadInner)}
+              ${readRowHtml("Status", badgeHtml(String(row.status)))}
+            </div>
+          </aside>
         </div>`;
     const formBlock = `
-        <div class="panel-head" style="border-bottom:none;padding-bottom:0;margin-bottom:0.5rem">
-          <h2>Edit story</h2>
-          <div class="panel-head-actions">
-            <button type="button" class="btn-subtle" id="btnStoryOpenEpic">Open epic</button>
-            <button type="button" class="btn-subtle" id="btnStorySeeTickets">See tickets</button>
+        <div class="issue-detail-layout">
+          <div class="issue-main">
+            <div class="panel-head issue-panel-head" style="border-bottom:none;padding-bottom:0;margin-bottom:0.5rem">
+              <h2 class="issue-title">Edit story</h2>
+              <div class="panel-head-actions">
+                <button type="button" class="btn-subtle" id="btnStoryOpenEpic">Open epic</button>
+                <button type="button" class="btn-subtle" id="btnStorySeeTickets">See tickets</button>
+              </div>
+            </div>
+            <p class="muted" style="font-size:0.85rem;margin-top:0">To move a story to another epic, delete and recreate it (CLI does not support changing epic on update).</p>
+            <label for="editStoryTitle">Title</label>
+            <input type="text" id="editStoryTitle" value="${escapeHtml(String(row.title))}" />
+            <label for="editStoryBody">Description</label>
+            <textarea id="editStoryBody" rows="6">${escapeHtml(String(row.body ?? ""))}</textarea>
+            <div class="row">
+              <button type="button" class="primary" id="btnSaveStory">Save</button>
+              <button type="button" class="ghost" id="btnStoryCancelEdit">Cancel</button>
+              <button type="button" class="danger" id="btnDeleteStory">Delete</button>
+            </div>
           </div>
-        </div>
-        <p class="muted" style="margin-top:0">${idChip(id)} · ${epicFormLine}</p>
-        <p class="muted" style="font-size:0.85rem">To move a story to another epic, delete and recreate it (CLI does not support changing epic on update).</p>
-        <label for="editStoryTitle">Title</label>
-        <input type="text" id="editStoryTitle" value="${escapeHtml(String(row.title))}" />
-        <label for="editStoryBody">Description</label>
-        <textarea id="editStoryBody" rows="6">${escapeHtml(String(row.body ?? ""))}</textarea>
-        <label for="editStoryStatus">Status</label>
-        ${statusOptionsHtml("editStoryStatus", String(row.status))}
-        <div class="row">
-          <button type="button" class="primary" id="btnSaveStory">Save</button>
-          <button type="button" class="ghost" id="btnStoryCancelEdit">Cancel</button>
-          <button type="button" class="danger" id="btnDeleteStory">Delete</button>
+          <aside class="issue-sidebar" aria-label="Story fields">
+            <div class="read-stack issue-meta-stack">
+              ${readRowHtml("Story ID", idChip(id))}
+              ${readRowHtml("Epic", epicFormLine)}
+              <div class="read-row">
+                <div class="read-label">Status</div>
+                <div class="read-value">${statusOptionsHtml("editStoryStatus", String(row.status))}</div>
+              </div>
+            </div>
+          </aside>
         </div>`;
     const storyTopBar = `
         <nav class="detail-page-top" aria-label="Story">
