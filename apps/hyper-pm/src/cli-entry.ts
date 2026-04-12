@@ -328,10 +328,14 @@ export const runCli = async (
     .command("read")
     .description("Show one story or list all when --id is omitted")
     .option("--id <id>", "story id; omit to list")
+    .option(
+      "--epic <id>",
+      "when listing (no --id), only stories under this epic",
+    )
     .action(async function (this: Command) {
       const g = readGlobals(this);
-      const o = this.opts<{ id?: string }>();
-      await readStory(g, o.id, deps);
+      const o = this.opts<{ id?: string; epic?: string }>();
+      await readStory(g, { id: o.id, epicId: o.epic }, deps);
     });
   story
     .command("update")
@@ -433,10 +437,14 @@ export const runCli = async (
     .command("read")
     .description("Show one ticket or list all when --id is omitted")
     .option("--id <id>", "ticket id; omit to list")
+    .option(
+      "--story <id>",
+      "when listing (no --id), only tickets under this story",
+    )
     .action(async function (this: Command) {
       const g = readGlobals(this);
-      const o = this.opts<{ id?: string }>();
-      await readTicket(g, o.id, deps);
+      const o = this.opts<{ id?: string; story?: string }>();
+      await readTicket(g, { id: o.id, storyId: o.story }, deps);
     });
   ticket
     .command("update")
@@ -852,15 +860,18 @@ const readEpic = async (
 };
 
 /**
- * Prints one story by id, or all story summaries when `id` is omitted or empty.
+ * Prints one story by id, or story list summaries when `id` is omitted or empty.
+ *
+ * When listing, optional `epicId` filters to stories under that epic (epic must exist).
+ * `epicId` is ignored when `id` is set (single-story read).
  *
  * @param g - Global CLI flags (repo, format, worktree, etc.).
- * @param id - Story id, or omit for list mode.
+ * @param opts - `id` for one row; omit for list. `epicId` narrows the list when `id` is omitted.
  * @param deps - Injectable process boundary (log, error, exit).
  */
 const readStory = async (
   g: GlobalOpts,
-  id: string | undefined,
+  opts: { id?: string; epicId?: string },
   deps: {
     exit: (code: number) => never;
     log: typeof console.log;
@@ -882,10 +893,29 @@ const readStory = async (
     try {
       const lines = await readAllEventLines(session.worktreePath);
       const proj = replayEvents(lines);
+      const { id, epicId } = opts;
       if (id === undefined || id === "") {
-        deps.log(
-          formatOutput(g.format, { items: listActiveStorySummaries(proj) }),
-        );
+        const epicFilter =
+          epicId !== undefined && epicId !== "" ? epicId : undefined;
+        if (epicFilter !== undefined) {
+          const epicRow = proj.epics.get(epicFilter);
+          if (!epicRow || epicRow.deleted) {
+            deps.error("Epic not found");
+            exitCode = ExitCode.UserError;
+          } else {
+            deps.log(
+              formatOutput(g.format, {
+                items: listActiveStorySummaries(proj, {
+                  epicId: epicFilter,
+                }),
+              }),
+            );
+          }
+        } else {
+          deps.log(
+            formatOutput(g.format, { items: listActiveStorySummaries(proj) }),
+          );
+        }
       } else {
         const row = proj.stories.get(id);
         if (!row || row.deleted) {
@@ -906,15 +936,18 @@ const readStory = async (
 };
 
 /**
- * Prints one ticket by id, or all ticket summaries when `id` is omitted or empty.
+ * Prints one ticket by id, or ticket list summaries when `id` is omitted or empty.
+ *
+ * When listing, optional `storyId` filters to tickets under that story (story must exist).
+ * `storyId` is ignored when `id` is set (single-ticket read).
  *
  * @param g - Global CLI flags (repo, format, worktree, etc.).
- * @param id - Ticket id, or omit for list mode.
+ * @param opts - `id` for one row; omit for list. `storyId` narrows the list when `id` is omitted.
  * @param deps - Injectable process boundary (log, error, exit).
  */
 const readTicket = async (
   g: GlobalOpts,
-  id: string | undefined,
+  opts: { id?: string; storyId?: string },
   deps: {
     exit: (code: number) => never;
     log: typeof console.log;
@@ -936,10 +969,29 @@ const readTicket = async (
     try {
       const lines = await readAllEventLines(session.worktreePath);
       const proj = replayEvents(lines);
+      const { id, storyId } = opts;
       if (id === undefined || id === "") {
-        deps.log(
-          formatOutput(g.format, { items: listActiveTicketSummaries(proj) }),
-        );
+        const storyFilter =
+          storyId !== undefined && storyId !== "" ? storyId : undefined;
+        if (storyFilter !== undefined) {
+          const storyRow = proj.stories.get(storyFilter);
+          if (!storyRow || storyRow.deleted) {
+            deps.error("Story not found");
+            exitCode = ExitCode.UserError;
+          } else {
+            deps.log(
+              formatOutput(g.format, {
+                items: listActiveTicketSummaries(proj, {
+                  storyId: storyFilter,
+                }),
+              }),
+            );
+          }
+        } else {
+          deps.log(
+            formatOutput(g.format, { items: listActiveTicketSummaries(proj) }),
+          );
+        }
       } else {
         const row = proj.tickets.get(id);
         if (!row || row.deleted) {

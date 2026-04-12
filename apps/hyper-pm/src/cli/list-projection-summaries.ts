@@ -61,16 +61,35 @@ export const listActiveEpicSummaries = (
     }))
     .sort((a, b) => a.id.localeCompare(b.id));
 
+/** Optional filter for {@link listActiveStorySummaries}. */
+export type ListActiveStorySummariesOptions = {
+  /** When set, only stories with this `epicId` are included. */
+  epicId?: string;
+};
+
+/** Optional filter for {@link listActiveTicketSummaries}. */
+export type ListActiveTicketSummariesOptions = {
+  /** When set, only tickets with this `storyId` are included. */
+  storyId?: string;
+};
+
 /**
  * Returns non-deleted stories as id/title/epicId tuples, sorted by id.
  *
  * @param projection - Replayed event projection.
+ * @param options - When `epicId` is set, restricts to stories under that epic; omit for all active stories.
+ * @returns Sorted list summaries.
  */
 export const listActiveStorySummaries = (
   projection: Projection,
+  options?: ListActiveStorySummariesOptions,
 ): StoryListSummary[] =>
   [...projection.stories.values()]
-    .filter((s) => !s.deleted)
+    .filter(
+      (s) =>
+        !s.deleted &&
+        (options?.epicId === undefined || s.epicId === options.epicId),
+    )
     .map((s) => ({
       id: s.id,
       title: s.title,
@@ -87,12 +106,19 @@ export const listActiveStorySummaries = (
  * Returns non-deleted tickets as compact rows, sorted by id.
  *
  * @param projection - Replayed event projection.
+ * @param options - When `storyId` is set, restricts to tickets under that story; omit for all active tickets.
+ * @returns Sorted list summaries.
  */
 export const listActiveTicketSummaries = (
   projection: Projection,
+  options?: ListActiveTicketSummariesOptions,
 ): TicketListSummary[] =>
   [...projection.tickets.values()]
-    .filter((t) => !t.deleted)
+    .filter(
+      (t) =>
+        !t.deleted &&
+        (options?.storyId === undefined || t.storyId === options.storyId),
+    )
     .map((t) => {
       const recent = t.prActivityRecent;
       const last =

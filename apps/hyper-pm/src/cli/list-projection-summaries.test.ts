@@ -112,6 +112,62 @@ describe("listActiveStorySummaries", () => {
       { id: "x", epicId: "e1", title: "X", status: "in_progress", ...audit },
     ]);
   });
+
+  it("filters by epicId when option is set", () => {
+    const projection = projectionWith({
+      stories: new Map([
+        [
+          "s-a",
+          {
+            id: "s-a",
+            epicId: "e1",
+            title: "A",
+            body: "",
+            status: "backlog",
+            ...audit,
+            ...statusAudit,
+          },
+        ],
+        [
+          "s-b",
+          {
+            id: "s-b",
+            epicId: "e2",
+            title: "B",
+            body: "",
+            status: "todo",
+            ...audit,
+            ...statusAudit,
+          },
+        ],
+      ]),
+    });
+    expect(listActiveStorySummaries(projection, { epicId: "e1" })).toEqual([
+      { id: "s-a", epicId: "e1", title: "A", status: "backlog", ...audit },
+    ]);
+  });
+
+  it("returns empty when epicId filter matches no stories", () => {
+    const projection = projectionWith({
+      stories: new Map([
+        [
+          "s-a",
+          {
+            id: "s-a",
+            epicId: "e1",
+            title: "A",
+            body: "",
+            status: "backlog",
+            ...audit,
+            ...statusAudit,
+          },
+        ],
+      ]),
+    });
+    expect(listActiveStorySummaries(projection, { epicId: "missing" })).toEqual(
+      [],
+    );
+  });
 });
 
 describe("listActiveTicketSummaries", () => {
@@ -204,5 +260,70 @@ describe("listActiveTicketSummaries", () => {
         ...audit,
       },
     ]);
+  });
+
+  it("filters by storyId when option is set", () => {
+    const projection = projectionWith({
+      tickets: new Map([
+        [
+          "t-a",
+          {
+            id: "t-a",
+            storyId: "s1",
+            title: "On S1",
+            body: "",
+            status: "todo",
+            linkedPrs: [],
+            ...audit,
+            ...statusAudit,
+          },
+        ],
+        [
+          "t-b",
+          {
+            id: "t-b",
+            storyId: "s2",
+            title: "On S2",
+            body: "",
+            status: "backlog",
+            linkedPrs: [],
+            ...audit,
+            ...statusAudit,
+          },
+        ],
+      ]),
+    });
+    expect(listActiveTicketSummaries(projection, { storyId: "s1" })).toEqual([
+      {
+        id: "t-a",
+        title: "On S1",
+        status: "todo",
+        storyId: "s1",
+        ...audit,
+      },
+    ]);
+  });
+
+  it("returns empty when storyId filter matches no tickets", () => {
+    const projection = projectionWith({
+      tickets: new Map([
+        [
+          "t-a",
+          {
+            id: "t-a",
+            storyId: "s1",
+            title: "On S1",
+            body: "",
+            status: "todo",
+            linkedPrs: [],
+            ...audit,
+            ...statusAudit,
+          },
+        ],
+      ]),
+    });
+    expect(
+      listActiveTicketSummaries(projection, { storyId: "missing" }),
+    ).toEqual([]);
   });
 });

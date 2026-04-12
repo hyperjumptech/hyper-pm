@@ -236,6 +236,22 @@ describe("hyper-pm CLI (e2e)", () => {
       }),
     );
 
+    const storyListByEpic = await invokeHyperPmCli(
+      ["story", "read", "--epic", "epic-e2e-1"],
+      { repoRoot, tempDir, clock },
+    );
+    expect(storyListByEpic.code).toBe(ExitCode.Success);
+    expect(storyListByEpic.json).toEqual(
+      expect.objectContaining({
+        items: [
+          expect.objectContaining({
+            id: "story-e2e-1",
+            epicId: "epic-e2e-1",
+          }),
+        ],
+      }),
+    );
+
     const ticketCreate = await invokeHyperPmCli(
       [
         "ticket",
@@ -262,6 +278,22 @@ describe("hyper-pm CLI (e2e)", () => {
     expect(ticketRead.code).toBe(ExitCode.Success);
     expect(ticketRead.json).toEqual(
       expect.objectContaining({ id: "ticket-e2e-1", title: "Ticket A" }),
+    );
+
+    const ticketListByStory = await invokeHyperPmCli(
+      ["ticket", "read", "--story", "story-e2e-1"],
+      { repoRoot, tempDir, clock },
+    );
+    expect(ticketListByStory.code).toBe(ExitCode.Success);
+    expect(ticketListByStory.json).toEqual(
+      expect.objectContaining({
+        items: [
+          expect.objectContaining({
+            id: "ticket-e2e-1",
+            storyId: "story-e2e-1",
+          }),
+        ],
+      }),
     );
 
     const ticketUpdate = await invokeHyperPmCli(

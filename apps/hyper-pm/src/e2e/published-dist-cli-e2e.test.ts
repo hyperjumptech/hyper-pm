@@ -5,7 +5,10 @@ import { join } from "node:path";
 import { env } from "@workspace/env";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { ExitCode } from "../cli/exit-codes";
-import { createGitRepoWithInitialCommit, git } from "./hyper-pm-e2e-git-fixtures";
+import {
+  createGitRepoWithInitialCommit,
+  git,
+} from "./hyper-pm-e2e-git-fixtures";
 import {
   assertDistMainExists,
   getDistMainPath,
@@ -171,6 +174,22 @@ describe("dist/main.cjs subprocess (JSON workflow parity)", () => {
       }),
     );
 
+    const storyListByEpic = invokeBundled(
+      ["story", "read", "--epic", "epic-dist-e2e-1"],
+      { repoRoot, tempDir },
+    );
+    expect(storyListByEpic.code).toBe(ExitCode.Success);
+    expect(storyListByEpic.json).toEqual(
+      expect.objectContaining({
+        items: [
+          expect.objectContaining({
+            id: "story-dist-e2e-1",
+            epicId: "epic-dist-e2e-1",
+          }),
+        ],
+      }),
+    );
+
     const ticketCreate = invokeBundled(
       [
         "ticket",
@@ -197,6 +216,22 @@ describe("dist/main.cjs subprocess (JSON workflow parity)", () => {
     expect(ticketRead.code).toBe(ExitCode.Success);
     expect(ticketRead.json).toEqual(
       expect.objectContaining({ id: "ticket-dist-e2e-1", title: "Ticket A" }),
+    );
+
+    const ticketListByStory = invokeBundled(
+      ["ticket", "read", "--story", "story-dist-e2e-1"],
+      { repoRoot, tempDir },
+    );
+    expect(ticketListByStory.code).toBe(ExitCode.Success);
+    expect(ticketListByStory.json).toEqual(
+      expect.objectContaining({
+        items: [
+          expect.objectContaining({
+            id: "ticket-dist-e2e-1",
+            storyId: "story-dist-e2e-1",
+          }),
+        ],
+      }),
     );
 
     const ticketUpdate = invokeBundled(

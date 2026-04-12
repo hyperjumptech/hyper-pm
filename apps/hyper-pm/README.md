@@ -60,18 +60,18 @@ Uses global options only (no subcommand-specific flags).
 | Subcommand | Description                  | Options                                                                                                                              |
 | ---------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | `create`   | Create a story under an epic | **Required:** `--title <t>`, `--epic <id>`. **Optional:** `--body <b>` (default `""`), `--id <id>`, `--status <s>` (default backlog) |
-| `read`     | One story or list all        | `--id <id>`                                                                                                                          |
+| `read`     | One story or list all        | `--id <id>`. **Optional when listing:** `--epic <id>` (only stories under that epic)                                                 |
 | `update`   | Patch a story                | **Required:** `--id <id>`. **Optional:** `--title <t>`, `--body <b>`, `--status <s>` (same status values as epic)                    |
 | `delete`   | Soft-delete a story          | **Required:** `--id <id>`                                                                                                            |
 
 ### `ticket`
 
-| Subcommand | Description                   | Options                                                                                                                                                                                               |
-| ---------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `create`   | Create a ticket under a story | **Required:** `--title <t>`, `--story <id>`. **Optional:** `--body <b>` (default `""`), `--id <id>`, `--status <s>` (default `todo`), `--ai-draft` (draft body via AI; needs `HYPER_PM_AI_API_KEY`)   |
-| `read`     | One ticket or list all        | `--id <id>` (JSON includes `prActivityRecent` / list rows include `lastPrActivity` when `GithubPrActivity` events were replayed)                                                                      |
-| `update`   | Patch a ticket                | **Required:** `--id <id>`. **Optional:** `--title <t>`, `--body <b>`, `--status <s>` (same status values), `--ai-improve` (rewrite `--body` with AI; **requires** `--body` and `HYPER_PM_AI_API_KEY`) |
-| `delete`   | Soft-delete a ticket          | **Required:** `--id <id>`                                                                                                                                                                             |
+| Subcommand | Description                   | Options                                                                                                                                                                                                     |
+| ---------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `create`   | Create a ticket under a story | **Required:** `--title <t>`, `--story <id>`. **Optional:** `--body <b>` (default `""`), `--id <id>`, `--status <s>` (default `todo`), `--ai-draft` (draft body via AI; needs `HYPER_PM_AI_API_KEY`)         |
+| `read`     | One ticket or list all        | `--id <id>` (JSON includes `prActivityRecent` / list rows include `lastPrActivity` when `GithubPrActivity` events were replayed). **Optional when listing:** `--story <id>` (only tickets under that story) |
+| `update`   | Patch a ticket                | **Required:** `--id <id>`. **Optional:** `--title <t>`, `--body <b>`, `--status <s>` (same status values), `--ai-improve` (rewrite `--body` with AI; **requires** `--body` and `HYPER_PM_AI_API_KEY`)       |
+| `delete`   | Soft-delete a ticket          | **Required:** `--id <id>`                                                                                                                                                                                   |
 
 ### `sync`
 
