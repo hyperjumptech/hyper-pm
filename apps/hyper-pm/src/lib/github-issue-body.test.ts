@@ -49,6 +49,7 @@ describe("github-issue-body", () => {
         estimate: 3,
         startWorkAt: "2026-02-01T00:00:00.000Z",
         targetFinishAt: "2026-02-10T00:00:00.000Z",
+        dependsOn: ["dep1", "dep2"],
       },
     });
     const meta = parseHyperPmFenceObject(body);
@@ -59,6 +60,7 @@ describe("github-issue-body", () => {
       estimate: 3,
       start_work_at: "2026-02-01T00:00:00.000Z",
       target_finish_at: "2026-02-10T00:00:00.000Z",
+      depends_on: ["dep1", "dep2"],
     });
   });
 
@@ -104,8 +106,13 @@ describe("github-issue-body", () => {
     const cleared = inboundTicketPlanningPayloadFromFenceMeta({
       priority: null,
       estimate: null,
+      depends_on: null,
     });
-    expect(cleared).toEqual({ priority: null, estimate: null });
+    expect(cleared).toEqual({
+      priority: null,
+      estimate: null,
+      dependsOn: null,
+    });
   });
 
   it("inboundTicketPlanningPayloadFromFenceMeta ignores invalid values", () => {
@@ -115,6 +122,16 @@ describe("github-issue-body", () => {
       start_work_at: "not-a-date",
     });
     expect(patch).toEqual({});
+  });
+
+  it("inboundTicketPlanningPayloadFromFenceMeta maps depends_on and drops junk", () => {
+    // Act
+    const patch = inboundTicketPlanningPayloadFromFenceMeta({
+      depends_on: ["a", 1, " a ", "b"],
+    });
+
+    // Assert
+    expect(patch).toEqual({ dependsOn: ["a", "b"] });
   });
 
   it("ticketPlanningForGithubIssueBody returns undefined when no planning set", () => {
@@ -129,5 +146,17 @@ describe("github-issue-body", () => {
       priority: "urgent",
       estimate: 1,
     });
+  });
+
+  it("ticketPlanningForGithubIssueBody includes dependsOn when non-empty", () => {
+    // Setup
+    const t = baseTicket();
+    t.dependsOn = ["x", "y"];
+
+    // Act
+    const plan = ticketPlanningForGithubIssueBody(t);
+
+    // Assert
+    expect(plan).toEqual({ dependsOn: ["x", "y"] });
   });
 });

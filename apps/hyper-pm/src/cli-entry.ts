@@ -16,6 +16,11 @@ import {
   normalizeTicketBranchName,
 } from "./lib/normalize-ticket-branches";
 import {
+  normalizeTicketDependsOnIds,
+  ticketDependsOnListsEqual,
+  validateTicketDependsOnForWrite,
+} from "./lib/ticket-depends-on";
+import {
   normalizeTicketLabelList,
   ticketLabelListsEqual,
   tryParseTicketPriority,
@@ -376,6 +381,8 @@ const buildTicketListQueryFromReadListOpts = (
     startBefore?: string;
     targetFinishAfter?: string;
     targetFinishBefore?: string;
+    /** When set and non-empty (trimmed), list tickets whose `dependsOn` includes this id. */
+    dependsOn?: string;
   },
   deps: {
     exit: (code: number) => never;
@@ -527,6 +534,10 @@ const buildTicketListQueryFromReadListOpts = (
   );
   if (targetFinishBeforeMs !== undefined) {
     query.targetFinishBeforeMs = targetFinishBeforeMs;
+  }
+
+  if (o.dependsOn !== undefined && o.dependsOn.trim() !== "") {
+    query.dependsOnIncludesId = o.dependsOn.trim();
   }
 
   return Object.keys(query).length > 0 ? query : undefined;
@@ -857,6 +868,12 @@ export const runCli = async (
       (value: string, previous: string[]) => [...previous, value],
       [],
     )
+    .option(
+      "--depends-on <id>",
+      "prerequisite ticket id (repeatable)",
+      (value: string, previous: string[]) => [...previous, value],
+      [],
+    )
     .option("--priority <p>", "low|medium|high|urgent")
     .option("--size <s>", "xs|s|m|l|xl")
     .option("--estimate <n>", "non-negative estimate (e.g. story points)")
@@ -874,6 +891,7 @@ export const runCli = async (
         assignee?: string;
         branch?: string | string[];
         label?: string | string[];
+        dependsOn?: string | string[];
         priority?: string;
         size?: string;
         estimate?: string;
@@ -941,6 +959,11 @@ export const runCli = async (
         "--target-finish-at",
         deps,
       );
+      const dependsOnTokensCreate = normalizeCliStringList(o.dependsOn);
+      const dependsOnNormCreate = normalizeTicketDependsOnIds(
+        dependsOnTokensCreate,
+      );
+
       const planningPayload: Record<string, unknown> = {
         ...labelsPayloadCreate,
         ...(priorityParsed !== undefined ? { priority: priorityParsed } : {}),
@@ -977,6 +1000,18 @@ export const runCli = async (
         const branchesNorm = normalizeTicketBranchListFromStrings(branchTokens);
         const branchesPayload =
           branchesNorm.length > 0 ? { branches: branchesNorm } : {};
+        const dependsOnErr = validateTicketDependsOnForWrite({
+          projection: proj,
+          fromTicketId: id,
+          nextDependsOn: dependsOnNormCreate,
+        });
+        if (dependsOnErr !== undefined) {
+          throw new Error(dependsOnErr);
+        }
+        const dependsOnPayloadCreate =
+          dependsOnNormCreate.length > 0
+            ? { dependsOn: dependsOnNormCreate }
+            : {};
         const evt = makeEvent(
           "TicketCreated",
           {
@@ -987,6 +1022,7 @@ export const runCli = async (
             ...(status !== undefined ? { status } : {}),
             ...assigneeCreate,
             ...branchesPayload,
+            ...dependsOnPayloadCreate,
             ...planningPayload,
           },
           deps.clock,
@@ -1062,6 +1098,10 @@ export const runCli = async (
     .option(
       "--branch <name>",
       "when listing (no --id): only tickets linked to this branch (normalized exact match)",
+    )
+    .option(
+      "--depends-on <id>",
+      "when listing (no --id): only tickets that list this ticket id in dependsOn",
     )
     .option(
       "--priority <p>",
@@ -1144,6 +1184,7 @@ export const runCli = async (
         startBefore?: string;
         targetFinishAfter?: string;
         targetFinishBefore?: string;
+        dependsOn?: string;
         sortBy?: string;
         sortDir?: string;
       }>();
@@ -1199,6 +1240,19 @@ export const runCli = async (
       "remove all planning labels from the ticket",
       false,
     )
+    .option(
+      "--add-depends-on <id>",
+      "add a prerequisite ticket id (repeatable)",
+      (value: string, previous: string[]) => [...previous, value],
+      [],
+    )
+    .option(
+      "--remove-depends-on <id>",
+      "remove a prerequisite ticket id (repeatable)",
+      (value: string, previous: string[]) => [...previous, value],
+      [],
+    )
+    .option("--clear-depends-on", "remove all ticket dependencies", false)
     .option("--priority <p>", "low|medium|high|urgent")
     .option("--clear-priority", "remove priority", false)
     .option("--size <s>", "xs|s|m|l|xl")
@@ -1227,6 +1281,9 @@ export const runCli = async (
         addLabel?: string | string[];
         removeLabel?: string | string[];
         clearLabels?: boolean;
+        addDependsOn?: string | string[];
+        removeDependsOn?: string | string[];
+        clearDependsOn?: boolean;
         priority?: string;
         clearPriority?: boolean;
         size?: string;
@@ -1291,6 +1348,17 @@ export const runCli = async (
       ) {
         deps.error(
           "Cannot use --clear-labels with --add-label or --remove-label",
+        );
+        deps.exit(ExitCode.UserError);
+      }
+      const addDependsOnTokens = normalizeCliStringList(o.addDependsOn);
+      const removeDependsOnTokens = normalizeCliStringList(o.removeDependsOn);
+      if (
+        o.clearDependsOn === true &&
+        (addDependsOnTokens.length > 0 || removeDependsOnTokens.length > 0)
+      ) {
+        deps.error(
+          "Cannot use --clear-depends-on with --add-depends-on or --remove-depends-on",
         );
         deps.exit(ExitCode.UserError);
       }
@@ -1443,6 +1511,38 @@ export const runCli = async (
           }
           if (!ticketLabelListsEqual(curTicket.labels, nextLabels)) {
             payload["labels"] = nextLabels;
+          }
+        }
+        const wantsDependsOnChange =
+          o.clearDependsOn === true ||
+          addDependsOnTokens.length > 0 ||
+          removeDependsOnTokens.length > 0;
+        if (wantsDependsOnChange) {
+          let nextDepends: string[];
+          if (o.clearDependsOn === true) {
+            nextDepends = [];
+          } else {
+            const removeDepSet = new Set(
+              normalizeTicketDependsOnIds(removeDependsOnTokens),
+            );
+            nextDepends = normalizeTicketDependsOnIds(
+              (curTicket.dependsOn ?? []).filter((d) => !removeDepSet.has(d)),
+            );
+            nextDepends = normalizeTicketDependsOnIds([
+              ...nextDepends,
+              ...addDependsOnTokens,
+            ]);
+          }
+          const depErr = validateTicketDependsOnForWrite({
+            projection: proj,
+            fromTicketId: o.id,
+            nextDependsOn: nextDepends,
+          });
+          if (depErr !== undefined) {
+            throw new Error(depErr);
+          }
+          if (!ticketDependsOnListsEqual(curTicket.dependsOn, nextDepends)) {
+            payload["dependsOn"] = nextDepends;
           }
         }
         if (priorityUpdate !== undefined) {
@@ -2390,6 +2490,7 @@ const readTicket = async (
     startBefore?: string;
     targetFinishAfter?: string;
     targetFinishBefore?: string;
+    dependsOn?: string;
     sortBy?: string;
     sortDir?: string;
   },

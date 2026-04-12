@@ -326,6 +326,7 @@ describe("runGithubOutboundSync", () => {
             priority: "high",
             size: "m",
             estimate: 3,
+            dependsOn: ["dep1"],
             ...audit,
             ...statusAudit,
           },
@@ -356,6 +357,8 @@ describe("runGithubOutboundSync", () => {
     expect(body).toContain('"priority": "high"');
     expect(body).toContain('"size": "m"');
     expect(body).toContain('"estimate": 3');
+    expect(body).toContain('"depends_on"');
+    expect(body).toContain('"dep1"');
   });
 });
 
@@ -604,6 +607,84 @@ describe("runGithubInboundSync", () => {
         payload: expect.objectContaining({
           priority: "urgent",
           estimate: 8,
+        }),
+      }),
+    );
+  });
+
+  it("appends GithubInboundUpdate when fenced depends_on differs from the ticket", async () => {
+    const body = buildGithubIssueBody({
+      hyperPmId: "t1",
+      type: "ticket",
+      parentIds: {},
+      description: "hello",
+      ticketPlanning: { dependsOn: ["d2", "d3"] },
+    });
+    const paginate = vi.fn().mockResolvedValue([
+      {
+        id: 504,
+        body,
+        title: "[hyper-pm] My ticket",
+        state: "open",
+        user: { login: "author" },
+        assignees: [],
+        labels: [{ name: "hyper-pm" }, { name: "ticket" }],
+      },
+    ]);
+    const octokit = {
+      rest: {
+        issues: {
+          update: vi.fn(),
+          create: vi.fn(),
+          listForRepo: vi.fn(),
+        },
+      },
+      paginate,
+    } as unknown as Octokit;
+    const projection: Projection = {
+      ...epicStory(),
+      tickets: new Map([
+        [
+          "t1",
+          {
+            id: "t1",
+            storyId: "s1",
+            title: "My ticket",
+            body: "hello",
+            status: "todo",
+            linkedPrs: [],
+            linkedBranches: [],
+            dependsOn: ["d1"],
+            ...audit,
+            ...statusAudit,
+          },
+        ],
+      ]),
+    };
+    const clock = { now: () => new Date("2026-03-04T00:00:00.000Z") };
+
+    await runGithubInboundSync({
+      dataRoot: "/tmp/hyper-pm-in",
+      projection,
+      config: baseConfig,
+      deps: {
+        octokit,
+        owner: "acme",
+        repo: "app",
+        clock,
+      },
+    });
+
+    const inboundCalls = vi
+      .mocked(appendEventLine)
+      .mock.calls.filter(
+        (c) => (c[1] as { type?: string }).type === "GithubInboundUpdate",
+      );
+    expect(inboundCalls.length).toBe(1);
+    expect(inboundCalls[0]?.[1]).toEqual(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          dependsOn: ["d2", "d3"],
         }),
       }),
     );

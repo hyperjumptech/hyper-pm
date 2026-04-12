@@ -1,5 +1,9 @@
 import { normalizeTicketBranchListFromPayloadValue } from "../lib/normalize-ticket-branches";
 import {
+  parseTicketDependsOnFromPayloadValue,
+  ticketDependsOnListsEqual,
+} from "../lib/ticket-depends-on";
+import {
   ticketLabelListsEqual,
   ticketLabelsFromPayloadValue,
 } from "../lib/ticket-planning-fields";
@@ -103,6 +107,21 @@ export const pruneTicketUpdatePayloadAgainstRow = (
     const nextLabels = parsed ?? [];
     if (!ticketLabelListsEqual(cur.labels, nextLabels)) {
       out["labels"] = draft["labels"];
+    }
+  }
+
+  if (draft["dependsOn"] !== undefined) {
+    if (draft["dependsOn"] === null) {
+      if (!ticketDependsOnListsEqual(cur.dependsOn, [])) {
+        out["dependsOn"] = null;
+      }
+    } else {
+      const parsed = parseTicketDependsOnFromPayloadValue(draft["dependsOn"]);
+      if (parsed !== undefined) {
+        if (!ticketDependsOnListsEqual(cur.dependsOn, parsed)) {
+          out["dependsOn"] = parsed;
+        }
+      }
     }
   }
 

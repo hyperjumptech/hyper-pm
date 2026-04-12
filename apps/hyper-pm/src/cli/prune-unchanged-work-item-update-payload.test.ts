@@ -101,6 +101,30 @@ describe("pruneTicketUpdatePayloadAgainstRow", () => {
     // Assert
     expect(out).toEqual({ id: "t1" });
   });
+
+  it("keeps dependsOn when the list changes", () => {
+    // Setup
+    const cur = ticketFixture({ dependsOn: ["a"] });
+    const draft = { id: "t1", dependsOn: ["a", "b"] };
+
+    // Act
+    const out = pruneTicketUpdatePayloadAgainstRow(cur, draft);
+
+    // Assert
+    expect(out).toEqual({ id: "t1", dependsOn: ["a", "b"] });
+  });
+
+  it("emits dependsOn null when clearing existing dependencies", () => {
+    // Setup
+    const cur = ticketFixture({ dependsOn: ["x"] });
+    const draft = { id: "t1", dependsOn: null };
+
+    // Act
+    const out = pruneTicketUpdatePayloadAgainstRow(cur, draft);
+
+    // Assert
+    expect(out).toEqual({ id: "t1", dependsOn: null });
+  });
 });
 
 describe("isNoOpUpdatePayload", () => {

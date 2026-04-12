@@ -60,6 +60,8 @@ export type TicketListSummary = {
   estimate?: number;
   startWorkAt?: string;
   targetFinishAt?: string;
+  /** Prerequisite ticket ids when non-empty. */
+  dependsOn?: string[];
 } & AuditSummaryFields;
 
 /**
@@ -189,6 +191,9 @@ export const listActiveTicketSummaries = (
       ...(t.startWorkAt !== undefined ? { startWorkAt: t.startWorkAt } : {}),
       ...(t.targetFinishAt !== undefined
         ? { targetFinishAt: t.targetFinishAt }
+        : {}),
+      ...(t.dependsOn !== undefined && t.dependsOn.length > 0
+        ? { dependsOn: t.dependsOn }
         : {}),
       ...(t.linkedBranches.length > 0
         ? { linkedBranches: t.linkedBranches }

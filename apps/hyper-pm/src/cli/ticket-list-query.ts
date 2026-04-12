@@ -7,7 +7,8 @@ import type { Projection, TicketRecord } from "../storage/projection";
  *
  * Dimensions combine with **AND**. Multiple `--status` values combine with **OR**
  * (ticket matches if its status is any listed status). The same **OR** rule applies
- * to repeated `--priority` and `--size` flags.
+ * to repeated `--priority` and `--size` flags. When `dependsOnIncludesId` is set,
+ * the ticket must list that id in `dependsOn`.
  *
  * Time bounds are **inclusive** on the parsed instant (`>=` after, `<=` before).
  */
@@ -68,6 +69,10 @@ export type TicketListQuery = {
   targetFinishAfterMs?: number;
   /** Inclusive upper bound on `targetFinishAt` (epoch ms). */
   targetFinishBeforeMs?: number;
+  /**
+   * When set, the ticket's `dependsOn` list must include this id (exact match after trim).
+   */
+  dependsOnIncludesId?: string;
 };
 
 /**
@@ -260,6 +265,14 @@ export const ticketMatchesTicketListQuery = (
   }
   if (query.targetFinishBeforeMs !== undefined) {
     if (targetMs === null || targetMs > query.targetFinishBeforeMs) {
+      return false;
+    }
+  }
+
+  const dependsOnIncludesId = query.dependsOnIncludesId;
+  if (dependsOnIncludesId !== undefined) {
+    const deps = ticket.dependsOn ?? [];
+    if (!deps.includes(dependsOnIncludesId)) {
       return false;
     }
   }

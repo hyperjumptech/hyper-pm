@@ -135,6 +135,20 @@ const workItemUpdateAspects = (
       }
     }
   }
+  if (kind === "ticket" && payload["dependsOn"] !== undefined) {
+    if (payload["dependsOn"] === null) {
+      aspects.push("cleared ticket dependencies");
+    } else {
+      const d = normalizeBranchList(payload["dependsOn"]);
+      if (d.length > 0 && d.length <= MAX_BRANCH_NAMES_TO_LIST) {
+        aspects.push(`set ticket dependencies to (${d.join(", ")})`);
+      } else if (d.length > MAX_BRANCH_NAMES_TO_LIST) {
+        aspects.push("updated ticket dependencies");
+      } else {
+        aspects.push("cleared ticket dependencies");
+      }
+    }
+  }
   if (kind === "ticket" && payload["priority"] !== undefined) {
     if (payload["priority"] === null) {
       aspects.push("cleared priority");
@@ -252,6 +266,7 @@ export const buildAuditLinkMetadata = (
       if (p["status"] !== undefined) meta["status"] = String(p["status"]);
       if (p["assignee"] !== undefined) meta["assignee"] = p["assignee"];
       if (p["labels"] !== undefined) meta["labels"] = p["labels"];
+      if (p["dependsOn"] !== undefined) meta["dependsOn"] = p["dependsOn"];
       if (p["priority"] !== undefined) meta["priority"] = p["priority"];
       if (p["size"] !== undefined) meta["size"] = p["size"];
       if (p["estimate"] !== undefined) meta["estimate"] = p["estimate"];
@@ -322,6 +337,14 @@ const formatEpicStoryTicketCreated = (
         parts.push(`with labels (${lb.join(", ")})`);
       } else if (lb.length > MAX_BRANCH_NAMES_TO_LIST) {
         parts.push("with labels");
+      }
+    }
+    if (p["dependsOn"] !== undefined) {
+      const d = normalizeBranchList(p["dependsOn"]);
+      if (d.length > 0 && d.length <= MAX_BRANCH_NAMES_TO_LIST) {
+        parts.push(`depending on (${d.join(", ")})`);
+      } else if (d.length > MAX_BRANCH_NAMES_TO_LIST) {
+        parts.push("with ticket dependencies");
       }
     }
     if (p["priority"] !== undefined) {
@@ -430,6 +453,18 @@ export const formatAuditHumanSentence = (evt: EventLine): string => {
           bits.push("cleared labels");
         } else {
           bits.push("updated labels");
+        }
+      }
+      if (p["dependsOn"] !== undefined) {
+        if (p["dependsOn"] === null) {
+          bits.push("cleared ticket dependencies");
+        } else {
+          const d = normalizeBranchList(p["dependsOn"]);
+          if (d.length > 0 && d.length <= MAX_BRANCH_NAMES_TO_LIST) {
+            bits.push(`dependencies: ${d.join(", ")}`);
+          } else {
+            bits.push("updated ticket dependencies");
+          }
         }
       }
       if (p["priority"] !== undefined) {

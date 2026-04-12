@@ -66,6 +66,18 @@ const workItemUpdateAspects = (
       );
     }
   }
+  if (kind === "ticket" && payload["dependsOn"] !== undefined) {
+    if (payload["dependsOn"] === null) {
+      aspects.push("Ticket dependencies cleared.");
+    } else {
+      const d = normalizeStrList(payload["dependsOn"]);
+      aspects.push(
+        d.length > 0
+          ? `Depends on: ${d.join(", ")}.`
+          : "Ticket dependencies cleared.",
+      );
+    }
+  }
   if (kind === "ticket" && payload["priority"] !== undefined) {
     aspects.push(
       payload["priority"] === null

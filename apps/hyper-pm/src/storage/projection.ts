@@ -13,6 +13,7 @@ import {
   resolveTicketStatusFromUpdatePayload,
   type WorkItemStatus,
 } from "../lib/work-item-status";
+import { parseTicketDependsOnFromPayloadValue } from "../lib/ticket-depends-on";
 import {
   readTicketEstimatePatch,
   readTicketIsoInstantPatch,
@@ -95,6 +96,11 @@ export type TicketRecord = {
   startWorkAt?: string;
   /** ISO-8601 instant for planned completion. */
   targetFinishAt?: string;
+  /**
+   * Other ticket ids this ticket depends on (prerequisites), from `TicketCreated` /
+   * `TicketUpdated` / `GithubInboundUpdate` payloads.
+   */
+  dependsOn?: string[];
   /** Chronological thread from `TicketCommentAdded` events (replay order). */
   comments?: TicketCommentRecord[];
   deleted?: boolean;
@@ -262,6 +268,12 @@ const applyTicketPlanningFieldsFromCreatePayload = (
   if (typeof tf === "string") {
     row.targetFinishAt = tf;
   }
+  if (Object.prototype.hasOwnProperty.call(payload, "dependsOn")) {
+    const v = parseTicketDependsOnFromPayloadValue(payload["dependsOn"]);
+    if (v !== undefined && v.length > 0) {
+      row.dependsOn = v;
+    }
+  }
 };
 
 /**
@@ -317,6 +329,20 @@ const applyTicketPlanningFieldsFromUpdatePayload = (
     delete row.targetFinishAt;
   } else if (typeof tf === "string") {
     row.targetFinishAt = tf;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "dependsOn")) {
+    if (payload["dependsOn"] === null) {
+      delete row.dependsOn;
+    } else {
+      const v = parseTicketDependsOnFromPayloadValue(payload["dependsOn"]);
+      if (v !== undefined) {
+        if (v.length === 0) {
+          delete row.dependsOn;
+        } else {
+          row.dependsOn = v;
+        }
+      }
+    }
   }
 };
 

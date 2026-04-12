@@ -351,4 +351,22 @@ describe("ticketMatchesTicketListQuery", () => {
       }),
     ).toBe(true);
   });
+
+  it("filters by dependsOnIncludesId", () => {
+    // Setup
+    const projection = emptyProjection();
+    const q: TicketListQuery = { dependsOnIncludesId: "dep1" };
+
+    // Assert
+    expect(
+      ticketMatchesTicketListQuery(
+        { ...baseTicket, dependsOn: ["dep1", "dep2"] },
+        projection,
+        q,
+      ),
+    ).toBe(true);
+    expect(ticketMatchesTicketListQuery({ ...baseTicket }, projection, q)).toBe(
+      false,
+    );
+  });
 });

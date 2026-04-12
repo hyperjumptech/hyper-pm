@@ -13,6 +13,10 @@ import {
   mergeOutboundGithubIssueLabelsForTicket,
   ticketLabelsFromGithubIssueLabels,
 } from "../lib/github-issue-labels";
+import {
+  parseTicketDependsOnFromPayloadValue,
+  ticketDependsOnListsEqual,
+} from "../lib/ticket-depends-on";
 import { ticketLabelListsEqual } from "../lib/ticket-planning-fields";
 import {
   resolveTicketInboundStatus,
@@ -205,6 +209,22 @@ export const runGithubInboundSync = async (params: {
     const planningSource = inboundTicketPlanningPayloadFromFenceMeta(meta);
     const planningPayload: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(planningSource)) {
+      if (k === "dependsOn") {
+        if (v === null) {
+          if (!ticketDependsOnListsEqual(ticket.dependsOn, [])) {
+            planningPayload["dependsOn"] = null;
+          }
+        } else if (Array.isArray(v)) {
+          const parsed = parseTicketDependsOnFromPayloadValue(v);
+          if (
+            parsed !== undefined &&
+            !ticketDependsOnListsEqual(ticket.dependsOn, parsed)
+          ) {
+            planningPayload["dependsOn"] = parsed;
+          }
+        }
+        continue;
+      }
       const tk = k as keyof TicketRecord;
       const cur = ticket[tk];
       if (v === null) {

@@ -1,4 +1,5 @@
 import type { TicketRecord } from "../storage/projection";
+import { parseTicketDependsOnFromFenceValue } from "./ticket-depends-on";
 import {
   tryParseTicketPriority,
   tryParseTicketSize,
@@ -13,6 +14,8 @@ export type GithubIssueBodyTicketPlanning = {
   estimate?: number;
   startWorkAt?: string;
   targetFinishAt?: string;
+  /** Prerequisite ticket ids (embedded as `depends_on` in the JSON fence). */
+  dependsOn?: string[];
 };
 
 const FENCE_JSON_RE = /```json\s*([\s\S]*?)```/i;
@@ -133,6 +136,18 @@ export const inboundTicketPlanningPayloadFromFenceMeta = (
     }
   }
 
+  if (Object.prototype.hasOwnProperty.call(meta, "depends_on")) {
+    const v = meta["depends_on"];
+    if (v === null) {
+      out["dependsOn"] = null;
+    } else {
+      const parsed = parseTicketDependsOnFromFenceValue(v);
+      if (parsed !== undefined) {
+        out["dependsOn"] = parsed;
+      }
+    }
+  }
+
   return out;
 };
 
@@ -171,6 +186,9 @@ export const buildGithubIssueBody = (params: {
     if (p.targetFinishAt !== undefined) {
       meta.target_finish_at = p.targetFinishAt;
     }
+    if (p.dependsOn !== undefined && p.dependsOn.length > 0) {
+      meta.depends_on = p.dependsOn;
+    }
   }
   return `${params.description.trim()}\n\n\`\`\`json\n${JSON.stringify(meta, null, 2)}\n\`\`\`\n`;
 };
@@ -198,6 +216,9 @@ export const ticketPlanningForGithubIssueBody = (
   }
   if (ticket.targetFinishAt !== undefined) {
     out.targetFinishAt = ticket.targetFinishAt;
+  }
+  if (ticket.dependsOn !== undefined && ticket.dependsOn.length > 0) {
+    out.dependsOn = ticket.dependsOn;
   }
   return Object.keys(out).length > 0 ? out : undefined;
 };

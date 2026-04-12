@@ -953,4 +953,144 @@ describe("replayEvents", () => {
     ];
     expect(replayEvents(lines).tickets.get("t1")?.labels).toBeUndefined();
   });
+
+  it("applies dependsOn on TicketCreated when valid", () => {
+    const lines = [
+      JSON.stringify({
+        schema: 1,
+        type: "TicketCreated",
+        id: "e1",
+        ts: "2026-01-02T00:00:00.000Z",
+        actor: "a",
+        payload: {
+          id: "t1",
+          title: "T",
+          body: "",
+          status: "todo",
+          dependsOn: ["x", " x "],
+        },
+      }),
+    ];
+    const t = replayEvents(lines).tickets.get("t1");
+    expect(t?.dependsOn).toEqual(["x"]);
+  });
+
+  it("ignores invalid dependsOn on TicketCreated", () => {
+    const lines = [
+      JSON.stringify({
+        schema: 1,
+        type: "TicketCreated",
+        id: "e1",
+        ts: "2026-01-02T00:00:00.000Z",
+        actor: "a",
+        payload: {
+          id: "t1",
+          title: "T",
+          body: "",
+          status: "todo",
+          dependsOn: ["a", 1],
+        },
+      }),
+    ];
+    expect(replayEvents(lines).tickets.get("t1")?.dependsOn).toBeUndefined();
+  });
+
+  it("patches and clears dependsOn via TicketUpdated", () => {
+    const lines = [
+      JSON.stringify({
+        schema: 1,
+        type: "TicketCreated",
+        id: "e1",
+        ts: "2026-01-02T00:00:00.000Z",
+        actor: "a",
+        payload: {
+          id: "t1",
+          title: "T",
+          body: "",
+          status: "todo",
+          dependsOn: ["a"],
+        },
+      }),
+      JSON.stringify({
+        schema: 1,
+        type: "TicketUpdated",
+        id: "e2",
+        ts: "2026-01-03T00:00:00.000Z",
+        actor: "b",
+        payload: { id: "t1", dependsOn: ["b", "c"] },
+      }),
+      JSON.stringify({
+        schema: 1,
+        type: "TicketUpdated",
+        id: "e3",
+        ts: "2026-01-04T00:00:00.000Z",
+        actor: "c",
+        payload: { id: "t1", dependsOn: null },
+      }),
+    ];
+    const t = replayEvents(lines).tickets.get("t1");
+    expect(t?.dependsOn).toBeUndefined();
+  });
+
+  it("clears dependsOn when TicketUpdated sends empty dependsOn array", () => {
+    const lines = [
+      JSON.stringify({
+        schema: 1,
+        type: "TicketCreated",
+        id: "e1",
+        ts: "2026-01-02T00:00:00.000Z",
+        actor: "a",
+        payload: {
+          id: "t1",
+          title: "T",
+          body: "",
+          status: "todo",
+          dependsOn: ["z"],
+        },
+      }),
+      JSON.stringify({
+        schema: 1,
+        type: "TicketUpdated",
+        id: "e2",
+        ts: "2026-01-03T00:00:00.000Z",
+        actor: "b",
+        payload: { id: "t1", dependsOn: [] },
+      }),
+    ];
+    expect(replayEvents(lines).tickets.get("t1")?.dependsOn).toBeUndefined();
+  });
+
+  it("applies dependsOn from GithubInboundUpdate", () => {
+    const lines = [
+      JSON.stringify({
+        schema: 1,
+        type: "TicketCreated",
+        id: "e1",
+        ts: "2026-01-02T00:00:00.000Z",
+        actor: "a",
+        payload: {
+          id: "t1",
+          title: "T",
+          body: "",
+          status: "todo",
+        },
+      }),
+      JSON.stringify({
+        schema: 1,
+        type: "GithubInboundUpdate",
+        id: "e2",
+        ts: "2026-01-03T00:00:00.000Z",
+        actor: "gh",
+        payload: {
+          entity: "ticket",
+          entityId: "t1",
+          dependsOn: ["d1", "d2"],
+        },
+      }),
+    ];
+    expect(replayEvents(lines).tickets.get("t1")?.dependsOn).toEqual([
+      "d1",
+      "d2",
+    ]);
+  });
 });

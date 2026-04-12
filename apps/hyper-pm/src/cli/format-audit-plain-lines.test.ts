@@ -221,6 +221,16 @@ describe("formatAuditHumanSentence", () => {
     expect(line).toMatch(/linked to story s1/);
   });
 
+  it("covers ticket create with dependencies", () => {
+    const line = formatAuditHumanSentence(
+      base({
+        type: "TicketCreated",
+        payload: { id: "t1", dependsOn: ["d1", "d2"] },
+      }),
+    );
+    expect(line).toMatch(/depending on \(d1, d2\)/);
+  });
+
   it("covers ticket update assignee cleared", () => {
     const line = formatAuditHumanSentence(
       base({
@@ -271,6 +281,16 @@ describe("formatAuditHumanSentence", () => {
       }),
     );
     expect(line).toContain("updated linked branches (feat/a, fix/b)");
+  });
+
+  it("lists ticket dependencies on TicketUpdated when few ids", () => {
+    const line = formatAuditHumanSentence(
+      base({
+        type: "TicketUpdated",
+        payload: { id: "t1", dependsOn: ["a", "b"] },
+      }),
+    );
+    expect(line).toContain("set ticket dependencies to (a, b)");
   });
 
   it("covers ticket delete", () => {

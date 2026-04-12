@@ -67,6 +67,21 @@ describe("summarizeAuditEventForWeb", () => {
     expect(r.detailLines).toContain("Labels: a, b.");
   });
 
+  it("describes TicketUpdated dependsOn", () => {
+    // Act
+    const r = summarizeAuditEventForWeb({
+      type: "TicketUpdated",
+      payload: {
+        id: "t1",
+        dependsOn: ["x", "y"],
+      },
+    });
+
+    // Assert
+    expect(r.title).toBe("Ticket updated");
+    expect(r.detailLines).toContain("Depends on: x, y.");
+  });
+
   it("truncates long TicketCommentAdded body", () => {
     // Setup
     const long = `${"word ".repeat(60)}end`;
