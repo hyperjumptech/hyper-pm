@@ -591,6 +591,10 @@ export const runCli = async (
     exit: (code: number) => never;
     log: typeof console.log;
     error: typeof console.error;
+    /**
+     * Progress and diagnostics to stderr (default `console.error`) so `--format json` stdout stays a single JSON value.
+     */
+    info?: (line: string) => void;
     clock: { now: () => Date };
   } = {
     exit: (code) => process.exit(code) as never,
@@ -2053,7 +2057,13 @@ export const runCli = async (
           );
           deps.exit(ExitCode.EnvironmentAuth);
         }
+        const info =
+          deps.info ??
+          ((line: string): void => {
+            console.error(line);
+          });
         const tmpBase = g.tempDir ?? env.TMPDIR ?? tmpdir();
+        info("hyper-pm: GitHub sync — preparing data worktree…");
         const session = await openDataBranchWorktree({
           repoRoot,
           dataBranch: cfg.dataBranch,
@@ -2062,6 +2072,7 @@ export const runCli = async (
           runGit,
         });
         try {
+          info("hyper-pm: GitHub sync — loading local projection…");
           const projection = await loadProjectionFromDataRoot(
             session.worktreePath,
           );
@@ -2083,6 +2094,7 @@ export const runCli = async (
             repo,
             clock: deps.clock,
             outboundActor,
+            reportProgress: info,
           };
           const githubCfg = hyperPmConfigForSyncWithGithub(cfg);
           await runGithubOutboundSync({
@@ -2103,15 +2115,21 @@ export const runCli = async (
           await runGithubPrActivitySync({
             projection: projectionAfterInbound,
             config: githubCfg,
-            deps: defaultGithubPrActivitySyncDeps({
-              dataRoot: session.worktreePath,
-              clock: deps.clock,
-              octokit,
-              owner,
-              repo,
-              actor: outboundActor,
-            }),
+            deps: {
+              ...defaultGithubPrActivitySyncDeps({
+                dataRoot: session.worktreePath,
+                clock: deps.clock,
+                octokit,
+                owner,
+                repo,
+                actor: outboundActor,
+              }),
+              reportProgress: info,
+            },
           });
+          info(
+            "hyper-pm: GitHub sync — committing updates to the data branch…",
+          );
           await commitDataWorktreeIfNeeded(
             session.worktreePath,
             formatDataBranchCommitMessage("hyper-pm: sync", outboundActor),
@@ -2123,6 +2141,7 @@ export const runCli = async (
             dataBranchPush = "skipped_cli";
             dataBranchPushDetail = "skip-push";
           } else {
+            info("hyper-pm: GitHub sync — pushing data branch to remote…");
             const pushResult = await tryPushDataBranchToRemote(
               session.worktreePath,
               cfg.remote,

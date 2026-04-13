@@ -27,7 +27,7 @@ The legacy **`--git-data`** flag is a no-op (plain `sync` is already git-only).
 
 Compares non-reserved labels and the planning JSON fence to the local projection and appends **`GithubInboundUpdate`** when something differs.
 
-After inbound, for tickets that are **not** `done` or `cancelled` and have **linked PR numbers** (from `Refs` / `Closes` / `Fixes` in the body), hyper-pm may load **linked PR timelines** — appending **`GithubPrActivity`** events. Replaying a `GithubPrActivity` with `kind: "opened"` sets the ticket to **`in_progress`**. This issues **extra GitHub API** calls per linked PR.
+After inbound, for tickets that are **not** `done` or `cancelled`, hyper-pm resolves linked PR numbers from **`Refs` / `Closes` / `Fixes` in the ticket body**, from the **GitHub issue timeline** for `githubIssueNumber`, and (when needed) from a **search** of open PRs with `linked:issue` whose bodies reference that issue (`Closes` / `Fixes` / `Resolves` / `Refs`). It then loads **PR timelines**, appending **`GithubPrActivity`** events. Replaying a `GithubPrActivity` with `kind: "opened"` (only while the PR is **open**) sets the ticket to **`in_progress`**. This uses **extra GitHub API** calls (including search when any ticket has a linked GitHub issue).
 
 ## Issue creation vs update
 

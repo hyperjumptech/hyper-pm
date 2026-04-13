@@ -5,9 +5,11 @@ import { buildPrOpenSourceId } from "../lib/github-pr-activity";
 import type { WorkItemStatus } from "../lib/work-item-status";
 import { appendEventLine } from "../storage/append-event";
 import type { EventLine } from "../storage/event-line";
-import type { Projection } from "../storage/projection";
+import type { Projection, TicketRecord } from "../storage/projection";
 import { readAllEventLines } from "../storage/read-event-lines";
 import { collectGithubPrActivitySourceIdsFromLines } from "./collect-github-pr-activity-source-ids";
+import { loadOpenPrsByClosingIssueIndex } from "./load-open-prs-by-closing-issue-index";
+import { listPullNumbersLinkedToGithubIssue } from "./list-pull-numbers-linked-to-github-issue";
 import {
   buildPrOpenedPayloadFromPull,
   mapGithubTimelineItemToActivityPayload,
@@ -23,6 +25,10 @@ export type GithubPrActivitySyncDeps = {
   actor: string;
   readEventLines: () => Promise<string[]>;
   appendEvent: (evt: EventLine) => Promise<void>;
+  /**
+   * Optional human-oriented progress lines (CLI sends these to stderr so `--format json` stdout stays clean).
+   */
+  reportProgress?: (message: string) => void;
 };
 
 /**
@@ -42,17 +48,27 @@ const githubActorFromLogin = (
 /**
  * Whether a ticket may trigger linked-PR timeline fetches during full GitHub sync.
  *
- * @param ticket - Projection row (non-deleted, non-terminal status, at least one linked PR).
+ * @param ticket - Projection row (non-deleted, non-terminal status, PR refs in body and/or linked GitHub issue).
  */
 const isTicketEligibleForPrActivitySync = (ticket: {
   deleted?: boolean;
   linkedPrs: readonly number[];
+  githubIssueNumber?: number;
   status: WorkItemStatus;
 }): boolean =>
   !ticket.deleted &&
-  ticket.linkedPrs.length > 0 &&
+  (ticket.linkedPrs.length > 0 || ticket.githubIssueNumber !== undefined) &&
   ticket.status !== "done" &&
   ticket.status !== "cancelled";
+
+/**
+ * Deduplicates and sorts PR numbers for stable iteration.
+ *
+ * @param numbers - Candidate pull request numbers.
+ * @returns Sorted unique list.
+ */
+const uniqSortedPrNumbers = (numbers: readonly number[]): number[] =>
+  [...new Set(numbers)].sort((a, b) => a - b);
 
 /**
  * Serializes mapped timeline fields into a JSONL payload object.
@@ -81,7 +97,7 @@ const timelinePayloadRecord = (
 };
 
 /**
- * Ingests GitHub PR timeline activity for non-terminal tickets with linked PRs, appending `GithubPrActivity` lines.
+ * Ingests GitHub PR timeline activity for non-terminal tickets with `Refs`/`Closes`/`Fixes` in the body and/or PRs linked to `githubIssueNumber` on GitHub, appending `GithubPrActivity` lines.
  * Replaying `kind: "opened"` moves the ticket to `in_progress` in the projection.
  * Returns early when `config.sync !== "full"` (the CLI uses `hyperPmConfigForSyncWithGithub` for `sync --with-github`).
  *
@@ -98,13 +114,78 @@ export const runGithubPrActivitySync = async (params: {
     return out;
   }
 
-  const lines = await params.deps.readEventLines();
-  const seen = collectGithubPrActivitySourceIdsFromLines(lines);
+  const needsClosingBodyIndex = [...params.projection.tickets.values()].some(
+    (t) =>
+      isTicketEligibleForPrActivitySync(t) && t.githubIssueNumber !== undefined,
+  );
+  const closingIssuePrIndex = needsClosingBodyIndex
+    ? await loadOpenPrsByClosingIssueIndex({
+        octokit: params.deps.octokit,
+        owner: params.deps.owner,
+        repo: params.deps.repo,
+      })
+    : new Map<number, number[]>();
 
+  const prWorkQueue: { ticket: TicketRecord; prNumbers: number[] }[] = [];
   for (const ticket of params.projection.tickets.values()) {
     if (!isTicketEligibleForPrActivitySync(ticket)) continue;
 
-    for (const prNumber of ticket.linkedPrs) {
+    let fromGithubIssue: number[] = [];
+    if (ticket.githubIssueNumber !== undefined) {
+      try {
+        fromGithubIssue = await listPullNumbersLinkedToGithubIssue({
+          octokit: params.deps.octokit,
+          owner: params.deps.owner,
+          repo: params.deps.repo,
+          issueNumber: ticket.githubIssueNumber,
+        });
+      } catch {
+        fromGithubIssue = [];
+      }
+    }
+    const fromSearch =
+      ticket.githubIssueNumber !== undefined
+        ? (closingIssuePrIndex.get(ticket.githubIssueNumber) ?? [])
+        : [];
+    const prNumbers = uniqSortedPrNumbers([
+      ...ticket.linkedPrs,
+      ...fromGithubIssue,
+      ...fromSearch,
+    ]);
+    if (prNumbers.length === 0) continue;
+    prWorkQueue.push({ ticket, prNumbers });
+  }
+
+  const totalLinkedPrs = prWorkQueue.reduce(
+    (sum, row) => sum + row.prNumbers.length,
+    0,
+  );
+  params.deps.reportProgress?.(
+    `hyper-pm: GitHub PR activity — loading timelines for ${totalLinkedPrs} linked PR(s)…`,
+  );
+
+  const lines = await params.deps.readEventLines();
+  const seen = collectGithubPrActivitySourceIdsFromLines(lines);
+
+  let prActivityDone = 0;
+  const reportPrChunk = (): void => {
+    const rp = params.deps.reportProgress;
+    if (
+      !rp ||
+      totalLinkedPrs === 0 ||
+      (prActivityDone % 10 !== 0 && prActivityDone !== totalLinkedPrs)
+    ) {
+      return;
+    }
+    rp(
+      `hyper-pm: GitHub PR activity — processed ${prActivityDone}/${totalLinkedPrs} linked PR(s)…`,
+    );
+  };
+
+  for (const { ticket, prNumbers } of prWorkQueue) {
+    for (const prNumber of prNumbers) {
+      prActivityDone += 1;
+      reportPrChunk();
       const openSourceId = buildPrOpenSourceId(ticket.id, prNumber);
       if (!seen.has(openSourceId)) {
         try {
@@ -114,7 +195,7 @@ export const runGithubPrActivitySync = async (params: {
             pull_number: prNumber,
           });
           const createdAt = pr.created_at;
-          if (createdAt) {
+          if (createdAt && pr.state === "open") {
             const fields = buildPrOpenedPayloadFromPull({
               ticketId: ticket.id,
               prNumber,

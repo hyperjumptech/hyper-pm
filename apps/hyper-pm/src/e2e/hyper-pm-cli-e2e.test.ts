@@ -78,6 +78,9 @@ const invokeHyperPmCli = async (
       error: (line: string) => {
         errors.push(line);
       },
+      info: (line: string) => {
+        errors.push(line);
+      },
       clock: ctx.clock ?? { now: () => new Date() },
     });
   } catch (e) {

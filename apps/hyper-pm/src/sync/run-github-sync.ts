@@ -37,6 +37,10 @@ export type GithubSyncDeps = {
   clock: { now: () => Date };
   /** When set, used as outbound/sync cursor `actor` (avoids an extra `getAuthenticated` call). */
   outboundActor?: string;
+  /**
+   * Optional human-oriented progress lines (CLI sends these to stderr so `--format json` stdout stays clean).
+   */
+  reportProgress?: (message: string) => void;
 };
 
 const parseRepo = (githubRepo: string): { owner: string; repo: string } => {
@@ -68,6 +72,13 @@ export const runGithubOutboundSync = async (params: {
     params.deps.outboundActor ??
     (await resolveGithubTokenActor(params.deps.octokit));
   const ts = params.deps.clock.now().toISOString();
+  const tickets = [...params.projection.tickets.values()].filter(
+    (t) => !t.deleted,
+  );
+  params.deps.reportProgress?.(
+    `hyper-pm: GitHub outbound — syncing ${tickets.length} ticket(s) to GitHub issues…`,
+  );
+  let outboundProcessed = 0;
   /**
    * Resolves epic+story ids for GitHub issue metadata when the ticket is linked to a valid story chain.
    *
@@ -91,8 +102,21 @@ export const runGithubOutboundSync = async (params: {
     return { epicId: epic.id, storyId: story.id };
   };
 
-  for (const ticket of params.projection.tickets.values()) {
-    if (ticket.deleted) continue;
+  const reportOutboundChunk = (): void => {
+    const rp = params.deps.reportProgress;
+    if (
+      !rp ||
+      tickets.length === 0 ||
+      (outboundProcessed % 25 !== 0 && outboundProcessed !== tickets.length)
+    ) {
+      return;
+    }
+    rp(
+      `hyper-pm: GitHub outbound — processed ${outboundProcessed}/${tickets.length} ticket(s)…`,
+    );
+  };
+
+  for (const ticket of tickets) {
     const parents = resolveTicketGithubParents(ticket);
     const parentIdsForBody =
       parents !== undefined
@@ -118,9 +142,13 @@ export const runGithubOutboundSync = async (params: {
         assignees: ticket.assignee ? [ticket.assignee] : [],
         labels: ghLabels,
       });
+      outboundProcessed += 1;
+      reportOutboundChunk();
       continue;
     }
     if (parents === undefined) {
+      outboundProcessed += 1;
+      reportOutboundChunk();
       continue;
     }
     const created = await params.deps.octokit.rest.issues.create({
@@ -148,6 +176,8 @@ export const runGithubOutboundSync = async (params: {
     };
     outEvents.push(linkEvt);
     await appendEventLine(params.dataRoot, linkEvt, params.deps.clock);
+    outboundProcessed += 1;
+    reportOutboundChunk();
   }
   const cursorEvt: EventLine = {
     schema: 1,
@@ -157,6 +187,7 @@ export const runGithubOutboundSync = async (params: {
     actor,
     payload: { cursor: ts },
   };
+
   outEvents.push(cursorEvt);
   await appendEventLine(params.dataRoot, cursorEvt, params.deps.clock);
   return outEvents;
@@ -178,6 +209,9 @@ export const runGithubInboundSync = async (params: {
   if (params.config.sync !== "full") return out;
   const ts = params.deps.clock.now().toISOString();
 
+  params.deps.reportProgress?.(
+    "hyper-pm: GitHub inbound — listing repository issues from GitHub…",
+  );
   const issues = await params.deps.octokit.paginate(
     params.deps.octokit.rest.issues.listForRepo,
     {
@@ -187,8 +221,28 @@ export const runGithubInboundSync = async (params: {
       per_page: 100,
     },
   );
+  params.deps.reportProgress?.(
+    `hyper-pm: GitHub inbound — comparing ${issues.length} issue(s) against local tickets…`,
+  );
+
+  let inboundCompared = 0;
+  const reportInboundChunk = (total: number): void => {
+    const rp = params.deps.reportProgress;
+    if (
+      !rp ||
+      total === 0 ||
+      (inboundCompared % 200 !== 0 && inboundCompared !== total)
+    ) {
+      return;
+    }
+    rp(
+      `hyper-pm: GitHub inbound — scanned ${inboundCompared}/${total} issue(s)…`,
+    );
+  };
 
   for (const issue of issues) {
+    inboundCompared += 1;
+    reportInboundChunk(issues.length);
     if (!issue.body) continue;
     const id = parseHyperPmIdFromIssueBody(issue.body);
     if (!id) continue;

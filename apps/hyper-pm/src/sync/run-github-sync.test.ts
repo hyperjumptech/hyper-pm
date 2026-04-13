@@ -8,7 +8,7 @@ vi.mock("../storage/append-event", () => ({
 import type { Octokit } from "@octokit/rest";
 import type { HyperPmConfig } from "../config/hyper-pm-config";
 import { buildGithubIssueBody } from "../lib/github-issue-body";
-import type { Projection } from "../storage/projection";
+import type { Projection, TicketRecord } from "../storage/projection";
 import { appendEventLine } from "../storage/append-event";
 import { runGithubInboundSync, runGithubOutboundSync } from "./run-github-sync";
 
@@ -367,6 +367,65 @@ describe("runGithubOutboundSync", () => {
     expect(body).toContain('"depends_on"');
     expect(body).toContain('"dep1"');
   });
+
+  it("invokes reportProgress while processing many tickets", async () => {
+    const issuesUpdate = vi.fn().mockResolvedValue({ data: {} });
+    const octokit = {
+      rest: {
+        issues: {
+          update: issuesUpdate,
+          create: vi.fn(),
+          listForRepo: vi.fn(),
+        },
+      },
+      paginate: vi.fn(),
+    } as unknown as Octokit;
+
+    const tickets = new Map<string, TicketRecord>();
+    for (let i = 1; i <= 26; i++) {
+      const id = `t${i}`;
+      tickets.set(id, {
+        id,
+        number: i,
+        storyId: "s1",
+        title: `Task ${i}`,
+        body: "",
+        status: "todo",
+        linkedPrs: [],
+        linkedBranches: [],
+        githubIssueNumber: 100 + i,
+        ...audit,
+        ...statusAudit,
+      });
+    }
+
+    const reportProgress = vi.fn();
+    const clock = { now: () => new Date("2026-02-10T00:00:00.000Z") };
+
+    await runGithubOutboundSync({
+      dataRoot: "/tmp/hyper-pm-test",
+      projection: { ...epicStory(), tickets },
+      config: baseConfig,
+      deps: {
+        octokit,
+        owner: "acme",
+        repo: "app",
+        clock,
+        outboundActor: "github:tester",
+        reportProgress,
+      },
+    });
+
+    expect(reportProgress).toHaveBeenCalledWith(
+      "hyper-pm: GitHub outbound — syncing 26 ticket(s) to GitHub issues…",
+    );
+    expect(reportProgress).toHaveBeenCalledWith(
+      "hyper-pm: GitHub outbound — processed 25/26 ticket(s)…",
+    );
+    expect(reportProgress).toHaveBeenCalledWith(
+      "hyper-pm: GitHub outbound — processed 26/26 ticket(s)…",
+    );
+  });
 });
 
 describe("runGithubInboundSync", () => {
@@ -698,6 +757,54 @@ describe("runGithubInboundSync", () => {
           dependsOn: ["d2", "d3"],
         }),
       }),
+    );
+  });
+
+  it("invokes reportProgress while scanning many issues", async () => {
+    const issueRows = Array.from({ length: 250 }, (_, i) => ({
+      id: i,
+      body: undefined as string | undefined,
+      title: "",
+      state: "open" as const,
+    }));
+    const paginate = vi.fn().mockResolvedValue(issueRows);
+    const octokit = {
+      rest: {
+        issues: {
+          update: vi.fn(),
+          create: vi.fn(),
+          listForRepo: vi.fn(),
+        },
+      },
+      paginate,
+    } as unknown as Octokit;
+    const reportProgress = vi.fn();
+    const clock = { now: () => new Date("2026-03-05T00:00:00.000Z") };
+
+    await runGithubInboundSync({
+      dataRoot: "/tmp/hyper-pm-in",
+      projection: { ...epicStory(), tickets: new Map() },
+      config: baseConfig,
+      deps: {
+        octokit,
+        owner: "acme",
+        repo: "app",
+        clock,
+        reportProgress,
+      },
+    });
+
+    expect(reportProgress).toHaveBeenCalledWith(
+      "hyper-pm: GitHub inbound — listing repository issues from GitHub…",
+    );
+    expect(reportProgress).toHaveBeenCalledWith(
+      "hyper-pm: GitHub inbound — comparing 250 issue(s) against local tickets…",
+    );
+    expect(reportProgress).toHaveBeenCalledWith(
+      "hyper-pm: GitHub inbound — scanned 200/250 issue(s)…",
+    );
+    expect(reportProgress).toHaveBeenCalledWith(
+      "hyper-pm: GitHub inbound — scanned 250/250 issue(s)…",
     );
   });
 });
