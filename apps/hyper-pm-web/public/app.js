@@ -2580,7 +2580,7 @@ function renderTools() {
         <h2>Sync with GitHub</h2>
       </div>
       <label><input type="radio" name="syncMode" id="syncModeDefault" value="default" checked /> Data branch (<code>sync</code> default, git only)</label>
-      <label><input type="radio" name="syncMode" id="syncModeGithub" value="with-github" /> With GitHub Issues (<code>--with-github</code>)</label>
+      <label><input type="radio" name="syncMode" id="syncModeGithub" value="with-github" /> Git + full GitHub mirror (<code>--with-github</code>)</label>
       <label><input type="radio" name="syncMode" id="syncModeSkipNetwork" value="skip-network" /> Skip all network (<code>--skip-network</code>)</label>
       <div class="row">
         <button type="button" class="primary" id="btnSync">Run sync</button>

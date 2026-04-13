@@ -73,6 +73,7 @@ import {
   tryParseTicketListSortField,
 } from "./cli/ticket-list-sort";
 import {
+  hyperPmConfigForSyncWithGithub,
   hyperPmConfigSchema,
   type HyperPmConfig,
 } from "./config/hyper-pm-config";
@@ -609,7 +610,10 @@ export const runCli = async (
     .option("--repo <path>", "path to target git repository")
     .option("--data-branch <name>", "override data branch name (config/init)")
     .option("--remote <name>", "override remote name (init/config)")
-    .option("--sync <mode>", "off|outbound|full")
+    .option(
+      "--sync <mode>",
+      "off|outbound|full (GitHub enabled unless off; see sync --help)",
+    )
     .option("--github-repo <owner/repo>", "override GitHub slug")
     .option(
       "--actor <label>",
@@ -1991,7 +1995,9 @@ export const runCli = async (
 
   program
     .command("sync")
-    .description("Sync data branch over git; optional GitHub Issues sync")
+    .description(
+      "Git-only by default; add --with-github for full GitHub mirror (issues + inbound + PR activity)",
+    )
     .option(
       "--skip-network",
       "skip all sync network operations (git fetch/merge/push and GitHub); legacy: --no-github",
@@ -1999,7 +2005,7 @@ export const runCli = async (
     )
     .option(
       "--with-github",
-      "also run GitHub Issues sync (requires GITHUB_TOKEN or gh; needs sync not off in config)",
+      "full GitHub sync: push issues, pull inbound updates, PR timeline (needs auth; sync not off)",
       false,
     )
     .option(
@@ -2033,7 +2039,7 @@ export const runCli = async (
       if (o.withGithub) {
         if (cfg.sync === "off") {
           deps.error(
-            "GitHub Issues sync is off in config (sync: off). Omit --with-github to sync the data branch via git only, or set sync to outbound/full.",
+            "GitHub sync is disabled (sync: off). Run plain sync for git only, or set sync to outbound or full in config.",
           );
           deps.exit(ExitCode.UserError);
         }
@@ -2078,16 +2084,17 @@ export const runCli = async (
             clock: deps.clock,
             outboundActor,
           };
+          const githubCfg = hyperPmConfigForSyncWithGithub(cfg);
           await runGithubOutboundSync({
             dataRoot: session.worktreePath,
             projection,
-            config: cfg,
+            config: githubCfg,
             deps: depsGh,
           });
           await runGithubInboundSync({
             dataRoot: session.worktreePath,
             projection,
-            config: cfg,
+            config: githubCfg,
             deps: depsGh,
           });
           const projectionAfterInbound = await loadProjectionFromDataRoot(
@@ -2095,7 +2102,7 @@ export const runCli = async (
           );
           await runGithubPrActivitySync({
             projection: projectionAfterInbound,
-            config: cfg,
+            config: githubCfg,
             deps: defaultGithubPrActivitySyncDeps({
               dataRoot: session.worktreePath,
               clock: deps.clock,

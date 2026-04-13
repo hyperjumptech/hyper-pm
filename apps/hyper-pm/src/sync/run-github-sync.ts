@@ -163,7 +163,8 @@ export const runGithubOutboundSync = async (params: {
 };
 
 /**
- * Minimum inbound sync: title/body/status for issues referencing hyper_pm ids.
+ * Inbound sync: title/body/status (and related fields) for issues referencing hyper-pm ids.
+ * No-ops when `config.sync !== "full"` (the CLI passes `hyperPmConfigForSyncWithGithub` for `sync --with-github`).
  *
  * @param params - Data worktree root, projection baseline, config, deps.
  */

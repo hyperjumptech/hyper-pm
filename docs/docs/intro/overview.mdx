@@ -37,7 +37,7 @@ Treat MCP and the web API as **powerful local automation**: only enable them in 
 
 ## Optional GitHub Issues sync
 
-When **sync** is enabled and credentials are present, hyper-pm can **push** ticket changes to GitHub Issues and, in **full** mode, **pull** inbound edits and attach **PR timeline** signals for eligible tickets with linked PR references (not `done` / `cancelled`). Opening a PR can record **`GithubPrActivity`** and move the ticket to **`in_progress`**. See [GitHub sync](/integrations/github-sync) for behavior details and limits.
+With **`sync --with-github`** (and credentials), hyper-pm **pushes** ticket changes to GitHub Issues, **pulls** inbound edits, and can attach **PR timeline** signals for eligible tickets with linked PR references (not `done` / `cancelled`). Opening a PR can record **`GithubPrActivity`** and move the ticket to **`in_progress`**. Plain **`sync`** is git-only. See [GitHub sync](/integrations/github-sync) for details.
 
 ## AI-assisted fields
 

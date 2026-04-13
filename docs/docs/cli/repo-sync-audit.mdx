@@ -29,17 +29,17 @@ JSON `{ "loginGuess": string | null }`.
 
 By default, **`sync`** reconciles the **`hyper-pm-data`** branch over **git** (`fetch` / `merge` / `push`) with no GitHub Issues API and no `GITHUB_TOKEN`. JSON includes `gitDataOnly`, `dataBranchFetch`, `dataBranchMerge`, `dataBranchPush`, optional `dataBranchPushDetail`, and `pushAttempts`.
 
-| Flag             | Default | Description                                                                           |
-| ---------------- | ------- | ------------------------------------------------------------------------------------- |
-| `--with-github`  | off     | Also run GitHub Issues sync (requires auth; `sync` must not be `off` in config)       |
-| `--skip-network` | off     | Skip **all** sync network work (git and GitHub); legacy **`--no-github`** is accepted |
-| `--git-data`     | off     | Legacy no-op (default is already git-only)                                            |
+| Flag             | Default | Description                                                                            |
+| ---------------- | ------- | -------------------------------------------------------------------------------------- |
+| `--with-github`  | off     | Full GitHub mirror: push issues, inbound updates, PR timeline (auth; `sync` not `off`) |
+| `--skip-network` | off     | Skip **all** sync network work (git and GitHub); legacy **`--no-github`** is accepted  |
+| `--git-data`     | off     | Legacy no-op (default is already git-only)                                             |
 
 With **`--with-github`**, requires **`GITHUB_TOKEN`** **or** **`gh`** (`gh auth token` must succeed). JSON then includes `githubSync` and the usual `dataBranchPush` fields after GitHub work.
 
 **Outbound** sets issue labels (`hyper-pm`, `ticket`, plus ticket labels — GitHub’s 50-character label limit applies) and embeds planning fields in a fenced JSON block after the description.
 
-**Inbound** (`sync: full`) compares issue labels and that fence to the projection and records inbound updates. With **`full`**, PR timeline activity for tickets that are not **`done`** / **`cancelled`** and have `Refs` / `Closes` / `Fixes` references may append `GithubPrActivity` events (extra API calls per linked PR). A `GithubPrActivity` with `kind: "opened"` moves the ticket to **`in_progress`** when replayed.
+**Inbound** compares issue labels and that fence to the projection and records inbound updates. **PR timeline** activity (for tickets that are not **`done`** / **`cancelled`** and have `Refs` / `Closes` / `Fixes` references) may append `GithubPrActivity` events (extra API calls per linked PR). A `GithubPrActivity` with `kind: "opened"` moves the ticket to **`in_progress`** when replayed. Config values **`outbound`** and **`full`** both run this full pipeline when you pass **`--with-github`**.
 
 Detailed behavior: [GitHub sync](/integrations/github-sync).
 

@@ -6,26 +6,24 @@ icon: Github
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-## Modes
+## Two ways to run `sync`
 
-Configuration (and global `--sync`) selects how **GitHub Issues** sync behaves when you pass **`sync --with-github`**:
+- **Git data only** — plain **`hyper-pm sync`** (no flags). Runs `git fetch` / `git merge` / `git push` for the data branch. No GitHub API, no token. Runs even when **`sync` is `off`** in config.
+- **Git + full GitHub mirror** — **`hyper-pm sync --with-github`**. Pushes ticket changes to GitHub Issues, pulls inbound edits into JSONL, then ingests linked **PR timeline** activity when applicable. Requires auth and a config where **`sync` is not `off`**.
 
-- **`off`** — `sync --with-github` is rejected; use plain **`sync`** to reconcile the data branch over git only.
-- **`outbound`** — push hyper-pm changes to issues.
-- **`full`** — outbound plus **inbound** comparison and optional **PR timeline** ingestion for eligible tickets.
+The legacy **`--git-data`** flag is a no-op (plain `sync` is already git-only).
 
-## Default `sync` (data branch over git)
+## Config `sync` field
 
-Plain **`sync`** (no flags) **only** runs `git fetch` / `git merge` / `git push` for the configured data branch (no Octokit, no `GITHUB_TOKEN`). It runs even when **`sync` is `off`** in config. Use **`sync --with-github`** when you also want GitHub Issues mirroring (see modes above).
-
-The legacy **`--git-data`** flag is a no-op; default behavior is already git-only.
+- **`off`** — **`sync --with-github`** is rejected.
+- **`outbound`** or **`full`** — both allow **`sync --with-github`** and behave the **same**: the CLI always runs outbound, inbound, and PR activity together. The two values remain for backward compatibility with existing `config.json` files.
 
 ## Outbound behavior
 
 - Issue **labels** include `hyper-pm`, `ticket`, plus each ticket label (GitHub’s label length limits apply).
 - Ticket **planning** (`priority`, `size`, `estimate`, schedule) is embedded in a **fenced JSON block** after the issue body so **`full`** inbound can round-trip fields conservatively (only keys present in the fence participate — older issues without keys are not mass-cleared).
 
-## Inbound (`full`)
+## Inbound (part of `--with-github`)
 
 Compares non-reserved labels and the planning JSON fence to the local projection and appends **`GithubInboundUpdate`** when something differs.
 

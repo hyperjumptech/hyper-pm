@@ -83,6 +83,7 @@ const timelinePayloadRecord = (
 /**
  * Ingests GitHub PR timeline activity for non-terminal tickets with linked PRs, appending `GithubPrActivity` lines.
  * Replaying `kind: "opened"` moves the ticket to `in_progress` in the projection.
+ * Returns early when `config.sync !== "full"` (the CLI uses `hyperPmConfigForSyncWithGithub` for `sync --with-github`).
  *
  * @param params - Projection (fresh after inbound), config, and injectable deps.
  * @returns Newly appended event lines.

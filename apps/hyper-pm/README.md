@@ -99,7 +99,7 @@ Read-only helpers against the **checked-out repository** (not the hyper-pm data 
 
 **Default (no flags):** reconciles the **`hyper-pm-data`** branch over git: `git fetch` of the configured branch on `remote`, `git merge` of `refs/remotes/<remote>/<dataBranch>` when that ref exists (bounded **push retries** on likely non-fast-forward races), then **`git push`**. Does **not** call the GitHub Issues API and does **not** require `GITHUB_TOKEN` or `gh`. Runs even when `sync` is **`off`** in config. JSON includes `gitDataOnly: true` plus **`dataBranchFetch`**, **`dataBranchMerge`**, **`dataBranchPush`**, optional **`dataBranchPushDetail`**, and **`pushAttempts`**. A merge conflict aborts the merge and exits with a user error. Pass **`--skip-push`** to fetch/merge without pushing.
 
-**`--with-github`:** additionally runs **GitHub Issues** sync when `sync` is **`outbound`** or **`full`** in config (not when `sync` is **`off`**). **Outbound** sets issue `labels` to `hyper-pm`, `ticket`, plus each ticket label (GitHub’s 50-character label limit applies), and embeds ticket planning in the fenced JSON after the description. **Inbound** (`sync: full`) compares the issue’s non-reserved labels and that fence to the projection and appends `GithubInboundUpdate` when anything differs. With `sync: full`, after inbound it may load linked PR timelines for tickets that are not **`done`** / **`cancelled`** and have `Refs` / `Closes` / `Fixes #<n>` in the body (`GithubPrActivity`); replaying `kind: "opened"` sets the ticket to **`in_progress`**. Requires **`GITHUB_TOKEN`** **or** `gh auth login`. After GitHub API work, **`hyper-pm` commits on the data branch** using `git -c user.name=… -c user.email=… commit` (same identity resolution as mutations). JSON then includes `githubSync: true` plus **`dataBranchPush`** / optional **`dataBranchPushDetail`** (same push semantics as the default path).
+**`--with-github`:** full **GitHub mirror** when `sync` is **`outbound`** or **`full`** in config (rejected when `sync` is **`off`** — same behavior for `outbound` and `full`). Pushes ticket state to GitHub Issues (**labels** `hyper-pm`, `ticket`, plus each ticket label; planning in the fenced JSON after the description). Pulls **inbound** edits (`GithubInboundUpdate` when labels/fence differ). Then may load **linked PR timelines** for eligible tickets (`GithubPrActivity`; replaying `kind: "opened"` sets **`in_progress`**). Requires **`GITHUB_TOKEN`** **or** `gh auth login`. After GitHub API work, **`hyper-pm` commits on the data branch** using `git -c user.name=… -c user.email=… commit` (same identity resolution as mutations). JSON then includes `githubSync: true` plus **`dataBranchPush`** / optional **`dataBranchPushDetail`** (same push semantics as the default path).
 
 **`--skip-network`:** skips **all** sync network work (no git fetch/merge/push, no GitHub). JSON `{ "ok": true, "skipped": true }`. The legacy spelling **`--no-github`** is still accepted (it is normalized to **`--skip-network`** before parsing).
 
@@ -107,12 +107,12 @@ Read-only helpers against the **checked-out repository** (not the hyper-pm data 
 
 For any path that pushes, a missing remote or push error **does not fail the command** for exit code: JSON still has `"ok":true` with **`dataBranchPush`** set to `pushed`, `skipped_no_remote`, `failed`, or (with **`--skip-push`**) `skipped_cli`. Push failures are also written to stderr as a single-line hint.
 
-| Option           | Description                                                              | Default                     |
-| ---------------- | ------------------------------------------------------------------------ | --------------------------- |
-| `--with-github`  | Also run GitHub Issues sync (needs auth; `sync` not `off`)               | `false`                     |
-| `--skip-network` | Skip all sync network operations (git and GitHub); legacy: `--no-github` | `false`                     |
-| `--git-data`     | Legacy; same as default                                                  | `false`                     |
-| `--skip-push`    | Skip `git push` of the data branch after sync                            | `false` (push is attempted) |
+| Option           | Description                                                                 | Default                     |
+| ---------------- | --------------------------------------------------------------------------- | --------------------------- |
+| `--with-github`  | Full GitHub mirror: issues + inbound + PR activity (auth; `sync` not `off`) | `false`                     |
+| `--skip-network` | Skip all sync network operations (git and GitHub); legacy: `--no-github`    | `false`                     |
+| `--git-data`     | Legacy; same as default                                                     | `false`                     |
+| `--skip-push`    | Skip `git push` of the data branch after sync                               | `false` (push is attempted) |
 
 For a successful push you need a configured remote and credentials that allow `git push` to that remote.
 
