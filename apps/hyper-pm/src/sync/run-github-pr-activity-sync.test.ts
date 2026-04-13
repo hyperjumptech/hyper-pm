@@ -647,6 +647,7 @@ describe("runGithubPrActivitySync replay integration", () => {
     const proj = replayEvents(allLines);
     const ticket = proj.tickets.get("t1");
     expect(ticket?.prActivityRecent?.map((x) => x.kind)).toEqual(["merged"]);
+    expect(ticket?.status).toBe("done");
   });
 
   it("replay moves todo ticket to in_progress when sync appends opened", async () => {

@@ -6,6 +6,7 @@ import {
   inboundTicketPlanningPayloadFromFenceMeta,
   parseHyperPmFenceObject,
   parseHyperPmIdFromIssueBody,
+  parseHyperPmTicketFenceObject,
   ticketPlanningForGithubIssueBody,
 } from "./github-issue-body";
 import type { TicketRecord } from "../storage/projection";
@@ -36,6 +37,39 @@ describe("github-issue-body", () => {
       description: "Hello",
     });
     expect(parseHyperPmIdFromIssueBody(body)).toBe("01");
+  });
+
+  it("parseHyperPmIdFromIssueBody finds hyper_pm_id in a later json fence", () => {
+    const body = [
+      "Docs",
+      "",
+      "```json",
+      '{"description": "snippet only"}',
+      "```",
+      "",
+      "```json",
+      '{"hyper_pm_id": "01KP1FZ60FD6CXCZV52GTW9SGZ", "type": "ticket"}',
+      "```",
+    ].join("\n");
+    expect(parseHyperPmIdFromIssueBody(body)).toBe(
+      "01KP1FZ60FD6CXCZV52GTW9SGZ",
+    );
+  });
+
+  it("parseHyperPmTicketFenceObject returns the fence that contains hyper_pm_id", () => {
+    const body = [
+      "```json",
+      '{"n":1}',
+      "```",
+      "",
+      "```json",
+      '{"hyper_pm_id": "z1", "priority": "low"}',
+      "```",
+    ].join("\n");
+    expect(parseHyperPmTicketFenceObject(body)).toMatchObject({
+      hyper_pm_id: "z1",
+      priority: "low",
+    });
   });
 
   it("embeds ticket planning in the fence when type is ticket", () => {

@@ -4,6 +4,7 @@ import {
   inboundTicketPlanningPayloadFromFenceMeta,
   parseHyperPmFenceObject,
   parseHyperPmIdFromIssueBody,
+  parseHyperPmTicketFenceObject,
 } from "../lib/github-issue-body";
 import { ticketLabelsFromGithubIssueLabels } from "../lib/github-issue-labels";
 import type { Projection } from "../storage/projection";
@@ -165,8 +166,13 @@ export const buildTicketCreatedPayloadBaseFromGithubIssue = (
   if (labels.length > 0) {
     payload["labels"] = labels;
   }
-  const meta = parseHyperPmFenceObject(bodyText);
-  Object.assign(payload, ticketCreatePlanningFragmentFromFenceMeta(meta));
+  const ticketMeta = parseHyperPmTicketFenceObject(bodyText);
+  const planningFenceSource =
+    ticketMeta ?? parseHyperPmFenceObject(bodyText) ?? undefined;
+  Object.assign(
+    payload,
+    ticketCreatePlanningFragmentFromFenceMeta(planningFenceSource),
+  );
   return payload;
 };
 

@@ -448,6 +448,7 @@ describe("runGithubInboundSync", () => {
     const paginate = vi.fn().mockResolvedValue([
       {
         id: 501,
+        number: 501,
         body,
         title: "[hyper-pm] My ticket",
         state: "open",
@@ -480,6 +481,7 @@ describe("runGithubInboundSync", () => {
             status: "todo",
             linkedPrs: [],
             linkedBranches: [],
+            githubIssueNumber: 501,
             ...audit,
             ...statusAudit,
           },
@@ -531,6 +533,7 @@ describe("runGithubInboundSync", () => {
     const paginate = vi.fn().mockResolvedValue([
       {
         id: 502,
+        number: 502,
         body,
         title: "[hyper-pm] My ticket",
         state: "open",
@@ -563,6 +566,7 @@ describe("runGithubInboundSync", () => {
             status: "todo",
             linkedPrs: [],
             linkedBranches: [],
+            githubIssueNumber: 502,
             ...audit,
             ...statusAudit,
           },
@@ -612,6 +616,7 @@ describe("runGithubInboundSync", () => {
     const paginate = vi.fn().mockResolvedValue([
       {
         id: 503,
+        number: 503,
         body,
         title: "[hyper-pm] My ticket",
         state: "open",
@@ -644,6 +649,7 @@ describe("runGithubInboundSync", () => {
             status: "todo",
             linkedPrs: [],
             linkedBranches: [],
+            githubIssueNumber: 503,
             priority: "low",
             ...audit,
             ...statusAudit,
@@ -692,6 +698,7 @@ describe("runGithubInboundSync", () => {
     const paginate = vi.fn().mockResolvedValue([
       {
         id: 504,
+        number: 504,
         body,
         title: "[hyper-pm] My ticket",
         state: "open",
@@ -724,6 +731,7 @@ describe("runGithubInboundSync", () => {
             status: "todo",
             linkedPrs: [],
             linkedBranches: [],
+            githubIssueNumber: 504,
             dependsOn: ["d1"],
             ...audit,
             ...statusAudit,
@@ -760,9 +768,160 @@ describe("runGithubInboundSync", () => {
     );
   });
 
+  it("appends GithubIssueLinked when ticket matches issue body but lacks githubIssueNumber", async () => {
+    const body = buildGithubIssueBody({
+      hyperPmId: "t1",
+      type: "ticket",
+      parentIds: { epic: "e1", story: "s1" },
+      description: "hello",
+    });
+    const paginate = vi.fn().mockResolvedValue([
+      {
+        id: 9_001,
+        number: 777,
+        body,
+        title: "[hyper-pm] My ticket",
+        state: "open",
+        user: { login: "author" },
+        assignees: [],
+        labels: [{ name: "hyper-pm" }, { name: "ticket" }],
+      },
+    ]);
+    const octokit = {
+      rest: {
+        issues: {
+          update: vi.fn(),
+          create: vi.fn(),
+          listForRepo: vi.fn(),
+        },
+      },
+      paginate,
+    } as unknown as Octokit;
+    const projection: Projection = {
+      ...epicStory(),
+      tickets: new Map([
+        [
+          "t1",
+          {
+            id: "t1",
+            number: 1,
+            storyId: "s1",
+            title: "My ticket",
+            body: "hello",
+            status: "todo",
+            linkedPrs: [],
+            linkedBranches: [],
+            ...audit,
+            ...statusAudit,
+          },
+        ],
+      ]),
+    };
+    const clock = { now: () => new Date("2026-03-06T00:00:00.000Z") };
+
+    await runGithubInboundSync({
+      dataRoot: "/tmp/hyper-pm-in",
+      projection,
+      config: baseConfig,
+      deps: {
+        octokit,
+        owner: "acme",
+        repo: "app",
+        clock,
+      },
+    });
+
+    const linkCalls = vi
+      .mocked(appendEventLine)
+      .mock.calls.filter(
+        (c) => (c[1] as { type?: string }).type === "GithubIssueLinked",
+      );
+    const inboundCalls = vi
+      .mocked(appendEventLine)
+      .mock.calls.filter(
+        (c) => (c[1] as { type?: string }).type === "GithubInboundUpdate",
+      );
+    expect(linkCalls.length).toBe(1);
+    expect(linkCalls[0]?.[1]).toEqual(
+      expect.objectContaining({
+        type: "GithubIssueLinked",
+        payload: { ticketId: "t1", issueNumber: 777 },
+      }),
+    );
+    expect(inboundCalls.length).toBe(0);
+  });
+
+  it("skips pull request rows from issues.listForRepo", async () => {
+    const body = buildGithubIssueBody({
+      hyperPmId: "t1",
+      type: "ticket",
+      parentIds: { epic: "e1", story: "s1" },
+      description: "hello",
+    });
+    const paginate = vi.fn().mockResolvedValue([
+      {
+        id: 11,
+        number: 11,
+        body,
+        title: "[hyper-pm] My ticket",
+        state: "open",
+        pull_request: { url: "https://api.github.com/repos/acme/app/pulls/11" },
+        user: { login: "author" },
+        assignees: [],
+        labels: [{ name: "hyper-pm" }, { name: "ticket" }],
+      },
+    ]);
+    const octokit = {
+      rest: {
+        issues: {
+          update: vi.fn(),
+          create: vi.fn(),
+          listForRepo: vi.fn(),
+        },
+      },
+      paginate,
+    } as unknown as Octokit;
+    const projection: Projection = {
+      ...epicStory(),
+      tickets: new Map([
+        [
+          "t1",
+          {
+            id: "t1",
+            number: 1,
+            storyId: "s1",
+            title: "My ticket",
+            body: "hello",
+            status: "todo",
+            linkedPrs: [],
+            linkedBranches: [],
+            ...audit,
+            ...statusAudit,
+          },
+        ],
+      ]),
+    };
+    const clock = { now: () => new Date("2026-03-07T00:00:00.000Z") };
+
+    await runGithubInboundSync({
+      dataRoot: "/tmp/hyper-pm-in",
+      projection,
+      config: baseConfig,
+      deps: {
+        octokit,
+        owner: "acme",
+        repo: "app",
+        clock,
+      },
+    });
+
+    expect(appendEventLine).not.toHaveBeenCalled();
+  });
+
   it("invokes reportProgress while scanning many issues", async () => {
     const issueRows = Array.from({ length: 250 }, (_, i) => ({
       id: i,
+      number: i + 1,
       body: undefined as string | undefined,
       title: "",
       state: "open" as const,

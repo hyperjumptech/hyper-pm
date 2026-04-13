@@ -7,6 +7,7 @@ import {
   inboundTicketPlanningPayloadFromFenceMeta,
   parseHyperPmFenceObject,
   parseHyperPmIdFromIssueBody,
+  parseHyperPmTicketFenceObject,
   ticketPlanningForGithubIssueBody,
 } from "../lib/github-issue-body";
 import {
@@ -42,6 +43,15 @@ export type GithubSyncDeps = {
    */
   reportProgress?: (message: string) => void;
 };
+
+/**
+ * Returns true when a row from `issues.listForRepo` is a pull request (not a GitHub Issue).
+ *
+ * @param issue - REST list payload element.
+ */
+const isGithubListRowPullRequest = (issue: {
+  pull_request?: unknown;
+}): boolean => issue.pull_request != null;
 
 const parseRepo = (githubRepo: string): { owner: string; repo: string } => {
   const [owner, repo] = githubRepo.split("/");
@@ -243,11 +253,31 @@ export const runGithubInboundSync = async (params: {
   for (const issue of issues) {
     inboundCompared += 1;
     reportInboundChunk(issues.length);
+    if (isGithubListRowPullRequest(issue)) continue;
+    const ghIssueNumber =
+      typeof issue.number === "number" && Number.isFinite(issue.number)
+        ? issue.number
+        : undefined;
+    if (ghIssueNumber === undefined || ghIssueNumber < 1) continue;
     if (!issue.body) continue;
     const id = parseHyperPmIdFromIssueBody(issue.body);
     if (!id) continue;
     const ticket = params.projection.tickets.get(id);
     if (!ticket || ticket.deleted) continue;
+
+    if (ticket.githubIssueNumber === undefined) {
+      const linkEvt: EventLine = {
+        schema: 1,
+        type: "GithubIssueLinked",
+        id: `gh-link-inbound-${ticket.id}-${ghIssueNumber}`,
+        ts,
+        actor: githubInboundActorFromIssue(issue),
+        payload: { ticketId: ticket.id, issueNumber: ghIssueNumber },
+      };
+      out.push(linkEvt);
+      await appendEventLine(params.dataRoot, linkEvt, params.deps.clock);
+      ticket.githubIssueNumber = ghIssueNumber;
+    }
     const issueApiState =
       issue.state === "closed" ? ("closed" as const) : ("open" as const);
     const nextStatus = resolveTicketInboundStatus({
@@ -260,7 +290,12 @@ export const runGithubInboundSync = async (params: {
     const nextLabels = ticketLabelsFromGithubIssueLabels(issue.labels);
     const labelsMatch = ticketLabelListsEqual(ticket.labels, nextLabels);
 
-    const meta = parseHyperPmFenceObject(issue.body) ?? {};
+    const firstFence = parseHyperPmFenceObject(issue.body) ?? {};
+    const ticketFence = parseHyperPmTicketFenceObject(issue.body);
+    const meta =
+      ticketFence !== undefined
+        ? { ...firstFence, ...ticketFence }
+        : firstFence;
     const planningSource = inboundTicketPlanningPayloadFromFenceMeta(meta);
     const planningPayload: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(planningSource)) {

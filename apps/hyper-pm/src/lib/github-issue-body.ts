@@ -40,18 +40,51 @@ export const parseHyperPmFenceObject = (
   }
 };
 
+const JSON_FENCE_RE = /```json\s*([\s\S]*?)```/gi;
+
 /**
- * Extracts `hyper_pm_id` from an issue body if the JSON fence is present.
+ * Parses ```json … ``` fences until one contains a non-empty string `hyper_pm_id`
+ * (the canonical hyper-pm issue metadata block). Skips unrelated JSON examples earlier in the body.
+ *
+ * @param body - GitHub issue body markdown.
+ * @returns The parsed object for that fence, or `undefined` when none qualify.
+ */
+export const parseHyperPmTicketFenceObject = (
+  body: string,
+): Record<string, unknown> | undefined => {
+  let m: RegExpExecArray | null;
+  JSON_FENCE_RE.lastIndex = 0;
+  while ((m = JSON_FENCE_RE.exec(body)) !== null) {
+    const slice = m[1]?.trim();
+    if (slice === undefined || slice === "") continue;
+    try {
+      const data: unknown = JSON.parse(slice);
+      if (typeof data !== "object" || data === null) continue;
+      const meta = data as Record<string, unknown>;
+      const id = meta["hyper_pm_id"];
+      if (typeof id === "string" && id.trim() !== "") {
+        return meta;
+      }
+    } catch {
+      continue;
+    }
+  }
+  return undefined;
+};
+
+/**
+ * Extracts `hyper_pm_id` from an issue body when a qualifying ```json``` fence exists
+ * (see {@link parseHyperPmTicketFenceObject}).
  *
  * @param body - GitHub issue body markdown.
  */
 export const parseHyperPmIdFromIssueBody = (
   body: string,
 ): string | undefined => {
-  const meta = parseHyperPmFenceObject(body);
+  const meta = parseHyperPmTicketFenceObject(body);
   if (meta === undefined) return undefined;
   const id = meta["hyper_pm_id"];
-  return typeof id === "string" ? id : undefined;
+  return typeof id === "string" ? id.trim() : undefined;
 };
 
 /**

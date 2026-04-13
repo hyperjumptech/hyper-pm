@@ -266,6 +266,83 @@ describe("replayEvents", () => {
     expect(ticket?.prActivityRecent?.[0]?.kind).toBe("opened");
   });
 
+  it("applies GithubPrActivity opened after ticket exists even when PR ts predates TicketCreated", () => {
+    const lines = [
+      JSON.stringify({
+        schema: 1,
+        type: "GithubPrActivity",
+        id: "e-pr",
+        ts: "2026-04-09T08:05:33.000Z",
+        actor: "github:dev",
+        payload: {
+          ticketId: "t1",
+          prNumber: 225,
+          kind: "opened",
+          sourceId: "hyper-pm:pr-open:t1:225",
+          occurredAt: "2026-04-09T08:05:33.000Z",
+        },
+      }),
+      JSON.stringify({
+        schema: 1,
+        type: "TicketCreated",
+        id: "e-tc",
+        ts: "2026-04-12T18:41:21.935Z",
+        actor: "a1",
+        payload: {
+          id: "t1",
+          storyId: "s1",
+          title: "T",
+          body: "",
+          status: "todo",
+        },
+      }),
+    ];
+    const p = replayEvents(lines);
+    const ticket = p.tickets.get("t1");
+    expect(ticket?.status).toBe("in_progress");
+    expect(ticket?.statusChangedAt).toBe("2026-04-12T18:41:21.935Z");
+    expect(ticket?.prActivityRecent?.[0]?.kind).toBe("opened");
+  });
+
+  it("moves ticket to done when GithubPrActivity kind is merged", () => {
+    const lines = [
+      JSON.stringify({
+        schema: 1,
+        type: "TicketCreated",
+        id: "e1",
+        ts: "2026-01-02T00:00:00.000Z",
+        actor: "a1",
+        payload: {
+          id: "t1",
+          storyId: "s1",
+          title: "T",
+          body: "",
+          status: "todo",
+        },
+      }),
+      JSON.stringify({
+        schema: 1,
+        type: "GithubPrActivity",
+        id: "e2",
+        ts: "2026-01-04T00:00:00.000Z",
+        actor: "github:dev",
+        payload: {
+          ticketId: "t1",
+          prNumber: 9,
+          kind: "merged",
+          sourceId: "github-timeline:88",
+          occurredAt: "2026-01-04T00:00:00.000Z",
+        },
+      }),
+    ];
+    const p = replayEvents(lines);
+    const ticket = p.tickets.get("t1");
+    expect(ticket?.status).toBe("done");
+    expect(ticket?.statusChangedAt).toBe("2026-01-04T00:00:00.000Z");
+    expect(ticket?.statusChangedBy).toBe("github:dev");
+    expect(ticket?.prActivityRecent?.[0]?.kind).toBe("merged");
+  });
+
   it("appends GithubPrActivity to prActivityRecent without changing status", () => {
     const lines = [
       JSON.stringify({

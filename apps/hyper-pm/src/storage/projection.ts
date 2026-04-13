@@ -241,7 +241,7 @@ const emptyProjection = (): Projection => ({
 
 const parsePrRefs = (body: string): number[] => {
   const out = new Set<number>();
-  const re = /\b(?:Closes|Refs|Fixes)\s+#(\d+)\b/gi;
+  const re = /\b(?:Closes|Refs|Fixes|Resolves)\s+#(\d+)\b/gi;
   let m: RegExpExecArray | null = re.exec(body);
   while (m !== null) {
     out.add(Number(m[1]));
@@ -759,10 +759,22 @@ export const applyEvent = (projection: Projection, evt: EventLine): void => {
         String(evt.payload["ticketId"] ?? ""),
       );
       if (!ticket || ticket.deleted) break;
+      const auditTs =
+        evt.ts.localeCompare(ticket.createdAt) < 0 ? ticket.createdAt : evt.ts;
+      const evtAudit: EventLine = { ...evt, ts: auditTs };
       if (summary.kind === "opened") {
-        const statusChanged = applyStatusIfChanged(ticket, evt, "in_progress");
+        const statusChanged = applyStatusIfChanged(
+          ticket,
+          evtAudit,
+          "in_progress",
+        );
         if (statusChanged) {
-          applyLastUpdate(ticket, evt);
+          applyLastUpdate(ticket, evtAudit);
+        }
+      } else if (summary.kind === "merged") {
+        const statusChanged = applyStatusIfChanged(ticket, evtAudit, "done");
+        if (statusChanged) {
+          applyLastUpdate(ticket, evtAudit);
         }
       }
       const list = ticket.prActivityRecent ?? (ticket.prActivityRecent = []);
@@ -780,6 +792,9 @@ export const applyEvent = (projection: Projection, evt: EventLine): void => {
 /**
  * Replays newline-delimited JSON lines into a deterministic projection.
  *
+ * `GithubPrActivity` is applied in a second pass so PR events keep their real
+ * `ts` (GitHub time) while still updating tickets that were created later in hyper-pm.
+ *
  * @param lines - Raw JSONL payload lines (may be unsorted; caller sorts files).
  */
 export const replayEvents = (lines: string[]): Projection => {
@@ -791,12 +806,19 @@ export const replayEvents = (lines: string[]): Projection => {
     const json: unknown = JSON.parse(trimmed);
     events.push(eventLineSchema.parse(json));
   }
-  events.sort((a, b) => {
+  const byTsThenId = (a: EventLine, b: EventLine): number => {
     const t = a.ts.localeCompare(b.ts);
     if (t !== 0) return t;
     return a.id.localeCompare(b.id);
-  });
-  for (const e of events) {
+  };
+  events.sort(byTsThenId);
+  const prActivity = events.filter((e) => e.type === "GithubPrActivity");
+  const nonPr = events.filter((e) => e.type !== "GithubPrActivity");
+  for (const e of nonPr) {
+    applyEvent(proj, e);
+  }
+  prActivity.sort(byTsThenId);
+  for (const e of prActivity) {
     applyEvent(proj, e);
   }
   return proj;
