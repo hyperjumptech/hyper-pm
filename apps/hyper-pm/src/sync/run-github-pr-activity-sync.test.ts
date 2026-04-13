@@ -104,6 +104,140 @@ describe("runGithubPrActivitySync", () => {
     expect(out[1]?.payload["kind"]).toBe("commented");
   });
 
+  it("appends opened seed and timeline for todo tickets with linked PRs", async () => {
+    const pullsGet = vi.fn().mockResolvedValue({
+      data: {
+        created_at: "2026-01-10T00:00:00Z",
+        html_url: "https://github.com/o/r/pull/5",
+        user: { login: "dev" },
+      },
+    });
+    const paginate = vi.fn().mockResolvedValue([]);
+    const appendEvent = vi.fn().mockResolvedValue(undefined);
+    const octokit = {
+      rest: {
+        pulls: { get: pullsGet },
+        issues: { listEventsForTimeline: { endpoint: { merge: vi.fn() } } },
+      },
+      paginate,
+    } as unknown as Octokit;
+
+    const tickets = new Map([
+      [
+        "t1",
+        {
+          id: "t1",
+          number: 1,
+          storyId: "s1",
+          title: "T",
+          body: "",
+          status: "todo" as const,
+          linkedPrs: [5],
+          linkedBranches: [],
+          createdAt: "a",
+          createdBy: "a",
+          updatedAt: "a",
+          updatedBy: "a",
+          statusChangedAt: "a",
+          statusChangedBy: "a",
+          prActivityRecent: [],
+        },
+      ],
+    ]);
+
+    await runGithubPrActivitySync({
+      projection: { epics: new Map(), stories: new Map(), tickets },
+      config: fullConfig,
+      deps: {
+        octokit,
+        owner: "o",
+        repo: "r",
+        clock: { now: () => new Date("2026-01-15T00:00:00.000Z") },
+        actor: "sync-user",
+        readEventLines: async () => [],
+        appendEvent,
+      },
+    });
+
+    expect(pullsGet).toHaveBeenCalled();
+    expect(appendEvent).toHaveBeenCalledTimes(1);
+    expect(appendEvent.mock.calls[0]?.[0]?.payload["kind"]).toBe("opened");
+  });
+
+  it("skips tickets in done or cancelled even when linked PRs exist", async () => {
+    const pullsGet = vi.fn();
+    const paginate = vi.fn();
+    const appendEvent = vi.fn();
+    const octokit = {
+      rest: {
+        pulls: { get: pullsGet },
+        issues: { listEventsForTimeline: { endpoint: { merge: vi.fn() } } },
+      },
+      paginate,
+    } as unknown as Octokit;
+
+    const tickets = new Map([
+      [
+        "done",
+        {
+          id: "done",
+          number: 1,
+          storyId: "s1",
+          title: "D",
+          body: "",
+          status: "done" as const,
+          linkedPrs: [1],
+          linkedBranches: [],
+          createdAt: "a",
+          createdBy: "a",
+          updatedAt: "a",
+          updatedBy: "a",
+          statusChangedAt: "a",
+          statusChangedBy: "a",
+          prActivityRecent: [],
+        },
+      ],
+      [
+        "cx",
+        {
+          id: "cx",
+          number: 2,
+          storyId: "s1",
+          title: "C",
+          body: "",
+          status: "cancelled" as const,
+          linkedPrs: [2],
+          linkedBranches: [],
+          createdAt: "a",
+          createdBy: "a",
+          updatedAt: "a",
+          updatedBy: "a",
+          statusChangedAt: "a",
+          statusChangedBy: "a",
+          prActivityRecent: [],
+        },
+      ],
+    ]);
+
+    await runGithubPrActivitySync({
+      projection: { epics: new Map(), stories: new Map(), tickets },
+      config: fullConfig,
+      deps: {
+        octokit,
+        owner: "o",
+        repo: "r",
+        clock: { now: () => new Date("2026-01-15T00:00:00.000Z") },
+        actor: "sync-user",
+        readEventLines: async () => [],
+        appendEvent,
+      },
+    });
+
+    expect(pullsGet).not.toHaveBeenCalled();
+    expect(paginate).not.toHaveBeenCalled();
+    expect(appendEvent).not.toHaveBeenCalled();
+  });
+
   it("skips timeline rows already present by sourceId", async () => {
     const pullsGet = vi.fn().mockResolvedValue({
       data: {
@@ -268,5 +402,63 @@ describe("runGithubPrActivitySync replay integration", () => {
       "opened",
       "merged",
     ]);
+  });
+
+  it("replay moves todo ticket to in_progress when sync appends opened", async () => {
+    const pullsGet = vi.fn().mockResolvedValue({
+      data: {
+        created_at: "2026-01-10T00:00:00Z",
+        html_url: "https://github.com/o/r/pull/5",
+        user: { login: "dev" },
+      },
+    });
+    const paginate = vi.fn().mockResolvedValue([]);
+    const octokit = {
+      rest: {
+        pulls: { get: pullsGet },
+        issues: { listEventsForTimeline: { endpoint: { merge: vi.fn() } } },
+      },
+      paginate,
+    } as unknown as Octokit;
+
+    const baseLines = [
+      JSON.stringify({
+        schema: 1,
+        type: "TicketCreated",
+        id: "c1",
+        ts: "2026-01-01T00:00:00.000Z",
+        actor: "a",
+        payload: {
+          id: "t1",
+          storyId: "s1",
+          title: "T",
+          body: "Refs #5",
+          status: "todo",
+        },
+      }),
+    ];
+
+    const proj0 = replayEvents(baseLines);
+    const appendEvent = vi.fn().mockResolvedValue(undefined);
+    const newEvents = await runGithubPrActivitySync({
+      projection: proj0,
+      config: fullConfig,
+      deps: {
+        octokit,
+        owner: "o",
+        repo: "r",
+        clock: { now: () => new Date("2026-01-15T00:00:00.000Z") },
+        actor: "sync-user",
+        readEventLines: async () => baseLines,
+        appendEvent,
+      },
+    });
+
+    const allLines = [...baseLines, ...newEvents.map((e) => JSON.stringify(e))];
+    const proj = replayEvents(allLines);
+    const ticket = proj.tickets.get("t1");
+    expect(ticket?.status).toBe("in_progress");
+    expect(ticket?.statusChangedBy).toBe("github:dev");
+    expect(ticket?.prActivityRecent?.[0]?.kind).toBe("opened");
   });
 });

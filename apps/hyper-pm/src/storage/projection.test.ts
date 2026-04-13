@@ -225,6 +225,47 @@ describe("replayEvents", () => {
     expect(ticket?.statusChangedBy).toBe("gh");
   });
 
+  it("moves ticket to in_progress when GithubPrActivity kind is opened", () => {
+    const lines = [
+      JSON.stringify({
+        schema: 1,
+        type: "TicketCreated",
+        id: "e1",
+        ts: "2026-01-02T00:00:00.000Z",
+        actor: "a1",
+        payload: {
+          id: "t1",
+          storyId: "s1",
+          title: "T",
+          body: "",
+          status: "todo",
+        },
+      }),
+      JSON.stringify({
+        schema: 1,
+        type: "GithubPrActivity",
+        id: "e2",
+        ts: "2026-01-03T00:00:00.000Z",
+        actor: "github:dev",
+        payload: {
+          ticketId: "t1",
+          prNumber: 9,
+          kind: "opened",
+          sourceId: "hyper-pm:pr-open:t1:9",
+          occurredAt: "2026-01-03T00:00:00.000Z",
+        },
+      }),
+    ];
+    const p = replayEvents(lines);
+    const ticket = p.tickets.get("t1");
+    expect(ticket?.status).toBe("in_progress");
+    expect(ticket?.statusChangedAt).toBe("2026-01-03T00:00:00.000Z");
+    expect(ticket?.statusChangedBy).toBe("github:dev");
+    expect(ticket?.updatedAt).toBe("2026-01-03T00:00:00.000Z");
+    expect(ticket?.updatedBy).toBe("github:dev");
+    expect(ticket?.prActivityRecent?.[0]?.kind).toBe("opened");
+  });
+
   it("appends GithubPrActivity to prActivityRecent without changing status", () => {
     const lines = [
       JSON.stringify({

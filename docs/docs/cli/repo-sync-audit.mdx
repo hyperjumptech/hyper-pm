@@ -39,7 +39,7 @@ With **`--with-github`**, requires **`GITHUB_TOKEN`** **or** **`gh`** (`gh auth 
 
 **Outbound** sets issue labels (`hyper-pm`, `ticket`, plus ticket labels — GitHub’s 50-character label limit applies) and embeds planning fields in a fenced JSON block after the description.
 
-**Inbound** (`sync: full`) compares issue labels and that fence to the projection and records inbound updates. With **`full`**, PR timeline activity for **`in_progress`** tickets with `Refs` / `Closes` / `Fixes` references may append `GithubPrActivity` events (extra API calls per linked PR).
+**Inbound** (`sync: full`) compares issue labels and that fence to the projection and records inbound updates. With **`full`**, PR timeline activity for tickets that are not **`done`** / **`cancelled`** and have `Refs` / `Closes` / `Fixes` references may append `GithubPrActivity` events (extra API calls per linked PR). A `GithubPrActivity` with `kind: "opened"` moves the ticket to **`in_progress`** when replayed.
 
 Detailed behavior: [GitHub sync](/integrations/github-sync).
 

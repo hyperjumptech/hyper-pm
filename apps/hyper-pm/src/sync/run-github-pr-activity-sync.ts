@@ -2,6 +2,7 @@ import type { Octokit } from "@octokit/rest";
 import { ulid } from "ulid";
 import type { HyperPmConfig } from "../config/hyper-pm-config";
 import { buildPrOpenSourceId } from "../lib/github-pr-activity";
+import type { WorkItemStatus } from "../lib/work-item-status";
 import { appendEventLine } from "../storage/append-event";
 import type { EventLine } from "../storage/event-line";
 import type { Projection } from "../storage/projection";
@@ -39,6 +40,21 @@ const githubActorFromLogin = (
 };
 
 /**
+ * Whether a ticket may trigger linked-PR timeline fetches during full GitHub sync.
+ *
+ * @param ticket - Projection row (non-deleted, non-terminal status, at least one linked PR).
+ */
+const isTicketEligibleForPrActivitySync = (ticket: {
+  deleted?: boolean;
+  linkedPrs: readonly number[];
+  status: WorkItemStatus;
+}): boolean =>
+  !ticket.deleted &&
+  ticket.linkedPrs.length > 0 &&
+  ticket.status !== "done" &&
+  ticket.status !== "cancelled";
+
+/**
  * Serializes mapped timeline fields into a JSONL payload object.
  *
  * @param fields - Non-null mapping result from {@link mapGithubTimelineItemToActivityPayload}.
@@ -65,7 +81,8 @@ const timelinePayloadRecord = (
 };
 
 /**
- * Ingests GitHub PR timeline activity for tickets in `in_progress` with linked PRs, appending `GithubPrActivity` lines.
+ * Ingests GitHub PR timeline activity for non-terminal tickets with linked PRs, appending `GithubPrActivity` lines.
+ * Replaying `kind: "opened"` moves the ticket to `in_progress` in the projection.
  *
  * @param params - Projection (fresh after inbound), config, and injectable deps.
  * @returns Newly appended event lines.
@@ -84,9 +101,7 @@ export const runGithubPrActivitySync = async (params: {
   const seen = collectGithubPrActivitySourceIdsFromLines(lines);
 
   for (const ticket of params.projection.tickets.values()) {
-    if (ticket.deleted) continue;
-    if (ticket.status !== "in_progress") continue;
-    if (ticket.linkedPrs.length === 0) continue;
+    if (!isTicketEligibleForPrActivitySync(ticket)) continue;
 
     for (const prNumber of ticket.linkedPrs) {
       const openSourceId = buildPrOpenSourceId(ticket.id, prNumber);

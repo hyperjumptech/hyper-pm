@@ -759,6 +759,12 @@ export const applyEvent = (projection: Projection, evt: EventLine): void => {
         String(evt.payload["ticketId"] ?? ""),
       );
       if (!ticket || ticket.deleted) break;
+      if (summary.kind === "opened") {
+        const statusChanged = applyStatusIfChanged(ticket, evt, "in_progress");
+        if (statusChanged) {
+          applyLastUpdate(ticket, evt);
+        }
+      }
       const list = ticket.prActivityRecent ?? (ticket.prActivityRecent = []);
       list.push(summary);
       if (list.length > GITHUB_PR_ACTIVITY_RECENT_CAP) {

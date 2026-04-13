@@ -73,6 +73,16 @@ var HyperPmAuditSummary = (() => {
         );
       }
     }
+    if (kind === "ticket" && payload["dependsOn"] !== void 0) {
+      if (payload["dependsOn"] === null) {
+        aspects.push("Ticket dependencies cleared.");
+      } else {
+        const d = normalizeStrList(payload["dependsOn"]);
+        aspects.push(
+          d.length > 0 ? `Depends on: ${d.join(", ")}.` : "Ticket dependencies cleared."
+        );
+      }
+    }
     if (kind === "ticket" && payload["priority"] !== void 0) {
       aspects.push(
         payload["priority"] === null ? "Priority cleared." : `Priority: ${quoteStatus(String(payload["priority"]))}.`
