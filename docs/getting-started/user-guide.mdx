@@ -63,7 +63,7 @@ hyper-pm --format text ticket read --status todo --status in_progress
 
 ### Work with GitHub
 
-Configure sync mode and repo slug (see [Configuration](/getting-started/configuration) and [GitHub sync](/integrations/github-sync)). Reconcile the data branch over git with plain **`hyper-pm sync`**. To mirror tickets to GitHub Issues, run **`hyper-pm sync --with-github`** (requires auth and `sync` not `off` in config).
+Configure repo slug and whether GitHub sync is allowed (see [Configuration](/getting-started/configuration) and [GitHub sync](/integrations/github-sync)). **Git only:** **`hyper-pm sync`**. **Git + GitHub (issues, inbound, PR activity):** **`hyper-pm sync --with-github`** (requires auth; `sync` must not be `off` in config).
 
 ```bash
 hyper-pm sync
